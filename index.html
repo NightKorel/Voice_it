@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音高測試（聲音節奏遊戲・原型）</title>
+<style>
+  * { box-sizing: border-box; }
+  :root{
+    --bg:#12121c; --panel:#1e1e2e; --ink:#eceafd; --muted:#9a97b8;
+    --up:#ff6b9d; --mid:#ffd166; --down:#5ee7df; --hit:#c792ea;
+  }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:"PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    -webkit-user-select:none; user-select:none; }
+  #app{ max-width:640px; margin:0 auto; padding:16px; }
+  h1{ font-size:20px; text-align:center; }
+  .muted{ color:var(--muted); font-size:14px; }
+  button{ font-family:inherit; cursor:pointer; border:none; border-radius:12px;
+    padding:12px 18px; font-size:16px; font-weight:700; color:#12121c;
+    background:linear-gradient(135deg,#c792ea,#7c6cf0); }
+  button:active{ transform:translateY(1px); }
+  button.big{ display:block; width:100%; margin:14px 0; padding:16px; font-size:18px; }
+  .panel{ background:var(--panel); border-radius:18px; padding:20px; margin-top:14px; }
+  .hidden{ display:none !important; }
+  .center{ text-align:center; }
+
+  /* 校準 */
+  #cal-step{ font-size:22px; font-weight:800; margin:6px 0; }
+  #cal-hint{ font-size:16px; margin:10px 0; }
+  .dots{ font-size:34px; letter-spacing:4px; min-height:40px; }
+  #cal-live{ font-size:15px; color:var(--muted); min-height:22px; }
+
+  /* 測試畫面：三排 */
+  .lanes{ display:flex; flex-direction:column; gap:10px; margin:10px 0; }
+  .lane{ position:relative; height:74px; border-radius:14px; display:flex; align-items:center;
+    padding:0 16px; font-size:20px; font-weight:800; color:#12121c; opacity:.35;
+    transition:opacity .06s, box-shadow .06s; }
+  .lane .tag{ z-index:2; }
+  .lane.up{ background:var(--up); }
+  .lane.mid{ background:var(--mid); }
+  .lane.down{ background:var(--down); }
+  .lane.on{ opacity:1; box-shadow:0 0 0 3px #fff6, 0 8px 24px #0008; }
+  /* 音高指針 */
+  #pitch-col{ position:relative; height:calc(74px*3 + 20px); width:8px; }
+  #needle{ position:absolute; left:0; width:100%; height:8px; border-radius:8px;
+    background:#fff; box-shadow:0 0 12px #fff; transition:top .05s linear; top:50%; }
+  .stage{ display:flex; gap:12px; align-items:stretch; }
+  .stage .lanes{ flex:1; }
+
+  #readout{ text-align:center; font-size:15px; color:var(--muted); margin-top:8px; min-height:22px; }
+  #hit-flash{ text-align:center; font-size:40px; font-weight:900; min-height:52px; margin-top:6px; }
+  .badge{ display:inline-block; padding:2px 10px; border-radius:10px; background:#2c2c44; margin:0 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>🎤 音高測試 <span class="muted">聲音節奏遊戲・原型</span></h1>
+
+  <!-- 開場 -->
+  <div id="screen-intro" class="panel center">
+    <p>先校準你的音域，再測「出聲 → 亮上／中／下」準不準。<br>
+       <span class="muted">建議戴耳機或在安靜環境。要允許麥克風。</span></p>
+    <button class="big" id="btn-begin">開始校準 🎙️</button>
+    <p class="muted">音高偵測是純本地即時運算（Web Audio），不連網、不做語音辨識。</p>
+  </div>
+
+  <!-- 校準 -->
+  <div id="screen-cal" class="panel center hidden">
+    <div id="cal-step">校準 1／3</div>
+    <div id="cal-hint">唱幾個你覺得<b style="color:var(--up)">「高」</b>的聲音（拉長一點，「啊——」）</div>
+    <div class="dots" id="cal-dots"></div>
+    <div id="cal-live"></div>
+    <button class="big" id="btn-cal">按住不放、開始唱 3 秒 ▶</button>
+    <div class="muted" id="cal-note"></div>
+  </div>
+
+  <!-- 測試 -->
+  <div id="screen-test" class="hidden">
+    <div class="panel">
+      <div class="stage">
+        <div id="pitch-col"><div id="needle"></div></div>
+        <div class="lanes">
+          <div class="lane up"   id="lane-up"><span class="tag">上排 · 高音</span></div>
+          <div class="lane mid"  id="lane-mid"><span class="tag">中排 · 中音</span></div>
+          <div class="lane down" id="lane-down"><span class="tag">下排 · 低音</span></div>
+        </div>
+      </div>
+      <div id="readout">出聲看看…</div>
+      <div id="hit-flash"></div>
+      <div class="center muted">
+        音域界線：<span class="badge" id="b-hm">–</span>上/中　<span class="badge" id="b-ml">–</span>中/下
+      </div>
+      <button class="big" id="btn-recal">重新校準 ↻</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+
+/* ===== 音訊 ===== */
+let ac, analyser, micStream, buf, freqBuf;
+async function initAudio(){
+  if(ac) return true;
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+  }catch(e){ alert("拿不到麥克風，請允許權限並用 Chrome／Edge。"); return false; }
+  ac = new (window.AudioContext||window.webkitAudioContext)({ latencyHint:"interactive" });
+  const src = ac.createMediaStreamSource(micStream);
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 2048;
+  src.connect(analyser);
+  buf = new Float32Array(analyser.fftSize);
+  freqBuf = new Uint8Array(analyser.frequencyBinCount);
+  return true;
+}
+
+/* ===== 音高偵測（自相關） ===== */
+function autoCorrelate(b, sr){
+  let SIZE=b.length, rms=0;
+  for(let i=0;i<SIZE;i++){ rms+=b[i]*b[i]; }
+  rms=Math.sqrt(rms/SIZE);
+  if(rms<0.01) return {hz:-1, rms};
+  let r1=0, r2=SIZE-1, thr=0.2;
+  for(let i=0;i<SIZE/2;i++){ if(Math.abs(b[i])<thr){ r1=i; break; } }
+  for(let i=1;i<SIZE/2;i++){ if(Math.abs(b[SIZE-i])<thr){ r2=SIZE-i; break; } }
+  const s=b.slice(r1,r2); const N=s.length;
+  const c=new Float32Array(N);
+  for(let i=0;i<N;i++){ let sum=0; for(let j=0;j<N-i;j++) sum+=s[j]*s[j+i]; c[i]=sum; }
+  let d=0; while(d<N-1 && c[d]>c[d+1]) d++;
+  let maxval=-1, maxpos=-1;
+  for(let i=d;i<N;i++){ if(c[i]>maxval){ maxval=c[i]; maxpos=i; } }
+  if(maxpos<=0) return {hz:-1, rms};
+  let T0=maxpos;
+  const x1=c[T0-1]||0, x2=c[T0], x3=c[T0+1]||0;
+  const a=(x1+x3-2*x2)/2, bb=(x3-x1)/2;
+  if(a) T0 = T0 - bb/(2*a);
+  const hz=sr/T0;
+  if(hz<60||hz>1200) return {hz:-1, rms};
+  return {hz, rms};
+}
+// 頻譜重心（分啪/咚：亮=高、悶=低）
+function spectralCentroid(){
+  analyser.getByteFrequencyData(freqBuf);
+  let num=0, den=0;
+  const binHz = (ac.sampleRate/2)/freqBuf.length;
+  for(let i=0;i<freqBuf.length;i++){ const m=freqBuf[i]; num+=i*binHz*m; den+=m; }
+  return den? num/den : 0;
+}
+
+/* ===== 校準 ===== */
+const cal = { high:0, mid:0, low:0, boundHM:0, boundML:0 };
+let calStep=0;
+const CAL_TEXT=[
+  { key:"high", label:"校準 1／3", hint:'唱幾個你覺得<b style="color:var(--up)">「高」</b>的聲音（拉長一點，「啊——」）' },
+  { key:"mid",  label:"校準 2／3", hint:'再唱幾個<b style="color:var(--mid)">「稍低」</b>的聲音' },
+  { key:"low",  label:"校準 3／3", hint:'最後唱幾個<b style="color:var(--down)">「更低」</b>的聲音' },
+];
+
+$("btn-begin").addEventListener("click", async ()=>{
+  if(!await initAudio()) return;
+  if(ac.state==="suspended") await ac.resume();
+  $("screen-intro").classList.add("hidden");
+  $("screen-cal").classList.remove("hidden");
+  calStep=0; showCalStep();
+});
+function showCalStep(){
+  const t=CAL_TEXT[calStep];
+  $("cal-step").textContent=t.label;
+  $("cal-hint").innerHTML=t.hint;
+  $("cal-dots").textContent="";
+  $("cal-live").textContent="";
+  $("btn-cal").textContent="開始唱 3 秒 ▶";
+  $("btn-cal").disabled=false;
+}
+$("btn-cal").addEventListener("click", ()=>{
+  $("btn-cal").disabled=true;
+  collectPitch(3000, (median)=>{
+    cal[CAL_TEXT[calStep].key]=median;
+    calStep++;
+    if(calStep<CAL_TEXT.length){ showCalStep(); }
+    else finishCal();
+  });
+});
+function collectPitch(ms, done){
+  const samples=[]; const t0=performance.now(); let dots=0;
+  function tick(){
+    analyser.getFloatTimeDomainData(buf);
+    const {hz,rms}=autoCorrelate(buf, ac.sampleRate);
+    if(hz>0){ samples.push(hz); }
+    $("cal-live").textContent = hz>0 ? ("聽到 "+Math.round(hz)+" Hz") : "（大聲一點唱…）";
+    const nd=Math.floor((performance.now()-t0)/500);
+    if(nd!==dots){ dots=nd; $("cal-dots").textContent="🎵".repeat(dots); }
+    if(performance.now()-t0<ms){ requestAnimationFrame(tick); }
+    else{
+      if(samples.length<5){ $("cal-live").textContent="沒聽到足夠聲音，再試一次。"; $("btn-cal").disabled=false; return; }
+      samples.sort((a,b)=>a-b);
+      done(samples[Math.floor(samples.length/2)]); // 中位數
+    }
+  }
+  requestAnimationFrame(tick);
+}
+function finishCal(){
+  // 確保 high>mid>low（玩家亂唱也不崩）
+  let arr=[["high",cal.high],["mid",cal.mid],["low",cal.low]].sort((a,b)=>b[1]-a[1]);
+  cal.high=arr[0][1]; cal.mid=arr[1][1]; cal.low=arr[2][1];
+  cal.boundHM=Math.sqrt(cal.high*cal.mid);   // 幾何平均（音高是對數的）
+  cal.boundML=Math.sqrt(cal.mid*cal.low);
+  $("b-hm").textContent=Math.round(cal.boundHM)+" Hz";
+  $("b-ml").textContent=Math.round(cal.boundML)+" Hz";
+  $("screen-cal").classList.add("hidden");
+  $("screen-test").classList.remove("hidden");
+  runTest();
+}
+$("btn-recal").addEventListener("click", ()=>{
+  $("screen-test").classList.add("hidden");
+  $("screen-cal").classList.remove("hidden");
+  calStep=0; showCalStep();
+});
+
+/* ===== 即時測試 ===== */
+let smooth=[]; let lastRms=0, lastHitAt=0;
+function runTest(){
+  function frame(){
+    if($("screen-test").classList.contains("hidden")) return;
+    analyser.getFloatTimeDomainData(buf);
+    const {hz,rms}=autoCorrelate(buf, ac.sampleRate);
+
+    // 音高 → 平滑
+    if(hz>0){ smooth.push(hz); if(smooth.length>5) smooth.shift(); }
+    else { if(smooth.length) smooth.shift(); }
+    const sHz = smooth.length ? median(smooth) : -1;
+
+    // 分排
+    ["up","mid","down"].forEach(k=>$("lane-"+k).classList.remove("on"));
+    if(sHz>0){
+      let lane = sHz>=cal.boundHM ? "up" : sHz>=cal.boundML ? "mid" : "down";
+      $("lane-"+lane).classList.add("on");
+      $("readout").textContent = Math.round(sHz)+" Hz → "+(lane==="up"?"上排":lane==="mid"?"中排":"下排");
+      // 指針位置（對數映射到三排高度）
+      posNeedle(sHz);
+    } else {
+      $("readout").textContent="出聲看看…";
+    }
+
+    // 啪/咚 偵測：音量瞬間衝高的邊緣
+    const now=performance.now();
+    if(rms>0.05 && lastRms<0.03 && now-lastHitAt>180){
+      lastHitAt=now;
+      const c=spectralCentroid();
+      const isPa = c>1800;   // 亮→啪、悶→咚（門檻先粗抓，之後可調）
+      flashHit(isPa? "啪！" : "咚！", isPa? "var(--up)":"var(--down)", Math.round(c));
+    }
+    lastRms=rms;
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+function median(a){ const s=[...a].sort((x,y)=>x-y); return s[Math.floor(s.length/2)]; }
+function posNeedle(hz){
+  // 把 hz 對應到 0(頂)~1(底)，用對數，範圍以校準的高/低再往外一點
+  const top=cal.high*1.15, bot=cal.low*0.87;
+  let t=(Math.log(hz)-Math.log(top))/(Math.log(bot)-Math.log(top));
+  t=Math.max(0,Math.min(1,t));
+  $("needle").style.top=(t*100)+"%";
+}
+let hitTimer;
+function flashHit(txt,color,centroid){
+  const el=$("hit-flash"); el.textContent=txt; el.style.color=color;
+  $("readout").textContent += "　（打擊 centroid≈"+centroid+"Hz）";
+  clearTimeout(hitTimer); hitTimer=setTimeout(()=>{ el.textContent=""; },350);
+}
+</script>
+</body>
+</html>
