@@ -211,12 +211,14 @@ function ensureSynth(){
   synthOsc.connect(lp).connect(synthGain).connect(ac.destination);
   synthOsc.start();
 }
-function chime(){
-  const o=ac.createOscillator(), g=ac.createGain(), t=ac.currentTime;
-  o.type="sine"; o.frequency.value=880;
-  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.01);
-  g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
-  o.connect(g).connect(ac.destination); o.start(t); o.stop(t+0.3);
+function laneFreqOf(l){ return [cal.high,cal.mid,cal.low][l]; }
+// 打中一下就彈那排的音
+function playNote(freq){
+  const o=ac.createOscillator(), g=ac.createGain(), lp=ac.createBiquadFilter(), t=ac.currentTime;
+  o.type="triangle"; o.frequency.value=freq; lp.type="lowpass"; lp.frequency.value=1600;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.28,t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.001,t+0.35);
+  o.connect(lp).connect(g).connect(ac.destination); o.start(t); o.stop(t+0.36);
 }
 function scheduler(){
   while(nextBeat < ac.currentTime+0.12){
@@ -266,16 +268,19 @@ function loop(){
   const curLane=laneOf(sHz);
   const now=ac.currentTime-songStart;
 
-  // 樂器：唱在某排就放那排的音（音準用校準值幫你校正，聽起來乾淨）
-  const laneFreq=[cal.high,cal.mid,cal.low];
-  if(sHz>0 && curLane>=0){
-    synthOsc.frequency.setTargetAtTime(laneFreq[curLane], ac.currentTime, 0.03);
-    synthGain.gain.setTargetAtTime(0.13, ac.currentTime, 0.02);
-  }else{
-    synthGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05);
-  }
-
   judge(now, curLane);
+
+  // 樂器只在「打中」時響：長音撐住的當下才持續發那排的音
+  let holding=null;
+  for(const n of CHART){
+    if(n.dur>0 && !n.done && now>=n.t && now<=n.t+n.dur && curLane===n.l){ holding=n; break; }
+  }
+  if(holding){
+    synthOsc.frequency.setTargetAtTime(laneFreqOf(holding.l), ac.currentTime, 0.03);
+    synthGain.gain.setTargetAtTime(0.14, ac.currentTime, 0.02);
+  }else{
+    synthGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.04);
+  }
   draw(now, sHz, curLane, W, H);
 
   $("score").textContent=stats.score;
@@ -290,14 +295,14 @@ function judge(now, curLane){
     if(n.done) continue;
     if(n.dur>0){
       if(now>=n.t && now<=n.t+n.dur){ n.frames++; if(curLane===n.l) n.good++; }
-      else if(now>n.t+n.dur){ n.done=true; (n.frames && n.good/n.frames>=0.4)? hit():miss(); }
+      else if(now>n.t+n.dur){ n.done=true; (n.frames && n.good/n.frames>=0.4)? hit(n.l):miss(); }
     }else{
-      if(Math.abs(now-n.t)<=HIT_WIN){ if(curLane===n.l){ n.done=true; hit(); } }
+      if(Math.abs(now-n.t)<=HIT_WIN){ if(curLane===n.l){ n.done=true; hit(n.l); } }
       else if(now>n.t+HIT_WIN){ n.done=true; miss(); }
     }
   }
 }
-function hit(){ stats.hit++; stats.combo++; stats.maxCombo=Math.max(stats.maxCombo,stats.combo); stats.score+=100+stats.combo*5; chime(); }
+function hit(lane){ stats.hit++; stats.combo++; stats.maxCombo=Math.max(stats.maxCombo,stats.combo); stats.score+=100+stats.combo*5; if(lane>=0) playNote(laneFreqOf(lane)); }
 function miss(){ stats.miss++; stats.combo=0; }
 
 function draw(now, sHz, curLane, W, H){
