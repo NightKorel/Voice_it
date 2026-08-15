@@ -102,7 +102,7 @@
 const $=id=>document.getElementById(id);
 
 /* ===== 音訊 ===== */
-let ac, analyser, micStream, buf, freqBuf;
+let ac, analyser, micStream, buf, freqBuf, floatFreq;
 async function initAudio(){
   if(ac) return true;
   try{
@@ -115,6 +115,7 @@ async function initAudio(){
   src.connect(analyser);
   buf = new Float32Array(analyser.fftSize);
   freqBuf = new Uint8Array(analyser.frequencyBinCount);
+  floatFreq = new Float32Array(analyser.frequencyBinCount);
   return true;
 }
 
@@ -142,13 +143,20 @@ function autoCorrelate(b, sr){
   if(hz<60||hz>1200) return {hz:-1, rms};
   return {hz, rms};
 }
-// 頻譜重心（分啪/咚：亮=高、悶=低）
-function spectralCentroid(){
-  analyser.getByteFrequencyData(freqBuf);
-  let num=0, den=0;
-  const binHz = (ac.sampleRate/2)/freqBuf.length;
-  for(let i=0;i<freqBuf.length;i++){ const m=freqBuf[i]; num+=i*binHz*m; den+=m; }
-  return den? num/den : 0;
+// 頻譜平坦度（分啪/咚：吵/雜=啪→接近 1、純/有調=咚→接近 0）
+function spectralFlatness(){
+  analyser.getFloatFrequencyData(floatFreq);
+  const binHz = (ac.sampleRate/2)/floatFreq.length;
+  let logSum=0, sum=0, n=0;
+  for(let i=0;i<floatFreq.length;i++){
+    const f=i*binHz; if(f<120||f>8000) continue;
+    let p=Math.pow(10, floatFreq[i]/10); // dB → 功率
+    if(!isFinite(p)||p<1e-12) p=1e-12;
+    logSum+=Math.log(p); sum+=p; n++;
+  }
+  if(!n) return 0;
+  const geo=Math.exp(logSum/n), ari=sum/n;
+  return ari>0? Math.min(1, geo/ari) : 0;
 }
 
 /* ===== 校準 ===== */
@@ -224,7 +232,7 @@ $("btn-recal").addEventListener("click", ()=>{
 });
 
 /* ===== 即時測試 ===== */
-let smooth=[]; let lastRms=0, lastHitAt=0;
+let smooth=[]; let lastHitAt=0, rmsBaseline=0.008;
 function runTest(){
   function frame(){
     if($("screen-test").classList.contains("hidden")) return;
@@ -248,15 +256,15 @@ function runTest(){
       $("readout").textContent="出聲看看…";
     }
 
-    // 啪/咚 偵測：音量瞬間衝高的邊緣
+    // 啪/咚 偵測：音量跳出「當下背景」就算一次打擊（門檻跟著你的音量走）
     const now=performance.now();
-    if(rms>0.05 && lastRms<0.03 && now-lastHitAt>180){
+    if(rms>0.02 && rms>rmsBaseline*2.2 && now-lastHitAt>200){
       lastHitAt=now;
-      const c=spectralCentroid();
-      const isPa = c>1800;   // 亮→啪、悶→咚（門檻先粗抓，之後可調）
-      flashHit(isPa? "啪！" : "咚！", isPa? "var(--up)":"var(--down)", Math.round(c));
+      const flat=spectralFlatness();
+      const isPa = flat>0.28;   // 吵/雜→啪、純/有調→咚（門檻先粗抓，待你的數字再調）
+      flashHit(isPa? "啪！" : "咚！", isPa? "var(--up)":"var(--down)", flat);
     }
-    lastRms=rms;
+    rmsBaseline = rmsBaseline*0.9 + rms*0.1;   // 慢慢跟隨背景音量
 
     requestAnimationFrame(frame);
   }
@@ -271,10 +279,9 @@ function posNeedle(hz){
   $("needle").style.top=(t*100)+"%";
 }
 let hitTimer;
-function flashHit(txt,color,centroid){
-  const el=$("hit-flash"); el.textContent=txt; el.style.color=color;
-  $("readout").textContent += "　（打擊 centroid≈"+centroid+"Hz）";
-  clearTimeout(hitTimer); hitTimer=setTimeout(()=>{ el.textContent=""; },350);
+function flashHit(txt,color,flat){
+  const el=$("hit-flash"); el.textContent=txt+"　平坦度 "+flat.toFixed(2); el.style.color=color;
+  clearTimeout(hitTimer); hitTimer=setTimeout(()=>{ el.textContent=""; },600);
 }
 </script>
 </body>
