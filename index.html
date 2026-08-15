@@ -206,9 +206,13 @@ let synthOsc, synthGain;
 function ensureSynth(){
   if(synthOsc) return;
   synthOsc=ac.createOscillator(); synthGain=ac.createGain();
-  const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=1400;
-  synthOsc.type="triangle"; synthGain.gain.value=0;
+  const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=2200;
+  synthOsc.type="sine"; synthGain.gain.value=0;
   synthOsc.connect(lp).connect(synthGain).connect(ac.destination);
+  // 一點點抖音，讓撐音柔和有生命，不死板
+  const lfo=ac.createOscillator(), lfoGain=ac.createGain();
+  lfo.type="sine"; lfo.frequency.value=5.2; lfoGain.gain.value=3.5;
+  lfo.connect(lfoGain).connect(synthOsc.frequency); lfo.start();
   synthOsc.start();
 }
 function laneFreqOf(l){ return [cal.high,cal.mid,cal.low][l]; }
@@ -277,7 +281,7 @@ function loop(){
   }
   if(holding){
     synthOsc.frequency.setTargetAtTime(laneFreqOf(holding.l), ac.currentTime, 0.03);
-    synthGain.gain.setTargetAtTime(0.14, ac.currentTime, 0.02);
+    synthGain.gain.setTargetAtTime(0.11, ac.currentTime, 0.03);
   }else{
     synthGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.04);
   }
