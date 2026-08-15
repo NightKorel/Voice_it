@@ -249,8 +249,7 @@ function recordOnce(onText, onFail){
 /* 聽到一句話 → 依 mode 分流 */
 function onHeard(text){
   if(G.mode==="twister"){ twisterHeard(text); return; }
-  if(G.mode==="play"){ commandHeard(text); }
-  showVoice("聽到：「"+text+"」");
+  if(G.mode==="play"){ commandHeard(text); return; }
 }
 
 function showVoice(msg){
@@ -561,32 +560,42 @@ function drawHp(){
 /* =========================================================
    指令解析（聲控 + 按鈕共用）
    ========================================================= */
-function commandHeard(text){
+// 動作偵測：含常見同音誤聽（左→坐/作/昨、右→又/有/佑、大招→大昭/打招…）
+function detectAction(text){
   const t=clean(text);
-  // 找出是哪個英雄（讀作優先，寫作次之，模糊比對）
-  let best=null, bestD=99;
+  if(/(大招|大昭|打招|絕招|技能|放招|招式|放大)/.test(t)) return "ult";
+  if(/[左佐作坐昨撮]/.test(t)) return "left";
+  if(/[右又有佑幼柚]/.test(t)) return "right";
+  return null;
+}
+// 英雄比對：讀作／寫作／職業三者取最像，回相似度 0~1
+function matchHero(text){
+  const t=clean(text);
+  let best=null, bestScore=-1;
   G.heroes.forEach(h=>{
-    const targets=[h.listen, h.write, h.job].map(clean);
-    targets.forEach(tg=>{
-      if(!tg) return;
-      if(t.includes(tg)){ if(0<bestD){best=h;bestD=0;} }
-      const d=lev(t, tg);
-      if(d<bestD){ best=h; bestD=d; }
+    [h.listen, h.write, h.job].forEach(tg=>{
+      tg=clean(tg); if(!tg) return;
+      let score;
+      if(t.includes(tg)) score=1;
+      else score = 1 - lev(t,tg)/Math.max(t.length, tg.length, 1);
+      if(score>bestScore){ bestScore=score; best=h; }
     });
   });
-  // 動作
-  let action=null;
-  if(/左/.test(text)) action="left";
-  else if(/右/.test(text)) action="right";
-  else if(/(大招|絕招|技能|放招)/.test(text)) action="ult";
-
-  if(best && bestD<=Math.max(2, Math.ceil(clean(best.listen).length/2)) && action){
+  return { best, score:bestScore };
+}
+function commandHeard(text){
+  const action=detectAction(text);
+  const { best, score }=matchHero(text);
+  const nameOK = best && score>=0.34;
+  if(nameOK && action){
     doAction(best, action);
-  } else if(action && best && bestD<=3){
-    doAction(best, action);
+    const a = action==="ult"?"放大招":action==="left"?"去左邊":"去右邊";
+    showVoice(`🎯 聽到「${text}」→ ${best.write} ${a}`);
   } else {
-    // 沒對上就不動，給點提示
-    if(action) showVoice("聽到動作但沒聽出是誰：「"+text+"」");
+    const why = !action && !nameOK ? "沒聽出是誰、也沒聽出動作"
+              : !action ? "沒聽出動作（左／右／大招）"
+              : "沒聽出是哪個英雄";
+    showVoice(`👂 聽到「${text}」→ ✗ ${why}`);
   }
 }
 function doAction(h, action){
