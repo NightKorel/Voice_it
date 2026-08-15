@@ -54,6 +54,15 @@
     <button class="big" id="btn-cal">開始唱 3 秒 ▶</button>
   </div>
 
+  <!-- 選關 -->
+  <div id="screen-select" class="panel center hidden">
+    <h2>選一關</h2>
+    <button class="big" data-lv="0">第一關 · 輕鬆</button>
+    <button class="big" data-lv="1">第二關 · 進階</button>
+    <button class="big" data-lv="2">第三關 · 挑戰</button>
+    <button class="big" id="btn-recal3" style="background:#2c2c44;color:var(--ink);">重新校準 ↻</button>
+  </div>
+
   <!-- 遊戲 -->
   <div id="screen-game" class="hidden">
     <div id="hud">
@@ -69,8 +78,9 @@
   <div id="screen-end" class="panel center hidden">
     <h2 id="end-title">🎉 過關！</h2>
     <div id="end-stats" style="font-size:17px; margin:12px 0;"></div>
-    <button class="big" id="btn-again">再玩一次 ↻</button>
-    <button class="big" id="btn-recal2" style="background:#2c2c44;color:var(--ink);">重新校準 ↻</button>
+    <button class="big hidden" id="btn-next">下一關 ▶</button>
+    <button class="big" id="btn-again">再玩這關 ↻</button>
+    <button class="big" id="btn-select" style="background:#2c2c44;color:var(--ink);">選關 ☰</button>
   </div>
 </div>
 
@@ -164,22 +174,51 @@ function finishCal(){
   cal.high=a[0][1]; cal.mid=a[1][1]; cal.low=a[2][1];
   cal.boundHM=Math.sqrt(cal.high*cal.mid);
   cal.boundML=Math.sqrt(cal.mid*cal.low);
-  startGame();
+  showSelect();
 }
+function showSelect(){
+  ["screen-cal","screen-game","screen-end"].forEach(s=>$(s).classList.add("hidden"));
+  $("screen-select").classList.remove("hidden");
+}
+document.querySelectorAll("#screen-select [data-lv]").forEach(b=>{
+  b.addEventListener("click", ()=>{ buildLevel(+b.dataset.lv); startGame(); });
+});
+$("btn-recal3").addEventListener("click", ()=>{
+  $("screen-select").classList.add("hidden");
+  $("screen-cal").classList.remove("hidden"); calStep=0; showCal();
+});
 
-/* ===== 譜面（BPM 84，放軟：少大跳、多長音） ===== */
-const BPM=84, beat=60/BPM, APPROACH=2.6, HIT_WIN=0.30;
-function b2s(b){ return b*beat; }
-// lane: 0=上(高) 1=中 2=下(低)；dur>0 為長音（秒）。盡量相鄰移動，避免上↔下直接跳
-const CHART=[
-  {b:4,l:1},{b:6,l:1},{b:8,l:0,dur:b2s(2)},
-  {b:11,l:1},{b:12,l:1},{b:14,l:2,dur:b2s(2)},
-  {b:17,l:1},{b:18,l:0},{b:20,l:1},
-  {b:22,l:2},{b:24,l:1,dur:b2s(2)},
-  {b:27,l:1},{b:28,l:0},{b:30,l:1},{b:31,l:2},
-  {b:32,l:1,dur:b2s(3)},
-].map(n=>({ t:b2s(n.b), l:n.l, dur:n.dur||0, done:false, frames:0, good:0 }));
-const LAST_T=Math.max(...CHART.map(n=>n.t+n.dur));
+/* ===== 三關譜面 =====
+   每個音符 [beat, lane, durBeats?]  lane: 0=上(高) 1=中 2=下(低)；有第三個值＝長音
+   節奏用半拍/切分做變化，長音只當點綴（少而精） */
+const APPROACH=2.6, HIT_WIN=0.30;
+const LEVELS=[
+  { name:"第一關", bpm:84, notes:[
+    [4,1],[5.5,1],[6.5,0],[8,1],[9.5,2],[10.5,1],
+    [12,0,1.5],[14.5,1],[15.5,2],[16.5,1],[18,0],
+    [19.5,1],[20.5,2],[22,1],[23.5,0],[24.5,1],
+    [26,2],[27,1],[28,0,2],
+  ]},
+  { name:"第二關", bpm:96, notes:[
+    [4,1],[4.5,0],[6,1],[7,2],[7.5,1],[9,0],[10,1],[10.5,2],
+    [12,1,1.5],[14.5,0],[15,1],[15.5,0],[16.5,2],[18,1],[18.5,0],
+    [20,2],[20.5,1],[21,0],[22.5,1],[23,2],[24,1],
+    [25.5,0],[26,1],[26.5,2],[28,1,1.5],[30.5,0],[31.5,1],
+  ]},
+  { name:"第三關", bpm:104, notes:[
+    [4,2],[4.5,0],[5,1],[6,0],[6.5,2],[7.5,0],[8,1],[9,2],[9.5,0],[10.5,1],
+    [12,0,1.5],[14.5,2],[15,1],[15.5,0],[16,2],[17,0],[17.5,1],[18.5,2],[19,0],[20,1],
+    [20.5,2],[21,0],[22,1],[23,2],[23.5,1],[24.5,0],
+    [26,1],[26.5,2],[27,0],[27.5,1],[28.5,2],[29,0],[30,1],[31,2],[32,0,2],
+  ]},
+];
+let curLevelIdx=0, beat=0.6, CHART=[], LAST_T=0;
+function buildLevel(idx){
+  curLevelIdx=idx;
+  beat=60/LEVELS[idx].bpm;
+  CHART=LEVELS[idx].notes.map(n=>({ t:n[0]*beat, l:n[1], dur:(n[2]||0)*beat, done:false, frames:0, good:0 }));
+  LAST_T=Math.max(...CHART.map(n=>n.t+n.dur));
+}
 
 /* ===== 節拍聲 ===== */
 let schedTimer, nextBeat, beatNo, noiseBuf;
@@ -239,6 +278,7 @@ const LANE_COL=["#ff6b9d","#ffd166","#5ee7df"], LANE_NAME=["上","中","下"];
 
 function startGame(){
   $("screen-cal").classList.add("hidden");
+  $("screen-select").classList.add("hidden");
   $("screen-end").classList.add("hidden");
   $("screen-game").classList.remove("hidden");
   CHART.forEach(n=>{ n.done=false; n.frames=0; n.good=0; });
@@ -281,7 +321,7 @@ function loop(){
   }
   if(holding){
     synthOsc.frequency.setTargetAtTime(laneFreqOf(holding.l), ac.currentTime, 0.03);
-    synthGain.gain.setTargetAtTime(0.11, ac.currentTime, 0.03);
+    synthGain.gain.setTargetAtTime(0.22, ac.currentTime, 0.03);
   }else{
     synthGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.04);
   }
@@ -361,18 +401,20 @@ function median(a){ const s=[...a].sort((x,y)=>x-y); return s[Math.floor(s.lengt
 
 function endGame(){
   playing=false; clearInterval(schedTimer);
+  synthGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.05);
   $("screen-game").classList.add("hidden");
   $("screen-end").classList.remove("hidden");
   const total=stats.hit+stats.miss;
   const acc=total? Math.round(stats.hit/total*100):0;
-  $("end-title").textContent = acc>=60? "🎉 過關！" : "💧 再挑戰看看！";
+  const passed=acc>=60;
+  $("end-title").textContent = (passed?"🎉 ":"💧 ")+LEVELS[curLevelIdx].name+(passed?" 過關！":" 再挑戰看看！");
   $("end-stats").innerHTML=`分數 <b>${stats.score}</b><br>命中 ${stats.hit}／${total}（${acc}%）<br>最高連段 ${stats.maxCombo}`;
+  const hasNext = curLevelIdx < LEVELS.length-1;
+  $("btn-next").classList.toggle("hidden", !(passed && hasNext));
 }
-$("btn-again").addEventListener("click", startGame);
-$("btn-recal2").addEventListener("click", ()=>{
-  $("screen-end").classList.add("hidden");
-  $("screen-cal").classList.remove("hidden"); calStep=0; showCal();
-});
+$("btn-again").addEventListener("click", ()=>{ buildLevel(curLevelIdx); startGame(); });
+$("btn-next").addEventListener("click", ()=>{ buildLevel(curLevelIdx+1); startGame(); });
+$("btn-select").addEventListener("click", showSelect);
 </script>
 </body>
 </html>
