@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>聲控守塔（MVP・第一關）</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --earth: #7cb342;
+    --earth-dark: #558b2f;
+    --sky: #aed581;
+    --ink: #33291f;
+    --panel: #fffdf5;
+    --gold: #f4b400;
+    --danger: #e53935;
+  }
+  html, body {
+    margin: 0; height: 100%;
+    font-family: "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(#cdeb8e, #a5d6a7);
+    -webkit-user-select: none; user-select: none;
+  }
+  #app { max-width: 900px; margin: 0 auto; padding: 12px; }
+  h1 { text-align: center; margin: 8px 0; font-size: 22px; }
+  .muted { color: #7a6f5f; font-size: 13px; }
+  button {
+    font-family: inherit; cursor: pointer; border: none; border-radius: 10px;
+    padding: 10px 14px; font-size: 15px; background: var(--earth); color: #fff;
+    box-shadow: 0 2px 0 var(--earth-dark);
+  }
+  button:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--earth-dark); }
+  button.ghost { background: #fff; color: var(--ink); box-shadow: 0 2px 0 #d8cfbc; }
+  button.rec { background: var(--danger); box-shadow: 0 2px 0 #b71c1c; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=text] {
+    font-family: inherit; font-size: 15px; padding: 9px 11px; border-radius: 10px;
+    border: 2px solid #d8cfbc; width: 100%; background: #fff; color: var(--ink);
+  }
+  .panel { background: var(--panel); border-radius: 16px; padding: 16px; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+  .hidden { display: none !important; }
+
+  /* 命名畫面 */
+  .hero-card { border: 2px solid #ece4d2; border-radius: 14px; padding: 12px; margin: 10px 0; }
+  .hero-card h3 { margin: 0 0 8px; font-size: 17px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row + .row { margin-top: 8px; }
+  .label-tag { flex: 0 0 44px; font-weight: 700; color: var(--earth-dark); }
+  .heard { font-size: 13px; color: #7a6f5f; margin-top: 4px; min-height: 18px; }
+
+  /* 戰場 */
+  #hud { display: flex; gap: 14px; align-items: center; justify-content: center;
+         flex-wrap: wrap; margin-bottom: 8px; font-weight: 700; }
+  #hpbar-wrap { flex: 1 1 200px; max-width: 320px; height: 20px; background:#e0d8c6;
+                border-radius: 20px; overflow: hidden; }
+  #hpbar { height: 100%; width: 100%; background: linear-gradient(90deg,#66bb6a,#43a047); transition: width .2s; }
+  #field {
+    position: relative; height: 320px; border-radius: 16px; overflow: hidden;
+    background: linear-gradient(#bfe39a, #8bc34a 70%, #7cb342);
+    border: 3px solid var(--earth-dark);
+  }
+  .sprite { position: absolute; transform: translate(-50%, -50%); font-size: 30px;
+            transition: none; text-align: center; }
+  .sprite .hpchip { font-size: 10px; color:#fff; background:rgba(0,0,0,.45); border-radius:6px;
+                    padding:0 3px; display:block; margin-top:-4px; }
+  #tower { left: 50%; top: 55%; font-size: 46px; }
+  .hero { top: 55%; }
+  .hero .name { font-size: 11px; background:#fff; border-radius:6px; padding:0 4px; display:block; margin-top:-2px; }
+  .hero.flash { animation: flash .18s; }
+  @keyframes flash { 0%{filter:brightness(2)} 100%{filter:none} }
+  .float { position:absolute; font-size:14px; font-weight:700; color:var(--gold);
+           pointer-events:none; animation: rise .8s ease-out forwards; }
+  @keyframes rise { to { transform: translate(-50%,-40px); opacity:0; } }
+
+  /* 控制列 */
+  #controls { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; justify-content:center; }
+  .hero-ctrl { background:#fff; border:2px solid #ece4d2; border-radius:12px; padding:8px; text-align:center; }
+  .hero-ctrl .cname { font-weight:700; font-size:13px; margin-bottom:6px; }
+  .hero-ctrl .btns { display:flex; gap:4px; }
+  .hero-ctrl button { padding:6px 9px; font-size:13px; }
+  .cd { font-size:11px; color:#7a6f5f; }
+
+  /* 覆蓋層 */
+  .overlay { position: fixed; inset: 0; background: rgba(40,30,20,.55);
+             display:flex; align-items:center; justify-content:center; padding:16px; z-index:10; }
+  .overlay .panel { max-width: 460px; width: 100%; text-align:center; }
+  .shop-item { display:flex; justify-content:space-between; align-items:center;
+               border:2px solid #ece4d2; border-radius:12px; padding:10px; margin:8px 0; }
+  .shop-item .desc { text-align:left; }
+  .twister-big { font-size: 22px; font-weight:800; margin:14px 0; line-height:1.5; }
+  .tries { font-size: 15px; color: var(--danger); font-weight:700; }
+  #voice-status { text-align:center; font-size:13px; margin-top:6px; min-height:18px; }
+  .kbd { background:#efe7d5; border-radius:6px; padding:1px 6px; font-size:12px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>🏰 聲控守塔 <span class="muted">MVP・第一關：陸地</span></h1>
+
+  <!-- ============ 命名畫面 ============ -->
+  <div id="screen-name" class="panel">
+    <p>幫你的三個英雄取名。每個都有兩種輸入：<br>
+      <b style="color:var(--danger)">讀作</b>（按著唸一次，遊戲要聽的是這個）、
+      <b style="color:var(--earth-dark)">寫作</b>（打字，畫面顯示的字）。<br>
+      <span class="muted">兩個至少填一個。沒填讀作就用寫作的字來聽；建議兩個都給，比較準。</span>
+    </p>
+    <div id="hero-cards"></div>
+    <div style="text-align:center; margin-top:8px;">
+      <button id="btn-start">開始守塔 ▶</button>
+      <div class="muted" style="margin-top:6px;">建議用 Chrome／Edge，並允許麥克風。</div>
+    </div>
+  </div>
+
+  <!-- ============ 戰場畫面 ============ -->
+  <div id="screen-game" class="hidden">
+    <div id="hud">
+      <div>❤️ <span id="hp-text">100</span>/<span id="hp-max">100</span></div>
+      <div id="hpbar-wrap"><div id="hpbar"></div></div>
+      <div>💰 <span id="money">0</span></div>
+      <div>🌊 第 <span id="wave">1</span>/5 波</div>
+    </div>
+    <div id="field">
+      <div id="tower" class="sprite">🏰</div>
+    </div>
+    <div id="controls"></div>
+    <div id="voice-status"></div>
+  </div>
+</div>
+
+<!-- 覆蓋層容器 -->
+<div id="overlay-root"></div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   資料：英雄、繞口令、Boss
+   ========================================================= */
+const HEROES = [
+  { key:"sword", job:"劍士", emoji:"🗡️", dmg:2, interval:800, target:"near",
+    ult:{ name:"橫掃", cd:9000, desc:"清掉我這邊靠近塔的一群怪" } },
+  { key:"arch",  job:"弓手", emoji:"🏹", dmg:1, interval:450, target:"far",
+    ult:{ name:"箭雨", cd:9000, desc:"射穿我這邊一整排怪" } },
+  { key:"mage",  job:"法師", emoji:"🔮", dmg:1, interval:1100, target:"all",
+    ult:{ name:"爆炸", cd:9000, desc:"把我這邊全部怪炸一輪" } },
+];
+
+const TWISTERS = [
+  "四是四十是十十四是十四四十是四十",
+  "紅鳳凰粉鳳凰紅粉鳳凰花鳳凰",
+  "吃葡萄不吐葡萄皮不吃葡萄倒吐葡萄皮",
+  "牛郎戀劉娘劉娘念牛郎",
+  "門口有四十四棵石榴樹",
+];
+
+// 第一關五波：陸地。type: slime 一般怪、boss 王
+const LEVEL1 = [
+  { wave:1, spawns:{ slime:6 } },
+  { wave:2, shop:true, spawns:{ slime:9 } },
+  { wave:3, spawns:{ slime:12 } },
+  { wave:4, shop:true, spawns:{ slime:14 } },
+  { wave:5, boss:true },
+];
+
+/* =========================================================
+   遊戲狀態
+   ========================================================= */
+const G = {
+  tower: { hp:100, max:100 },
+  money: 0,
+  waveIndex: 0,
+  heroes: [],           // 執行期英雄物件
+  enemies: [],
+  running: false,
+  paused: false,
+  mode: "name",         // name | play | twister | record
+  spawnQueue: [],
+  boss: null,
+  bossUltTimer: 0,
+};
+
+const FIELD = { el:null, w:0, h:0 };
+const TOWER_L = 0.42, TOWER_R = 0.58;  // 塔的左右邊界（怪走到這裡就開打）
+
+/* =========================================================
+   工具
+   ========================================================= */
+function $(id){ return document.getElementById(id); }
+function clean(s){ return (s||"").replace(/[\s，。、！？,.!?~～·]/g,""); }
+function lev(a,b){
+  a=clean(a); b=clean(b);
+  const m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  const d=Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]);
+  for(let j=0;j<=n;j++) d[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++)
+    d[i][j]=Math.min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return d[m][n];
+}
+
+/* =========================================================
+   語音辨識（Web Speech API）
+   ========================================================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null, recogWanted = false;
+
+function voiceSupported(){ return !!SR; }
+
+function buildRecog(){
+  if(!SR) return null;
+  const r = new SR();
+  r.lang = "zh-TW";
+  r.continuous = true;
+  r.interimResults = false;
+  r.onresult = (e)=>{
+    const t = e.results[e.results.length-1][0].transcript;
+    onHeard(t);
+  };
+  r.onend = ()=>{ if(recogWanted){ try{ r.start(); }catch(_){} } };
+  r.onerror = ()=>{};
+  return r;
+}
+function startListening(){
+  if(!SR) return;
+  recogWanted = true;
+  if(!recog) recog = buildRecog();
+  try{ recog.start(); }catch(_){}
+}
+function stopListening(){
+  recogWanted = false;
+  if(recog){ try{ recog.stop(); }catch(_){} }
+}
+
+// 一次性錄音（給「讀作」用），避免跟遊戲的連續辨識打架
+function recordOnce(onText, onFail){
+  if(!SR){ onFail && onFail("此瀏覽器不支援語音，請改用寫作打字。"); return; }
+  const wasWanted = recogWanted;
+  stopListening();
+  const r = new SR();
+  r.lang="zh-TW"; r.continuous=false; r.interimResults=false;
+  let got=false;
+  r.onresult=(e)=>{ got=true; onText(e.results[0][0].transcript); };
+  r.onerror=(e)=>{ onFail && onFail("沒聽清楚，再試一次。"); };
+  r.onend=()=>{ if(wasWanted) startListening(); };
+  try{ r.start(); }catch(_){ onFail && onFail("無法開始錄音。"); }
+}
+
+/* 聽到一句話 → 依 mode 分流 */
+function onHeard(text){
+  if(G.mode==="twister"){ twisterHeard(text); return; }
+  if(G.mode==="play"){ commandHeard(text); }
+  showVoice("聽到：「"+text+"」");
+}
+
+function showVoice(msg){
+  const el=$("voice-status"); if(el) el.textContent=msg;
+}
+
+/* =========================================================
+   命名畫面
+   ========================================================= */
+function renderNameScreen(){
+  const wrap=$("hero-cards"); wrap.innerHTML="";
+  HEROES.forEach((h,i)=>{
+    const card=document.createElement("div");
+    card.className="hero-card";
+    card.innerHTML=`
+      <h3>${h.emoji} ${h.job}</h3>
+      <div class="row">
+        <span class="label-tag" style="color:var(--danger)">讀作</span>
+        <button class="rec" data-rec="${i}">🎙️ 開始錄音</button>
+        <span class="heard" id="heard-${i}"></span>
+      </div>
+      <div class="row">
+        <span class="label-tag">寫作</span>
+        <input type="text" id="write-${i}" placeholder="顯示名字（例：小明）">
+      </div>
+    `;
+    wrap.appendChild(card);
+  });
+  wrap.querySelectorAll("[data-rec]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const i=+btn.dataset.rec;
+      btn.textContent="🔴 聽你唸…";
+      recordOnce(
+        (txt)=>{ HEROES[i]._read=txt; $("heard-"+i).textContent="讀作：「"+txt+"」"; btn.textContent="🎙️ 重錄"; },
+        (msg)=>{ $("heard-"+i).textContent=msg; btn.textContent="🎙️ 開始錄音"; }
+      );
+    });
+  });
+  if(!voiceSupported()){
+    showAtTop("⚠️ 這個瀏覽器不支援語音辨識，讀作會失效——請用寫作打字，並改用 Chrome／Edge 才能聲控。");
+  }
+}
+function showAtTop(msg){
+  const p=document.createElement("div");
+  p.className="muted"; p.style.textAlign="center"; p.style.color="var(--danger)";
+  p.textContent=msg; $("screen-name").prepend(p);
+}
+
+/* =========================================================
+   開始遊戲
+   ========================================================= */
+$("btn-start").addEventListener("click",()=>{
+  // 收集名字
+  G.heroes = HEROES.map((h,i)=>{
+    const write = $("write-"+i).value.trim();
+    const read = h._read || "";
+    return {
+      ...h,
+      write: write || h.job,           // 顯示名
+      listen: read || write || h.job,  // 要聽的指紋
+      side: null, pos: 0.5,
+      atkTimer: 0, ultTimer: 0, ultReady: true,
+    };
+  });
+  $("screen-name").classList.add("hidden");
+  $("screen-game").classList.remove("hidden");
+  FIELD.el=$("field");
+  placeHeroes();
+  renderControls();
+  G.running=true; G.mode="play";
+  startListening();
+  showVoice(voiceSupported()? "🎤 聲控已開，喊「〔名字〕左／右／大招」。也可以用下面的按鈕。"
+                            : "此瀏覽器沒有語音，改用下面的按鈕操作。");
+  startWave(0);
+  requestAnimationFrame(loop);
+});
+
+/* =========================================================
+   英雄
+   ========================================================= */
+function placeHeroes(){
+  // 起始都站塔邊待命
+  G.heroes.forEach((h,i)=>{
+    let el=document.createElement("div");
+    el.className="sprite hero"; el.id="hero-"+i;
+    el.innerHTML=`<span>${h.emoji}</span><span class="name">${h.write}</span>`;
+    FIELD.el.appendChild(el);
+    h.el=el; h.side=null; h.pos=0.5; h.slot=0.5;
+  });
+  layoutHeroes();
+}
+function layoutHeroes(){
+  // 依 side 把英雄排在塔的左邊或右邊，同側的稍微錯開
+  const left=[], right=[], idle=[];
+  G.heroes.forEach(h=> (h.side==="left"?left:h.side==="right"?right:idle).push(h));
+  const put=(arr, base, dir)=>arr.forEach((h,k)=>{ h.pos = base + dir*(0.05+0.05*k); });
+  put(left, TOWER_L, -1);
+  put(right, TOWER_R, +1);
+  idle.forEach((h,k)=>{ h.pos = 0.5 + (k-1)*0.03; });
+  G.heroes.forEach(h=>{ h.el.style.left=(h.pos*100)+"%"; h.el.style.top="55%"; });
+}
+function assignHero(h, side){
+  h.side=side; layoutHeroes();
+  flash(h.el);
+  showVoice(`${h.write} → ${side==="left"?"左":"右"}邊`);
+}
+function flash(el){ el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"),200); }
+
+/* 大招 */
+function castUlt(h){
+  if(!h.ultReady){ showVoice(`${h.write} 的大招還在冷卻`); return; }
+  if(!h.side){ showVoice(`先叫 ${h.write} 去左邊或右邊，才能放大招`); return; }
+  h.ultReady=false; h.ultTimer=h.ult.cd; flash(h.el);
+  const targets = enemiesOnSide(h.side);
+  if(h.key==="sword"){ // 橫掃：靠塔最近的一半
+    targets.sort((a,b)=>distToTower(a)-distToTower(b));
+    targets.slice(0, Math.ceil(targets.length/2)+2).forEach(e=>hurt(e, 6, h));
+  } else if(h.key==="arch"){ // 箭雨：整排各扣
+    targets.forEach(e=>hurt(e,4,h));
+  } else { // 法師爆炸：全部大扣
+    targets.forEach(e=>hurt(e,5,h));
+  }
+  bigText(h.side==="left"?0.25:0.75, 0.4, "💥"+h.ult.name+"！");
+  updateControls();
+}
+
+/* =========================================================
+   敵人
+   ========================================================= */
+function spawnSlime(){
+  const side = Math.random()<0.5 ? "left":"right";
+  const e={ type:"slime", emoji:"🔵", hp:1, max:1, dmg:2,
+            side, pos: side==="left"?0:1, speed:0.045, atkTimer:0, dead:false };
+  makeEnemyEl(e); G.enemies.push(e);
+}
+function spawnBoss(){
+  const side = Math.random()<0.5 ? "left":"right";
+  const e={ type:"boss", emoji:"👑", hp:40, max:40, dmg:6,
+            side, pos: side==="left"?0:1, speed:0.018, atkTimer:0, dead:false };
+  makeEnemyEl(e); G.enemies.push(e); G.boss=e; G.bossUltTimer=8000;
+  showVoice("⚠️ Boss 史萊姆王登場！");
+}
+function makeEnemyEl(e){
+  const el=document.createElement("div");
+  el.className="sprite enemy";
+  if(e.type==="boss") el.style.fontSize="52px";
+  el.innerHTML=`<span>${e.emoji}</span>`+(e.max>1?`<span class="hpchip">${e.hp}</span>`:``);
+  FIELD.el.appendChild(el); e.el=el;
+}
+function enemiesOnSide(side){ return G.enemies.filter(e=>!e.dead && e.side===side); }
+function distToTower(e){ return Math.abs(e.pos-0.5); }
+function hurt(e, dmg, by){
+  if(e.dead) return;
+  e.hp-=dmg;
+  const chip=e.el.querySelector(".hpchip"); if(chip) chip.textContent=Math.max(0,e.hp);
+  if(e.hp<=0){ killEnemy(e); }
+}
+function killEnemy(e){
+  if(e.dead) return; e.dead=true;
+  const drop = e.type==="boss"?0:(1+Math.floor(Math.random()*2));
+  if(drop){ addMoney(drop); floatText(e.pos, 0.5, "+"+drop, "var(--gold)"); }
+  e.el.remove();
+  if(e===G.boss){ G.boss=null; winLevel(); }
+}
+function addMoney(n){ G.money+=n; $("money").textContent=G.money; }
+
+/* =========================================================
+   波次
+   ========================================================= */
+function startWave(idx){
+  G.waveIndex=idx;
+  const w=LEVEL1[idx];
+  $("wave").textContent=w.wave;
+  if(w.shop){ openShop(()=>reallyStartWave(w)); }
+  else reallyStartWave(w);
+}
+function reallyStartWave(w){
+  G.spawnQueue=[];
+  if(w.boss){ G.spawnQueue.push({t:600, fn:spawnBoss}); }
+  else {
+    let t=300;
+    for(let i=0;i<(w.spawns.slime||0);i++){ G.spawnQueue.push({t, fn:spawnSlime}); t+=650; }
+  }
+  G._spawnClock=0;
+}
+function waveClear(){
+  // 進下一波，或全破
+  if(G.waveIndex>=LEVEL1.length-1) return; // 第五波交給 winLevel
+  startWave(G.waveIndex+1);
+}
+
+/* =========================================================
+   商店（買升級）
+   ========================================================= */
+function shopItems(){
+  return [
+    { id:"sword", name:"🗡️ 劍士攻擊 +1", cost:5, apply:()=>bumpDmg("sword",1) },
+    { id:"arch",  name:"🏹 弓手攻擊 +1", cost:5, apply:()=>bumpDmg("arch",1) },
+    { id:"mage",  name:"🔮 法師攻擊 +1", cost:6, apply:()=>bumpDmg("mage",1) },
+    { id:"tower", name:"🏰 塔血上限 +20", cost:6, apply:()=>{ G.tower.max+=20; G.tower.hp+=20; drawHp(); } },
+  ];
+}
+function bumpDmg(key,n){ const h=G.heroes.find(x=>x.key===key); if(h) h.dmg+=n; }
+function openShop(done){
+  G.paused=true; G.mode="name"; stopListening();
+  const items=shopItems();
+  const root=$("overlay-root");
+  const ov=document.createElement("div"); ov.className="overlay";
+  ov.innerHTML=`<div class="panel">
+    <h2>🛒 神秘商人</h2>
+    <div class="muted">花現在，還是留給下一個商人？💰 你有 <b id="shop-money">${G.money}</b></div>
+    <div id="shop-list"></div>
+    <button id="shop-done">出發 ▶</button>
+  </div>`;
+  root.appendChild(ov);
+  const list=ov.querySelector("#shop-list");
+  items.forEach(it=>{
+    const row=document.createElement("div"); row.className="shop-item";
+    row.innerHTML=`<span class="desc">${it.name}</span>`;
+    const b=document.createElement("button"); b.textContent="買 ("+it.cost+")";
+    b.addEventListener("click",()=>{
+      if(G.money>=it.cost){ addMoney(-it.cost); it.apply(); ov.querySelector("#shop-money").textContent=G.money; flashBtn(b); }
+      else { b.textContent="錢不夠"; setTimeout(()=>b.textContent="買 ("+it.cost+")",700); }
+    });
+    row.appendChild(b); list.appendChild(row);
+  });
+  ov.querySelector("#shop-done").addEventListener("click",()=>{
+    ov.remove(); G.paused=false; G.mode="play"; startListening(); done&&done();
+  });
+}
+function flashBtn(b){ const o=b.textContent; b.textContent="✔ 已買"; setTimeout(()=>b.textContent=o,600); }
+
+/* =========================================================
+   Boss 繞口令大招
+   ========================================================= */
+let curTwister=null, twisterTries=0;
+function bossCastUlt(){
+  G.mode="twister"; G.paused=true;
+  curTwister=TWISTERS[Math.floor(Math.random()*TWISTERS.length)];
+  twisterTries=3;
+  showTwisterOverlay();
+}
+function showTwisterOverlay(){
+  const root=$("overlay-root");
+  let ov=document.getElementById("tw-ov");
+  if(!ov){
+    ov=document.createElement("div"); ov.className="overlay"; ov.id="tw-ov";
+    root.appendChild(ov);
+  }
+  ov.innerHTML=`<div class="panel">
+    <h2>⚠️ Boss 大招來襲！</h2>
+    <div class="muted">在三次內唸對繞口令就能反彈！（辨識錯 3 字內算對）</div>
+    <div class="twister-big">${curTwister}</div>
+    <div class="tries">剩 ${twisterTries} 次</div>
+    <div style="margin-top:12px;">
+      <button id="tw-rec" class="rec">🎙️ 唸出來</button>
+    </div>
+    <div class="muted" style="margin-top:10px;">沒麥克風？打字也行：</div>
+    <div class="row" style="margin-top:6px;">
+      <input type="text" id="tw-type" placeholder="打出繞口令">
+      <button id="tw-submit" class="ghost">送出</button>
+    </div>
+    <div class="heard" id="tw-feedback" style="text-align:center;"></div>
+  </div>`;
+  ov.querySelector("#tw-rec").addEventListener("click",()=>{
+    ov.querySelector("#tw-rec").textContent="🔴 聽你唸…";
+    recordOnce((txt)=>twisterHeard(txt), (m)=>{ ov.querySelector("#tw-feedback").textContent=m; ov.querySelector("#tw-rec").textContent="🎙️ 唸出來"; });
+  });
+  ov.querySelector("#tw-submit").addEventListener("click",()=>{
+    twisterHeard(ov.querySelector("#tw-type").value);
+  });
+}
+function twisterHeard(text){
+  const d=lev(text, curTwister);
+  const fb=document.getElementById("tw-feedback");
+  if(d<=3){ twisterSuccess(); return; }
+  twisterTries--;
+  if(fb) fb.textContent=`差了 ${d} 字，不夠近！聽到：「${text}」`;
+  const el=document.querySelector("#tw-ov .tries"); if(el) el.textContent="剩 "+twisterTries+" 次";
+  const recBtn=document.querySelector("#tw-rec"); if(recBtn) recBtn.textContent="🎙️ 再唸一次";
+  if(twisterTries<=0){ twisterFail(); }
+}
+function twisterSuccess(){
+  closeTwister();
+  if(G.boss){ hurt(G.boss, 12, null); bigText(0.5,0.4,"🛡️ 反彈！-12"); }
+}
+function twisterFail(){
+  closeTwister();
+  damageTower(25); bigText(0.5,0.4,"💥 沒擋住！塔 -25");
+}
+function closeTwister(){
+  const ov=document.getElementById("tw-ov"); if(ov) ov.remove();
+  G.mode="play"; G.paused=false; G.bossUltTimer=10000;
+}
+
+/* =========================================================
+   塔
+   ========================================================= */
+function damageTower(n){
+  G.tower.hp=Math.max(0, G.tower.hp-n); drawHp();
+  if(G.tower.hp<=0){ loseGame(); }
+}
+function drawHp(){
+  $("hp-text").textContent=G.tower.hp; $("hp-max").textContent=G.tower.max;
+  $("hpbar").style.width=(100*G.tower.hp/G.tower.max)+"%";
+}
+
+/* =========================================================
+   指令解析（聲控 + 按鈕共用）
+   ========================================================= */
+function commandHeard(text){
+  const t=clean(text);
+  // 找出是哪個英雄（讀作優先，寫作次之，模糊比對）
+  let best=null, bestD=99;
+  G.heroes.forEach(h=>{
+    const targets=[h.listen, h.write, h.job].map(clean);
+    targets.forEach(tg=>{
+      if(!tg) return;
+      if(t.includes(tg)){ if(0<bestD){best=h;bestD=0;} }
+      const d=lev(t, tg);
+      if(d<bestD){ best=h; bestD=d; }
+    });
+  });
+  // 動作
+  let action=null;
+  if(/左/.test(text)) action="left";
+  else if(/右/.test(text)) action="right";
+  else if(/(大招|絕招|技能|放招)/.test(text)) action="ult";
+
+  if(best && bestD<=Math.max(2, Math.ceil(clean(best.listen).length/2)) && action){
+    doAction(best, action);
+  } else if(action && best && bestD<=3){
+    doAction(best, action);
+  } else {
+    // 沒對上就不動，給點提示
+    if(action) showVoice("聽到動作但沒聽出是誰：「"+text+"」");
+  }
+}
+function doAction(h, action){
+  if(action==="ult") castUlt(h);
+  else assignHero(h, action);
+}
+
+/* 按鈕控制列 */
+function renderControls(){
+  const c=$("controls"); c.innerHTML="";
+  G.heroes.forEach((h,i)=>{
+    const box=document.createElement("div"); box.className="hero-ctrl";
+    box.innerHTML=`<div class="cname">${h.emoji} ${h.write}</div>
+      <div class="btns">
+        <button data-a="left" data-h="${i}">左</button>
+        <button data-a="right" data-h="${i}">右</button>
+        <button data-a="ult" data-h="${i}" class="ghost">大招</button>
+      </div>
+      <div class="cd" id="cd-${i}"></div>`;
+    c.appendChild(box);
+  });
+  c.querySelectorAll("button").forEach(b=>{
+    b.addEventListener("click",()=>doAction(G.heroes[+b.dataset.h], b.dataset.a));
+  });
+}
+function updateControls(){
+  G.heroes.forEach((h,i)=>{
+    const el=$("cd-"+i); if(!el) return;
+    el.textContent = h.ultReady ? "大招 OK" : "大招 "+Math.ceil(h.ultTimer/1000)+"s";
+  });
+}
+
+/* =========================================================
+   浮動文字
+   ========================================================= */
+function floatText(posX, posY, txt, color){
+  const el=document.createElement("div"); el.className="float";
+  el.textContent=txt; if(color) el.style.color=color;
+  el.style.left=(posX*100)+"%"; el.style.top=(posY*100)+"%";
+  FIELD.el.appendChild(el); setTimeout(()=>el.remove(),800);
+}
+function bigText(posX,posY,txt){
+  const el=document.createElement("div"); el.className="float";
+  el.textContent=txt; el.style.fontSize="26px"; el.style.color="#fff";
+  el.style.textShadow="0 2px 6px rgba(0,0,0,.5)";
+  el.style.left=(posX*100)+"%"; el.style.top=(posY*100)+"%";
+  FIELD.el.appendChild(el); setTimeout(()=>el.remove(),900);
+}
+
+/* =========================================================
+   主迴圈
+   ========================================================= */
+let lastT=0;
+function loop(ts){
+  if(!G.running) return;
+  const dt = lastT? Math.min(50, ts-lastT):16; lastT=ts;
+  if(!G.paused){ update(dt); }
+  requestAnimationFrame(loop);
+}
+
+function update(dt){
+  // 生怪
+  if(G.spawnQueue.length){
+    G._spawnClock+=dt;
+    while(G.spawnQueue.length && G._spawnClock>=G.spawnQueue[0].t){
+      const s=G.spawnQueue.shift(); s.fn();
+    }
+  }
+
+  // 敵人移動 / 攻擊塔
+  G.enemies.forEach(e=>{
+    if(e.dead) return;
+    const dir = e.side==="left"? +1 : -1;
+    const edge = e.side==="left"? TOWER_L : TOWER_R;
+    const atTower = e.side==="left"? (e.pos>=edge) : (e.pos<=edge);
+    if(!atTower){
+      e.pos += dir * e.speed * (dt/1000);
+    } else {
+      e.pos = edge;
+      e.atkTimer-=dt;
+      if(e.atkTimer<=0){ e.atkTimer=1000; damageTower(e.dmg); flash(e.el); }
+    }
+    e.el.style.left=(e.pos*100)+"%";
+    e.el.style.top="55%";
+  });
+
+  // 英雄攻擊
+  G.heroes.forEach(h=>{
+    // 大招冷卻
+    if(!h.ultReady){ h.ultTimer-=dt; if(h.ultTimer<=0){ h.ultReady=true; } }
+    if(!h.side) return;
+    h.atkTimer-=dt;
+    if(h.atkTimer<=0){
+      const foes=enemiesOnSide(h.side);
+      if(foes.length){
+        h.atkTimer=h.interval;
+        if(h.target==="all"){ foes.forEach(e=>hurt(e,h.dmg,h)); flash(h.el); }
+        else {
+          foes.sort((a,b)=> h.target==="near" ? distToTower(a)-distToTower(b) : distToTower(b)-distToTower(a));
+          hurt(foes[0], h.dmg, h); flash(h.el);
+        }
+      }
+    }
+  });
+
+  updateControls();
+
+  // Boss 大招計時
+  if(G.boss && !G.boss.dead){
+    G.bossUltTimer-=dt;
+    if(G.bossUltTimer<=0){ bossCastUlt(); }
+  }
+
+  // 這波清完了嗎？
+  const w=LEVEL1[G.waveIndex];
+  const noEnemies = G.enemies.filter(e=>!e.dead).length===0;
+  if(!G.paused && G.spawnQueue.length===0 && noEnemies && !w.boss){
+    if(!G._waveEndPending){ G._waveEndPending=true; setTimeout(()=>{ G._waveEndPending=false; waveClear(); }, 900); }
+  }
+  // 清屍體
+  G.enemies=G.enemies.filter(e=>!e.dead);
+}
+
+/* =========================================================
+   勝負
+   ========================================================= */
+function winLevel(){
+  G.running=false; stopListening();
+  const root=$("overlay-root");
+  const ov=document.createElement("div"); ov.className="overlay";
+  ov.innerHTML=`<div class="panel">
+    <h2>🎉 第一關過關！</h2>
+    <p>陸地守住了！海與天空兩關之後會加進來。</p>
+    <div class="muted">剩餘塔血 ${G.tower.hp}／${G.tower.max}　💰 ${G.money}</div>
+    <button onclick="location.reload()">再玩一次 ↻</button>
+  </div>`;
+  root.appendChild(ov);
+}
+function loseGame(){
+  G.running=false; stopListening();
+  const root=$("overlay-root");
+  const ov=document.createElement("div"); ov.className="overlay";
+  ov.innerHTML=`<div class="panel">
+    <h2>💀 塔被攻破了…</h2>
+    <p>撐到第 ${LEVEL1[G.waveIndex].wave} 波。</p>
+    <button onclick="location.reload()">再試一次 ↻</button>
+  </div>`;
+  root.appendChild(ov);
+}
+
+/* =========================================================
+   啟動
+   ========================================================= */
+renderNameScreen();
+drawHp();
+</script>
+</body>
+</html>
