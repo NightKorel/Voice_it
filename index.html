@@ -241,18 +241,23 @@ function hat(t){
 }
 
 /* ===== 樂器：你的音高會發聲（唱在某排就放那排的音，音準幫你校正） ===== */
-let synthOsc, synthGain;
+let synthOsc, synthOsc2, synthGain;
 function ensureSynth(){
   if(synthOsc) return;
-  synthOsc=ac.createOscillator(); synthGain=ac.createGain();
-  const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=2200;
-  synthOsc.type="sine"; synthGain.gain.value=0;
-  synthOsc.connect(lp).connect(synthGain).connect(ac.destination);
-  // 一點點抖音，讓撐音柔和有生命，不死板
+  synthGain=ac.createGain(); synthGain.gain.value=0;
+  const lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=2600;
+  synthOsc=ac.createOscillator();  synthOsc.type="sine";
+  synthOsc2=ac.createOscillator(); synthOsc2.type="sine"; synthOsc2.detune.value=7; // 微失諧＝較暖
+  synthOsc.connect(lp); synthOsc2.connect(lp); lp.connect(synthGain).connect(ac.destination);
+  // 很輕的抖音
   const lfo=ac.createOscillator(), lfoGain=ac.createGain();
-  lfo.type="sine"; lfo.frequency.value=5.2; lfoGain.gain.value=3.5;
-  lfo.connect(lfoGain).connect(synthOsc.frequency); lfo.start();
-  synthOsc.start();
+  lfo.type="sine"; lfo.frequency.value=4.6; lfoGain.gain.value=1.6;
+  lfo.connect(lfoGain); lfoGain.connect(synthOsc.frequency); lfoGain.connect(synthOsc2.frequency);
+  synthOsc.start(); synthOsc2.start(); lfo.start();
+}
+function synthFreq(f){
+  synthOsc.frequency.setTargetAtTime(f, ac.currentTime, 0.03);
+  synthOsc2.frequency.setTargetAtTime(f, ac.currentTime, 0.03);
 }
 function laneFreqOf(l){ return [cal.high,cal.mid,cal.low][l]; }
 // 打中一下就彈那排的音
@@ -274,6 +279,7 @@ function scheduler(){
 /* ===== 遊戲 ===== */
 const cv=$("cv"), ctx=cv.getContext("2d");
 let songStart=0, smooth=[], stats={score:0,combo:0,maxCombo:0,hit:0,miss:0}, playing=false;
+let holdNote=null, holdGraceUntil=0;
 const LANE_COL=["#ff6b9d","#ffd166","#5ee7df"], LANE_NAME=["上","中","下"];
 
 function startGame(){
@@ -314,16 +320,17 @@ function loop(){
 
   judge(now, curLane);
 
-  // 樂器只在「打中」時響：長音撐住的當下才持續發那排的音
-  let holding=null;
-  for(const n of CHART){
-    if(n.dur>0 && !n.done && now>=n.t && now<=n.t+n.dur && curLane===n.l){ holding=n; break; }
-  }
-  if(holding){
-    synthOsc.frequency.setTargetAtTime(laneFreqOf(holding.l), ac.currentTime, 0.03);
-    synthGain.gain.setTargetAtTime(0.22, ac.currentTime, 0.03);
+  // 長音撐住時才持續發聲；加「寬限」讓短暫抖音不會把聲音切斷（避免斷斷續續很雜）
+  const rt=performance.now();
+  let active=null;
+  for(const n of CHART){ if(n.dur>0 && !n.done && now>=n.t && now<=n.t+n.dur){ active=n; break; } }
+  if(active && curLane===active.l){ holdNote=active; holdGraceUntil=rt+160; }
+  if(active && holdNote===active && rt<holdGraceUntil){
+    synthFreq(laneFreqOf(active.l));
+    synthGain.gain.setTargetAtTime(0.2, ac.currentTime, 0.05);
   }else{
-    synthGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.04);
+    synthGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.08);
+    if(!active) holdNote=null;
   }
   draw(now, sHz, curLane, W, H);
 
