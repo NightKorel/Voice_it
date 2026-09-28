@@ -444,7 +444,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.12';
+  const VERSION = '0.0.13';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -923,6 +923,15 @@
     openSettings(`先貼上 ${prefs.ai === 'openrouter' ? 'OpenRouter' : 'Gemini'} 鑰匙，或把 AI 來源改成「手動複製貼上」`);
     return false;
   }
+  // AI 給的名字如果其實是原有的詞（只差大小寫、全形半形、空格），沿用原本的名字
+  const normKey = n => String(n || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+  function canonical(name){
+    if (!name || save.items[name] || STARTER.items[name]) return name;
+    const k = normKey(name);
+    for (const n of Object.keys(save.items)) if (normKey(n) === k) return n;
+    for (const n of Object.keys(STARTER.items)) if (normKey(n) === k) return n;
+    return name;
+  }
   // 名字：去掉標點和引號；英文專有名詞中間的空格保留一個
   const cleanName = n => String(n || '').replace(/[。，！？、「」『』《》"'!?]/g, '').replace(/\s+/g, ' ').trim()
     .replace(/(?<=[^\x00-\x7F]) | (?=[^\x00-\x7F])/g, '').slice(0, 24);
@@ -991,12 +1000,12 @@ ${knownRule()}
 ${againRule(avoid)}${DETAIL_RULES()}`;
     let out = await ask(prompt, COMBINE_SCHEMA);
     if (isFail(out)) return {fail:true};
-    let name = cleanName(out.name);
+    let name = canonical(cleanName(out.name));
     // 名字太長又不是專有名詞：請 AI 再短一點（只重問一次）
     if (nameLen(name) > NAME_LIMIT && !isTrue(out.proper)){
       out = await ask(`${prompt}\n\n注意：你上次回答「${name}」超過 ${NAME_LIMIT} 個字又不是專有名詞。請改成 ${NAME_LIMIT} 個字以內，或換成網路上查得到、跟政治無關的專有名詞。`, COMBINE_SCHEMA);
       if (isFail(out)) return {fail:true};
-      name = cleanName(out.name);
+      name = canonical(cleanName(out.name));
     }
     if (!name) throw new Error('AI 沒想出東西，再試一次');
     return {...out, name, emoji:String(out.emoji || '').trim().slice(0, 8) || '✨'};
@@ -1014,7 +1023,7 @@ ${DETAIL_RULES()}`;
     const out = await ask(prompt, {parts:{type:'ARRAY', items:{type:'OBJECT', properties:ITEM_SCHEMA, required:Object.keys(ITEM_SCHEMA)}}});
     const seen = new Set();
     const parts = (Array.isArray(out.parts) ? out.parts : [])
-      .map(p => ({...p, name:cleanName(p.name), emoji:String(p.emoji || '').trim().slice(0, 8) || '✨'}))
+      .map(p => ({...p, name:canonical(cleanName(p.name)), emoji:String(p.emoji || '').trim().slice(0, 8) || '✨'}))
       .filter(p => p.name && p.name !== name && !seen.has(p.name) && seen.add(p.name))
       .slice(0, 3);
     if (!parts.length) throw new Error('AI 沒拆出東西，再試一次');
