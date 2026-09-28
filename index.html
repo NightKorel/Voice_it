@@ -94,7 +94,7 @@
   #st-body h3{font-size:.9rem;color:var(--accent);margin:.9rem 0 .35rem}
   #st-body p{font-size:.88rem;line-height:1.7;margin:.2rem 0}
   .st-row{display:flex;align-items:center;gap:.5rem;font-size:.84rem;margin:.22rem 0}
-  .st-lbl{width:6.5rem;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .st-lbl{width:8rem;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .st-bar{flex:1;height:.55rem;background:var(--chip);border-radius:1rem;overflow:hidden}
   .st-bar span{display:block;height:100%;background:var(--accent);border-radius:1rem}
   .st-n{width:2.5rem;text-align:right;color:var(--muted)}
@@ -282,7 +282,7 @@
   #c-catin:focus{border-color:var(--accent)}
   #c-catedit .actions{margin-top:.5rem}
   .rar{font-size:.85rem;color:var(--accent);margin:.35rem 0 .2rem}
-  .rar .dots{letter-spacing:.12em}
+  .rar .dots{letter-spacing:.06em;font-size:1.3em;vertical-align:-.08em}
   #c-desc{font-size:.95rem;line-height:1.75;margin:.6rem 0 .8rem}
   #c-desc.muted{color:var(--muted);font-size:.85rem}
   .meta{font-size:.85rem;color:var(--muted);margin:.3rem 0;line-height:1.8}
@@ -665,7 +665,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.44';
+  const VERSION = '0.0.45';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -682,6 +682,7 @@
   const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話奇幻','科技','文化娛樂','概念','天文','專有名詞'];
   const PROPER_CAT = '專有名詞';  // 特定角色、作品、品牌、真實存在的特定人事物，一律放這類
   const RARITY = ['常見','普通','少見','稀有','傳說'];
+  const stars = r => { r = Math.min(5, Math.max(1, r || 1)); return '★'.repeat(r) + '☆'.repeat(5 - r); };  // 稀有度用星星：1 顆實心到 5 顆實心
   const BASE = [
     {name:'水', emoji:'💧', desc:'萬物生命的源頭，會流動、會蒸發，也能把火澆熄。', rarity:1, cat:'自然', color:'#3d8bd4'},
     {name:'火', emoji:'🔥', desc:'會發光發熱的燃燒現象，人類的文明從學會用火開始。', rarity:1, cat:'自然', color:'#e2582a'},
@@ -855,7 +856,7 @@
     const fs = foldersOf(name);
     const lines = [`${it.emoji} ${name}${fs.length ? '  ★ ' + fs.join('、') : ''}`];
     const meta = [];
-    if (it.rarity) meta.push(`稀有度：${RARITY[it.rarity - 1]}（${it.rarity}／5）`);
+    if (it.rarity) meta.push(`稀有度：${stars(it.rarity)} ${RARITY[it.rarity - 1]}`);
     if (it.cat) meta.push(`分類：${it.cat}`);
     if (meta.length) lines.push(meta.join('　'));
     if (it.desc) lines.push(it.desc);
@@ -2260,7 +2261,7 @@ ${lines}
     const rr = $('c-rarity'); rr.textContent = '';
     if (it.rarity){
       const dots = document.createElement('span'); dots.className = 'dots';
-      dots.textContent = '●'.repeat(it.rarity) + '○'.repeat(5 - it.rarity);
+      dots.textContent = stars(it.rarity);
       rr.append(dots, document.createTextNode(' ' + RARITY[it.rarity - 1]));
     }
     $('c-cat').textContent = (it.cat || '未分類') + (it.catLocked ? '（自己分的）' : '') + ' ✎';
@@ -2513,7 +2514,7 @@ ${lines}
     for (const n of newItems){
       const it = fr.items[n];
       const ways = newRecipes.filter(k => fr.recipes[k][0] === n).map(k => k.split('+').join('＋'));
-      const sub = [it.rarity ? `${RARITY[it.rarity - 1]}` : '', it.desc || '', ways.length ? `煉法：${ways.join('、')}` : ''].filter(Boolean).join('　');
+      const sub = [it.rarity ? `${stars(it.rarity)} ${RARITY[it.rarity - 1]}` : '', it.desc || '', ways.length ? `煉法：${ways.join('、')}` : ''].filter(Boolean).join('　');
       itemRows.push({name:n, cb:row($('fm-items'), `${it.emoji || '❓'} ${n}`, sub)});
     }
     for (const k of newRecipes.filter(k => !tied(k))) recipeRows.push({k, cb:row($('fm-recipes'), recipeText(k))});
@@ -2629,7 +2630,7 @@ ${lines}
     line(`已發現 ${names.length} 樣（今天 ${todayN} 樣）${mine ? `，其中自己設定的 ${mine} 樣` : ''}${friend ? `，從朋友那裡得到 ${friend} 樣` : ''}。`);
     line(`配方 ${Object.keys(save.recipes).length} 條、萃取紀錄 ${Object.keys(save.extracts).length} 條、收藏夾 ${save.folders.length} 個。`);
     sec('稀有度');
-    bars(RARITY.map((r, i) => [r, names.filter(n => (I[n].rarity || 1) === i + 1).length]));
+    bars(RARITY.map((r, i) => [`${stars(i + 1)} ${r}`, names.filter(n => (I[n].rarity || 1) === i + 1).length]));
     const cats = catCounts().slice(0, 10);
     if (cats.length){ sec('分類（前 10）'); bars(cats); }
     // 最常用的材料：在幾條配方裡出現過
