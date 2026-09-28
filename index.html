@@ -518,7 +518,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.31';
+  const VERSION = '0.0.32';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -586,6 +586,15 @@
     const sorted = {};
     for (const [k, v] of Object.entries(s.recipes)){ const nk = k.split('+').sort().join('+'); if (!(nk in sorted)) sorted[nk] = v; }
     s.recipes = sorted;
+    // 以前失敗時被存成「……」之類的東西：從圖鑑拿掉，合出它的配方改成合成失敗
+    const bad = n => { n = String(n || '').trim(); return !n || /^[\s.…。、,，\-—_~～?？!！*＊·•]+$/.test(n) || ['東西的名字','名字','名稱'].includes(n); };
+    for (const n of Object.keys(s.items)) if (bad(n)) delete s.items[n];
+    for (const [k, v] of Object.entries(s.recipes)){
+      if (k.split('+').some(bad)) delete s.recipes[k];
+      else if (bad(v[0])) s.recipes[k] = ['💥'];
+    }
+    for (const [k, v] of Object.entries(s.extracts || {})){ if (bad(k) || (v || []).some(bad)) delete s.extracts[k]; }
+    for (const f of s.folders || []) f.items = (f.items || []).filter(n => !bad(n));
     for (const b of BASE){
       const it = s.items[b.name];
       if (it && !it.desc) Object.assign(it, {desc:b.desc, rarity:b.rarity, cat:b.cat, color:b.color});
@@ -1185,6 +1194,10 @@
     for (const n of Object.keys(STARTER.items)) if (normKey(n) === k) return n;
     return name;
   }
+  // 沒有意義的名字：空的、只有刪節號或標點、抄了格式範例的提示字
+  const isBadName = n => { n = String(n || '').trim();
+    return !n || /^[\s.…。、,，\-—_~～?？!！*＊·•]+$/.test(n) || /^[<＜(（\[【].*[>＞)）\]】]$/.test(n)
+      || ['東西的名字','名字','名稱','name','保留的名字','空','無','none','null','undefined'].includes(n.toLowerCase()); };
   // 名字：去掉標點和引號；英文專有名詞中間的空格保留一個
   const cleanName = n => String(n || '').replace(/[。，！？、「」『』《》"'!?]/g, '').replace(/\s+/g, ' ').trim()
     .replace(/(?<=[^\x00-\x7F]) | (?=[^\x00-\x7F])/g, '').slice(0, 24);
@@ -1236,7 +1249,7 @@ ${catRule()}
   const isTrue = v => v === true || String(v).toLowerCase() === 'true';
   // 算字數：中文一個字算一個，英文一個單字算一個
   const nameLen = n => (n.match(/[^\x00-\x7F]/g) || []).length + (n.match(/[A-Za-z0-9]+/g) || []).length;
-  const isFail = o => o.ok === false || String(o.ok).toLowerCase() === 'false' || !String(o.name || '').trim();
+  const isFail = o => o.ok === false || String(o.ok).toLowerCase() === 'false' || isBadName(cleanName(o.name));
   // 「真的嗎？」：把原本的配方完整附上，請 AI 想一個新的
   function againRule(avoid, names){
     if (!avoid || !avoid.length) return '';
@@ -1272,7 +1285,7 @@ ${againRule(avoid, names)}${DETAIL_RULES()}`;
       if (isFail(out)) return {fail:true};
       name = canonical(cleanName(out.name));
     }
-    if (!name) throw new Error('AI 沒想出東西，再試一次');
+    if (isBadName(name)) return {fail:true};
     return {...out, name, emoji:String(out.emoji || '').trim().slice(0, 8) || '✨'};
   }
   async function askExtract(name, avoid){
@@ -1294,7 +1307,7 @@ ${DETAIL_RULES()}`;
     const seen = new Set();
     const parts = (Array.isArray(out.parts) ? out.parts : [])
       .map(p => ({...p, name:canonical(cleanName(p.name)), emoji:String(p.emoji || '').trim().slice(0, 8) || '✨'}))
-      .filter(p => p.name && p.name !== name && !seen.has(p.name) && seen.add(p.name))
+      .filter(p => !isBadName(p.name) && p.name !== name && !seen.has(p.name) && seen.add(p.name))
       .slice(0, 3);
     if (!parts.length) throw new Error('AI 沒拆出東西，再試一次');
     return parts;
@@ -1455,13 +1468,16 @@ ${DETAIL_RULES()}`;
   }
 
   // ---------- 手動問 AI ----------
-  function example(schema){
+  // 給手動／OpenRouter 看的格式範例；這些提示字如果被原封不動抄回來，會被當成沒答案
+  const HINTS = {name:'東西的名字', emoji:'一個emoji', desc:'一兩句介紹', category:'分類', color:'#RRGGBB', keep:'保留的名字', from:'舊分類', to:'新分類'};
+  function example(schema, key){
     if (schema.type === 'BOOLEAN') return true;
-    if (schema.type === 'ARRAY') return [example(schema.items), example(schema.items)];
-    if (schema.type === 'OBJECT') return Object.fromEntries(Object.entries(schema.properties).map(([k, v]) => [k, example(v)]));
+    if (schema.type === 'ARRAY') return [example(schema.items, key), example(schema.items, key)];
+    if (schema.type === 'OBJECT') return Object.fromEntries(Object.entries(schema.properties).map(([k, v]) => [k, example(v, k)]));
     if (schema.type === 'INTEGER') return 1;
-    return '……';
+    return HINTS[key] || '……';
   }
+
   function extractJSON(text){
     let t = String(text || '').replace(/```(?:json)?/gi, '');
     const a = t.indexOf('{'), b = t.lastIndexOf('}');
