@@ -494,7 +494,8 @@
       <div class="mn-row"><label>名稱</label><input id="mn-name" maxlength="24" placeholder="必填" autocomplete="off"></div>
       <div class="mn-row"><label>emoji</label><input id="mn-emoji" maxlength="8" placeholder="✨" autocomplete="off"></div>
       <div class="mn-row"><label>介紹</label><textarea id="mn-desc" maxlength="120" placeholder="一兩句話介紹它是什麼"></textarea></div>
-      <div class="mn-row"><label>分類</label><input id="mn-cat" list="catlist2" autocomplete="off"><datalist id="catlist2"></datalist></div>
+      <div class="mn-row"><label>分類</label><input id="mn-cat" list="catlist2" placeholder="不填＝只放在「我的」" autocomplete="off"><datalist id="catlist2"></datalist></div>
+      <p class="muted" style="margin:.1rem 0 .3rem 4.1rem">不管有沒有填分類，都一定會出現在「我的」。填了分類，那個分類標籤裡也會有它。</p>
       <div class="mn-row"><label>稀有度</label><select id="mn-rar" class="sel"><option value="1">常見</option><option value="2">普通</option><option value="3">少見</option><option value="4">稀有</option><option value="5">傳說</option></select></div>
       <div class="mn-row"><label>顏色</label><input id="mn-color" type="color"></div>
       <p class="muted" id="mn-err"></p>
@@ -670,7 +671,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.48';
+  const VERSION = '0.0.49';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -932,7 +933,7 @@
     $('mn-name').value = editing || '';
     $('mn-emoji').value = it ? it.emoji : '';
     $('mn-desc').value = it ? (it.desc || '') : '';
-    $('mn-cat').value = it ? (it.cat || '') : PROPER_CAT;
+    $('mn-cat').value = it ? (it.cat || '') : '';
     $('mn-rar').value = String(it ? (it.rarity || 3) : 3);
     $('mn-color').value = it && /^#[0-9a-f]{6}$/i.test(it.color || '') ? it.color : '#c9a76a';
     $('mn-err').textContent = '';
@@ -943,7 +944,7 @@
       if (isBadName(name)){ $('mn-err').textContent = '要取一個名字'; return; }
       if (name !== editing && save.items[name]){ $('mn-err').textContent = `已經有「${name}」了，換個名字`; return; }
       const data = {emoji:$('mn-emoji').value.trim().slice(0, 8) || '✨', desc:$('mn-desc').value.trim().slice(0, 120),
-        cat:cleanCat($('mn-cat').value || PROPER_CAT), catLocked:true, rarity:+$('mn-rar').value, color:$('mn-color').value, custom:true};
+        cat:$('mn-cat').value.trim() ? cleanCat($('mn-cat').value) : '', catLocked:true, rarity:+$('mn-rar').value, color:$('mn-color').value, custom:true};
       if (it && name !== editing) renameItem(editing, name);
       save.items[name] = {...(save.items[name] || {t:Date.now()}), ...data};
       persist(); renderList(); renderSlots(); if (last) renderResult();
@@ -1168,7 +1169,7 @@
       const it = I[n];
       if (mode === 'cat' && it.cat !== lastCat){
         lastCat = it.cat;
-        const h = document.createElement('div'); h.className = 'group'; h.textContent = it.cat || '未分類';
+        const h = document.createElement('div'); h.className = 'group'; h.textContent = it.cat || (it.custom ? '只在「我的」' : '未分類');
         frag.append(h);
       }
       const el = chip('litem', n);
@@ -2274,7 +2275,7 @@ ${lines}
       dots.textContent = stars(it.rarity);
       rr.append(dots, document.createTextNode(' ' + RARITY[it.rarity - 1]));
     }
-    $('c-cat').textContent = (it.cat || '未分類') + (it.catLocked ? '（自己分的）' : '') + ' ✎';
+    $('c-cat').textContent = (it.cat || (it.custom ? '只在「我的」' : '未分類')) + (it.catLocked && it.cat ? '（自己分的）' : '') + ' ✎';
     $('c-catedit').hidden = true;
     const asking = !!it._asking;
     $('c-desc').textContent = it.desc || (asking ? '介紹生成中……' : '還沒有介紹');
@@ -2356,15 +2357,16 @@ ${lines}
     const dl = $('catlist'); dl.textContent = '';
     for (const [c] of catCounts()){ const o = document.createElement('option'); o.value = c; dl.append(o); }
     $('c-catin').value = it.cat || '';
-    $('c-catauto').hidden = !it.catLocked;
+    $('c-catauto').hidden = !it.catLocked || !!it.custom;
+    $('c-catin').placeholder = it.custom ? '選一個分類，或清空＝只放在「我的」' : '選一個分類，或打新的名字';
     $('c-catedit').hidden = false;
     $('c-catin').focus();
   };
   function saveCat(){
     const it = save.items[cardName]; if (!it) return;
     const v = $('c-catin').value.trim();
-    if (!v){ toast('分類名稱不能空白', true); return; }
-    it.cat = cleanCat(v); it.catLocked = true;
+    if (!v && !it.custom){ toast('分類名稱不能空白', true); return; }
+    it.cat = v ? cleanCat(v) : ''; it.catLocked = true;  // 自己設定的東西可以清空＝只放在「我的」
     persist(); renderList(); openCard(cardName);
   }
   $('c-catok').onclick = saveCat;
