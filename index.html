@@ -581,6 +581,29 @@
   <div class="box">
     <div class="head"><h2>設定</h2><button class="btn" id="btn-close">關閉</button></div>
 
+    <h3>存檔</h3>
+    <p class="muted">你的發現存在這個瀏覽器裡。想換裝置或怕不見，可以分享或下載成檔案備份，之後再匯入。每多發現 30 樣會提醒你備份一次。</p>
+    <div class="actions">
+      <button class="btn" id="btn-share" hidden>分享存檔</button>
+      <button class="btn" id="btn-export">下載存檔</button>
+      <button class="btn" id="btn-merge">合併朋友的存檔</button>
+    </div>
+    <p class="muted">跟朋友交換：把「分享存檔」或「下載存檔」的檔案傳給對方，對方按「合併朋友的存檔」。只會加進你沒有的東西和配方，你已經有的一律以你的為主。</p>
+    <div class="actions"><button class="btn" id="btn-undo" hidden></button></div>
+    <p class="muted">刪除、整理、合併朋友的存檔、匯入、全部重來之前，會自動留一份快照；按上面的「復原」可以回到那之前（只保留最近一次）。</p>
+    <div class="actions">
+      <button class="btn" id="btn-import">匯入存檔（整個換掉）</button>
+      <button class="btn danger" id="btn-reset">全部重來</button>
+      <input type="file" id="file" accept=".json,application/json,text/plain,.txt" style="display:none">
+    </div>
+
+    <hr>
+    <h3>AI 來源</h3>
+    <div class="setrow"><span class="lbl">來源</span>
+      <div class="seg" id="seg-ai"><button data-v="gemini">Gemini</button><button data-v="openrouter">OpenRouter</button><button data-v="manual">手動複製貼上</button></div></div>
+    <p class="muted">手動：每次需要 AI 時會跳出一段問題，你複製去問任何 AI，再把回答貼回來。自動的 AI 太忙或次數用完時，也會問你要不要改用手動。</p>
+
+    <hr>
     <h3>外觀</h3>
     <div class="setrow"><span class="lbl">主題</span>
       <div class="seg" id="seg-theme"><button data-v="dark">深色</button><button data-v="light">柔和淺色</button></div></div>
@@ -589,35 +612,24 @@
     <div class="setrow"><span class="lbl">清單寬度</span>
       <input type="range" id="sidew" min="30" max="70" step="5"><span id="sidew-val" class="rv"></span></div>
     <p class="muted">清單寬度只影響電腦版（左邊工作台、右邊清單）；手機一律是上下排。</p>
-    <div class="setrow"><span class="lbl">字型</span>
-      <div class="seg" id="seg-font"><button data-v="sans">黑體</button><button data-v="round">圓體</button><button data-v="serif">明體</button></div></div>
-    <div class="setrow"><span class="lbl">動畫</span>
-      <div class="seg" id="seg-motion"><button data-v="on">開</button><button data-v="off">關</button></div></div>
     <div class="setrow"><span class="lbl">邊框</span>
       <div class="seg" id="seg-border"><button data-v="thick">粗框</button><button data-v="thin">細框</button></div></div>
+    <div class="setrow"><span class="lbl">字型</span>
+      <div class="seg" id="seg-font"><button data-v="sans">黑體</button><button data-v="round">圓體</button><button data-v="serif">明體</button></div></div>
     <p class="muted">圓體、明體要你的裝置有裝對應字型才會變，沒有就會維持黑體。</p>
+    <div class="setrow"><span class="lbl">動畫</span>
+      <div class="seg" id="seg-motion"><button data-v="on">開</button><button data-v="off">關</button></div></div>
 
     <hr>
-    <h3>AI 來源</h3>
-    <div class="setrow"><span class="lbl">來源</span>
-      <div class="seg" id="seg-ai"><button data-v="gemini">Gemini</button><button data-v="openrouter">OpenRouter</button><button data-v="manual">手動複製貼上</button></div></div>
-    <p class="muted">手動：每次需要 AI 時會跳出一段問題，你複製去問任何 AI，再把回答貼回來。自動的 AI 太忙或次數用完時，也會問你要不要改用手動。</p>
+    <h3>加到主畫面</h3>
+    <p class="muted" id="pwa-state"></p>
+    <div class="actions"><button class="btn primary" id="btn-install" hidden>安裝到主畫面</button></div>
+    <p class="muted">加到主畫面後，就能像 App 一樣全螢幕打開；沒網路時，合過的組合照樣能玩（新組合要問 AI 才需要網路）。iPhone 加到主畫面後，存檔也比較不會被 Safari 自動清掉。</p>
+    <p class="muted">iPhone／iPad：用 Safari 打開這個網頁 → 按下方的「分享」按鈕 → 選「加入主畫面」。<br>Android：用 Chrome 打開 → 右上角選單 → 「加到主畫面」或「安裝應用程式」。電腦的 Chrome／Edge：網址列右邊的安裝圖示。</p>
 
-    <h3>OpenRouter 鑰匙</h3>
-    <p>OpenRouter 集合了很多家的免費 AI（DeepSeek、Qwen、Llama 等），一把鑰匙全部能用，免費、不用綁信用卡。某一個 AI 太忙時，遊戲會自動換下一個免費的試。</p>
-    <ol>
-      <li>打開 <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter 的鑰匙頁面</a>，註冊或登入。</li>
-      <li>按「Create Key」（建立鑰匙），名字隨便取，建好後按複製。</li>
-      <li>貼到下面的格子，按「儲存鑰匙」，再把上面的來源選成 OpenRouter。</li>
-    </ol>
-    <p class="muted">免費額度：每分鐘 20 次、每天 50 次（在 OpenRouter 儲值過 10 美元以上，免費額度會變成每天 1000 次）。合過的組合不會再花次數。</p>
-    <label for="orkey">鑰匙</label>
-    <input id="orkey" type="password" placeholder="貼上 OpenRouter 鑰匙（sk-or- 開頭）" autocomplete="off">
-    <div class="actions">
-      <button class="btn primary" id="btn-orsave">儲存鑰匙</button>
-      <button class="btn" id="btn-ortest">測試鑰匙</button>
-    </div>
-
+    <hr>
+    <h3 id="keys-anchor">AI 鑰匙</h3>
+    <p class="muted">選 Gemini 或 OpenRouter 時才需要。鑰匙只存在這台裝置的這個瀏覽器裡，不會上傳到任何地方；換手機或換瀏覽器要重新貼一次。</p>
     <h3>Gemini 鑰匙</h3>
     <p>用 Google 的 Gemini 免費方案來想「合出來是什麼」。你需要一把自己的鑰匙（API key），免費、不用綁信用卡。</p>
     <ol>
@@ -636,26 +648,19 @@
       <button class="btn" id="btn-test">測試鑰匙</button>
     </div>
 
-    <hr>
-    <h3>加到主畫面</h3>
-    <p class="muted" id="pwa-state"></p>
-    <div class="actions"><button class="btn primary" id="btn-install" hidden>安裝到主畫面</button></div>
-    <p class="muted">加到主畫面後，就能像 App 一樣全螢幕打開；沒網路時，合過的組合照樣能玩（新組合要問 AI 才需要網路）。iPhone 加到主畫面後，存檔也比較不會被 Safari 自動清掉。</p>
-    <p class="muted">iPhone／iPad：用 Safari 打開這個網頁 → 按下方的「分享」按鈕 → 選「加入主畫面」。<br>Android：用 Chrome 打開 → 右上角選單 → 「加到主畫面」或「安裝應用程式」。電腦的 Chrome／Edge：網址列右邊的安裝圖示。</p>
-
-    <hr>
-    <h3>存檔</h3>
-    <p class="muted">你的發現存在這個瀏覽器裡。想換裝置或怕不見，可以下載或分享成檔案備份，之後再匯入。每多發現 30 樣會提醒你備份一次。</p>
-    <div class="actions"><button class="btn" id="btn-undo" hidden></button></div>
-    <p class="muted">刪除、整理、合併朋友的存檔、匯入、全部重來之前，會自動留一份快照；按上面的「復原」可以回到那之前（只保留最近一次）。</p>
-    <p class="muted">跟朋友交換：把「下載存檔」或「分享存檔」的檔案傳給對方，對方按「合併朋友的存檔」。只會加進你沒有的東西和配方，你已經有的一律以你的為主。「匯入存檔」則是整個換掉。</p>
+    <h3>OpenRouter 鑰匙</h3>
+    <p>OpenRouter 集合了很多家的免費 AI（DeepSeek、Qwen、Llama 等），一把鑰匙全部能用，免費、不用綁信用卡。某一個 AI 太忙時，遊戲會自動換下一個免費的試。</p>
+    <ol>
+      <li>打開 <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter 的鑰匙頁面</a>，註冊或登入。</li>
+      <li>按「Create Key」（建立鑰匙），名字隨便取，建好後按複製。</li>
+      <li>貼到下面的格子，按「儲存鑰匙」，再把上面的來源選成 OpenRouter。</li>
+    </ol>
+    <p class="muted">免費額度：每分鐘 20 次、每天 50 次（在 OpenRouter 儲值過 10 美元以上，免費額度會變成每天 1000 次）。合過的組合不會再花次數。</p>
+    <label for="orkey">鑰匙</label>
+    <input id="orkey" type="password" placeholder="貼上 OpenRouter 鑰匙（sk-or- 開頭）" autocomplete="off">
     <div class="actions">
-      <button class="btn" id="btn-export">下載存檔</button>
-      <button class="btn" id="btn-share" hidden>分享存檔</button>
-      <button class="btn" id="btn-import">匯入存檔</button>
-      <button class="btn" id="btn-merge">合併朋友的存檔</button>
-      <button class="btn danger" id="btn-reset">全部重來</button>
-      <input type="file" id="file" accept=".json,application/json,text/plain,.txt" style="display:none">
+      <button class="btn primary" id="btn-orsave">儲存鑰匙</button>
+      <button class="btn" id="btn-ortest">測試鑰匙</button>
     </div>
     <p class="muted" id="ver2" style="margin-top:1rem;text-align:right"></p>
   </div>
@@ -665,7 +670,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.47';
+  const VERSION = '0.0.48';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2385,12 +2390,14 @@ ${lines}
   window.addEventListener('keydown', e => { if (e.key === 'Escape'){ closeCard(); closeSettings(); } });
 
   // ---------- 設定 ----------
-  function openSettings(msg){
+  function openSettings(msg, toKeys){
     $('key').value = getKey();
     $('orkey').value = getOrKey();
     fillModels();
     $('modal').classList.add('open');
     if (msg) toast(msg, true);
+    if (msg || toKeys) setTimeout(() => $('keys-anchor').scrollIntoView({block:'start'}), 50);  // 缺鑰匙才打開的，直接捲到鑰匙那段
+    else $('modal').querySelector('.box').scrollTop = 0;
   }
   async function fillModels(){
     const sel = $('model'), o = getOverride();
@@ -2675,7 +2682,7 @@ ${lines}
   persist();
   renderList();
   renderSlots();
-  if (prefs.ai !== 'manual' && !hasAutoKey()) setTimeout(() => openSettings(), 300);
+  if (prefs.ai !== 'manual' && !hasAutoKey()) setTimeout(() => openSettings('', true), 300);
 })();
 </script>
 </body>
