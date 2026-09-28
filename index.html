@@ -517,7 +517,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.28';
+  const VERSION = '0.0.29';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1482,13 +1482,24 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     $('m-reason').hidden = !reason;
     $('m-reason').textContent = reason || '';
     $('manual').classList.add('open');
+    // 跳出來就自動複製；瀏覽器不允許（例如等 AI 等太久、或 iPhone 限制）時，就留給「複製問題」按鈕
+    copyPrompt(true);
     return new Promise((resolve, reject) => { manualPending = {resolve, reject, props}; });
   }
-  $('m-copy').onclick = async () => {
-    const t = $('m-prompt');
-    try { await navigator.clipboard.writeText(t.value); toast('已複製，去貼給 AI 吧'); }
-    catch(e){ t.focus(); t.select(); try { document.execCommand('copy'); toast('已複製，去貼給 AI 吧'); } catch(_){ toast('複製失敗，請手動全選複製', true); } }
-  };
+  async function copyPrompt(auto){
+    const t = $('m-prompt'), btn = $('m-copy');
+    let ok = false;
+    try { await navigator.clipboard.writeText(t.value); ok = true; }
+    catch(e){
+      try { t.focus(); t.select(); ok = document.execCommand('copy'); } catch(_){}
+      t.setSelectionRange(0, 0); t.blur();
+    }
+    btn.textContent = ok ? '✓ 已複製（再按一次重新複製）' : '複製問題';
+    btn.classList.toggle('primary', !ok);
+    if (ok) toast(auto ? '問題已經自動複製好了，直接去貼給 AI 吧' : '已複製，去貼給 AI 吧');
+    else if (!auto) toast('複製失敗，請在框框裡長按全選複製', true);
+  }
+  $('m-copy').onclick = () => copyPrompt(false);
   $('m-ok').onclick = () => {
     if (!manualPending) return;
     try {
