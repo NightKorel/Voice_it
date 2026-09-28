@@ -98,7 +98,16 @@
   #reorg p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #reorg .muted{color:var(--muted);font-size:.8rem}
   #reorg .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
-  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],.rg-list[hidden]{display:none}
+  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],.rg-list[hidden]{display:none}
+  .co-row{cursor:default;flex-wrap:nowrap}
+  .co-btn{padding:.2rem .6rem;font-size:.9rem}
+  #cattabs{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
+  #cattabs::-webkit-scrollbar{height:4px}
+  #cattabs::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+  .cattab{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:1rem;padding:.25rem .7rem;
+    font-size:.8rem;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .cattab:hover{border-color:var(--accent);color:var(--text)}
+  .cattab.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
   .rg-sub{font-size:.8rem;color:var(--muted);flex-basis:100%;padding-left:1.6rem;line-height:1.5}
   #reorg h3{font-size:.92rem;color:var(--accent);margin:.9rem 0 .3rem}
   .rg-opt{display:flex;gap:.5rem;align-items:flex-start;font-size:.9rem;line-height:1.6;margin:.5rem 0;cursor:pointer}
@@ -287,9 +296,11 @@
       <input id="search" type="search" placeholder="搜尋名稱或介紹……" autocomplete="off">
       <div class="row">
         <button class="chipbtn" id="f-fav">★ 收藏</button>
-        <select id="cat" class="sel" style="flex:1;min-width:0"></select>
+        <div style="flex:1"></div>
+        <button class="chipbtn" id="btn-catorder" title="自己排分類的順序">排序分類</button>
         <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、合併分類、檢查分類">整理</button>
       </div>
+      <div id="cattabs"></div>
     </div>
     <div id="list"></div>
   </div>
@@ -343,6 +354,15 @@
       <div class="actions">
         <button class="btn primary" id="rg-go">開始整理</button>
         <button class="btn" id="rg-cancel">取消</button>
+      </div>
+    </div>
+    <div id="rg-order" hidden>
+      <h2>排序分類</h2>
+      <p>用 ↑ ↓ 調整順序，上面的分類會排在前面。分類標籤、「依分類」排序都照這個順序。之後新出現的分類會接在最後面。</p>
+      <div id="co-list" class="rg-list"></div>
+      <div class="actions">
+        <button class="btn primary" id="co-done">完成</button>
+        <button class="btn" id="co-reset">改回照數量排</button>
       </div>
     </div>
     <div id="rg-friend" hidden>
@@ -468,7 +488,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.15';
+  const VERSION = '0.0.16';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -670,19 +690,57 @@
 
   // ---------- 清單 ----------
   let filterFav = false;
+  // 現有分類與數量：自己排過的照自己的順序，沒排過的（新分類）照數量接在後面
   function catCounts(){
     const m = new Map();
     for (const it of Object.values(save.items)) if (it.cat) m.set(it.cat, (m.get(it.cat) || 0) + 1);
-    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
+    const order = save.catOrder || [];
+    const pos = c => { const i = order.indexOf(c); return i < 0 ? 1e6 : i; };
+    return [...m].sort((a, b) => pos(a[0]) - pos(b[0]) || b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
   }
+  // 分類標籤：點一下只看那一類
+  let catFilter = '';
   function renderCatFilter(){
-    const sel = $('cat'), cur = sel.value;
-    const counts = catCounts();
-    sel.textContent = '';
-    const all = document.createElement('option'); all.value = ''; all.textContent = '全部分類'; sel.append(all);
-    for (const [c, n] of counts){ const o = document.createElement('option'); o.value = c; o.textContent = `${c}（${n}）`; sel.append(o); }
-    sel.value = counts.some(([c]) => c === cur) ? cur : '';
+    const box = $('cattabs'), counts = catCounts();
+    if (catFilter && !counts.some(([c]) => c === catFilter)) catFilter = '';
+    box.textContent = '';
+    const tab = (value, label) => {
+      const b = document.createElement('button'); b.className = 'cattab' + (catFilter === value ? ' on' : '');
+      b.textContent = label;
+      b.onclick = () => { catFilter = value; renderList(); list.scrollTop = 0; };
+      box.append(b);
+    };
+    tab('', `全部 ${Object.keys(save.items).length}`);
+    for (const [c, n] of counts) tab(c, `${c} ${n}`);
+    const on = box.querySelector('.on');
+    if (on) on.scrollIntoView({block:'nearest', inline:'nearest'});
   }
+
+  // 自己排分類的順序
+  function openCatOrder(){
+    const draw = () => {
+      const box = $('co-list'); box.textContent = '';
+      const counts = catCounts();
+      counts.forEach(([c, n], i) => {
+        const r = document.createElement('div'); r.className = 'rg-row co-row';
+        const t = document.createElement('span'); t.className = 'rg-from'; t.textContent = `${c}`;
+        const k = document.createElement('span'); k.className = 'rg-arrow'; k.textContent = `${n} 樣`;
+        const sp = document.createElement('span'); sp.style.flex = '1';
+        const mv = (d, label, dis) => { const b = document.createElement('button'); b.className = 'btn co-btn'; b.textContent = label; b.disabled = dis;
+          b.onclick = () => { const names = counts.map(([x]) => x); [names[i], names[i + d]] = [names[i + d], names[i]]; save.catOrder = names; persist(); draw(); renderList(); }; return b; };
+        r.append(t, k, sp, mv(-1, '↑', i === 0), mv(1, '↓', i === counts.length - 1));
+        box.append(r);
+      });
+      if (!counts.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = '還沒有分類'; box.append(e); }
+    };
+    draw();
+    $('co-reset').onclick = () => { delete save.catOrder; persist(); draw(); renderList(); toast('分類改回照數量排'); };
+    $('co-done').onclick = () => $('reorg').classList.remove('open');
+    ['rg-setup', 'rg-review', 'rg-friend'].forEach(id => $(id).hidden = true);
+    $('rg-order').hidden = false;
+    $('reorg').classList.add('open');
+  }
+  $('btn-catorder').onclick = openCatOrder;
   function chip(cls, name){
     const it = save.items[name] || {emoji:'❓'};
     const el = document.createElement('div');
@@ -702,7 +760,7 @@
     $('count').innerHTML = `已發現 <b>${names.length}</b> 樣`;
     $('f-fav').textContent = `★ 收藏 ${favCount}`;
     renderCatFilter();
-    const cat = $('cat').value;
+    const cat = catFilter;
     if (q) names = names.filter(n => n.toLowerCase().includes(q) || (save.items[n].desc || '').toLowerCase().includes(q));
     if (filterFav) names = names.filter(n => save.items[n].fav);
     if (cat) names = names.filter(n => save.items[n].cat === cat);
@@ -743,7 +801,6 @@
   }
   $('search').addEventListener('input', renderList);
   $('sort').addEventListener('change', renderList);
-  $('cat').addEventListener('change', renderList);
   $('f-fav').addEventListener('click', () => { filterFav = !filterFav; $('f-fav').classList.toggle('on', filterFav); renderList(); });
 
   // ---------- 槽位 ----------
@@ -1333,7 +1390,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     const upd = () => { $('rg-cost').textContent = `大約要問 AI ${cost()} 次。`; $('rg-go').disabled = !cost(); };
     ['rg-items', 'rg-cat', 'rg-move'].forEach(id => $(id).onchange = upd);
     upd();
-    $('rg-setup').hidden = false; $('rg-review').hidden = true; $('rg-friend').hidden = true;
+    $('rg-setup').hidden = false; $('rg-review').hidden = true; $('rg-friend').hidden = true; $('rg-order').hidden = true;
     $('reorg').classList.add('open');
   }
   $('rg-cancel').onclick = () => $('reorg').classList.remove('open');
@@ -1467,7 +1524,7 @@ ${lines}
         rows.push({cb, sel, from:x});
       }
     }
-    $('rg-setup').hidden = true; $('rg-review').hidden = false; $('rg-friend').hidden = true;
+    $('rg-setup').hidden = true; $('rg-review').hidden = false; $('rg-friend').hidden = true; $('rg-order').hidden = true;
     $('reorg').classList.add('open');
     return new Promise(resolve => {
       const done = picks => { $('reorg').classList.remove('open'); resolve(picks); };
@@ -1804,7 +1861,7 @@ ${lines}
     const all = v => [...itemRows, ...recipeRows].forEach(r => r.cb.checked = v);
     $('fm-all').onclick = () => all(true);
     $('fm-none').onclick = () => all(false);
-    $('rg-setup').hidden = true; $('rg-review').hidden = true; $('rg-friend').hidden = false;
+    $('rg-setup').hidden = true; $('rg-review').hidden = true; $('rg-friend').hidden = false; $('rg-order').hidden = true;
     $('modal').classList.remove('open');
     $('reorg').classList.add('open');
     $('fm-cancel').onclick = () => $('reorg').classList.remove('open');
