@@ -617,7 +617,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.38';
+  const VERSION = '0.0.39';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1299,14 +1299,7 @@
   }
 
   // ---------- 合成 ----------
-  function finishFail(inputs, tried){
-    last = {type:'combine', inputs, outputs:[], fresh:[], fail:true, tried:tried || [FAIL]};
-    persist();
-    slots.fill(null);
-    setBusy(false);
-    renderResult();
-    toast('💥 砰！合成失敗', true);
-  }
+
   $('btn-craft').onclick = craft;
   async function craft(){
     const names = filled();
@@ -1327,7 +1320,6 @@
     setBusy(true, '煉製中……');
     try {
       const res = await askCombine(names);
-      if (res.fail) return finishFail(names);  // 合成失敗不記錄，下次再合會重新問
       const isNew = addItem(res.name, starterData(res.name) || aiData(res), {from:names});
       save.recipes[k] = [res.name];
       recordExtract(res.name, names);
@@ -1392,10 +1384,6 @@
       let outputs, fresh = [];
       if (L.type === 'combine'){
         const res = await askCombine(L.inputs, L.tried);
-        if (res.fail){
-          // 失敗不記錄：原本有結果就維持原本的
-          throw new Error(L.fail ? 'AI 想了想，還是覺得合不起來' : 'AI 想不出別的結果，維持原本的');
-        }
         if (L.tried.includes(res.name)) throw new Error('AI 想了想，還是覺得一樣，再按一次試試');
         if (addItem(res.name, starterData(res.name) || aiData(res), {from:L.inputs})) fresh.push(res.name);
         save.recipes[comboKey(L.inputs)] = [res.name];  // 這組的答案換成新的；舊的東西還留在圖鑑裡
@@ -1490,12 +1478,11 @@ ${catRule()}
     return `- 已經有的東西：${names.join('、')}。
   不同配方可以合出同一樣東西。如果結果就是其中某一樣（包括同義詞或不同寫法，例如「蒸汽」和「蒸氣」），請用上面一字不差的名字，不要另外取名。不是的話就正常取新名字。`;
   }
-  const COMBINE_SCHEMA = {ok:{type:'BOOLEAN'}, ...ITEM_SCHEMA};
+  const COMBINE_SCHEMA = ITEM_SCHEMA;  // 不再有「合成失敗」：一定要給結果
   const OPTIONAL = new Set(['proper']);  // AI 忘了回也沒關係的欄位
   const isTrue = v => v === true || String(v).toLowerCase() === 'true';
   // 算字數：中文一個字算一個，英文一個單字算一個
   const nameLen = n => (n.match(/[^\x00-\x7F]/g) || []).length + (n.match(/[A-Za-z0-9]+/g) || []).length;
-  const isFail = o => o.ok === false || String(o.ok).toLowerCase() === 'false' || isBadName(cleanName(o.name));
   // 「真的嗎？」：把原本的配方完整附上，請 AI 想一個新的
   function againRule(avoid, names){
     if (!avoid || !avoid.length) return '';
@@ -1525,18 +1512,17 @@ ${NAME_RULE}
 - 結果要合理、符合常識，大多數人一看就懂為什麼會變成這個。寧可普通，也不要天馬行空。
 - 避免直接回傳材料本身。
 ${knownRule()}
-- ok：如果這些東西合在一起真的說不通、想不出合理的結果，ok＝false（合成失敗），其他欄位留空字串。說得通就 ok＝true。
+- 一定要給出一個結果，就算材料很不相干，也要想出一個說得通的東西。
 ${againRule(avoid, names)}${DETAIL_RULES()}`;
     let out = await ask(prompt, COMBINE_SCHEMA);
-    if (isFail(out)) return {fail:true};
     let name = canonical(cleanName(out.name));
+    if (isBadName(name)) throw new Error('沒拿到答案（AI 回的是空的或看不懂），東西還在槽位，再按一次合成試試');
     // 名字太長又不是專有名詞：請 AI 再短一點（只重問一次）
     if (nameLen(name) > NAME_LIMIT && !isTrue(out.proper)){
       out = await ask(`${prompt}\n\n注意：你上次回答「${name}」超過 ${NAME_LIMIT} 個字又不是專有名詞。請改成 ${NAME_LIMIT} 個字以內，或換成網路上查得到、跟政治無關的專有名詞。`, COMBINE_SCHEMA);
-      if (isFail(out)) return {fail:true};
-      name = canonical(cleanName(out.name));
+      const again = canonical(cleanName(out.name));
+      if (!isBadName(again)) name = again;
     }
-    if (isBadName(name)) return {fail:true};
     return {...out, name, emoji:String(out.emoji || '').trim().slice(0, 8) || '✨'};
   }
   async function askExtract(name, avoid){
@@ -1791,6 +1777,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     try {
       const out = extractJSON($('m-answer').value);
       const miss = Object.keys(manualPending.props).filter(k => !(k in out) && !OPTIONAL.has(k));
+      if (!miss.length && 'name' in manualPending.props && isBadName(cleanName(out.name))) throw new Error('名字是空的或看不懂，請 AI 重新回答一次再貼');
       if (miss.length) throw new Error(`回答裡少了：${miss.join('、')}，請 AI 照格式重回一次`);
       const p = manualPending; manualPending = null;
       $('manual').classList.remove('open');
