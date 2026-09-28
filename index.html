@@ -291,6 +291,7 @@
   </div>
 </div>
 
+<script src="starter.js"></script>
 <script>
 (() => {
   // ---------- 存檔 ----------
@@ -330,6 +331,12 @@
     for (const b of BASE){
       const it = s.items[b.name];
       if (it && !it.desc) Object.assign(it, {desc:b.desc, rarity:b.rarity, cat:b.cat, color:b.color});
+    }
+    // 舊存檔裡剛好是內建圖鑑的東西，也直接補上寫好的介紹（不花次數）
+    const SI = (window.STARTER || {}).items || {};
+    for (const [n, it] of Object.entries(s.items)){
+      const d = SI[n];
+      if (d && !it.desc) Object.assign(it, {desc:d[1], rarity:d[2], cat:it.catLocked ? it.cat : d[3], color:d[4]});
     }
     return s;
   }
@@ -619,6 +626,34 @@
     color: /^#[0-9a-f]{6}$/i.test(String(o.color || '').trim()) ? String(o.color).trim() : ''
   });
 
+  // 內建配方（starter.js）
+  const STARTER = window.STARTER || {items:{}, recipes:[]};
+  const STARTER_MAP = new Map(STARTER.recipes.map(([p, q, r]) => [pairKey(p, q), r]));
+  function starterData(name){
+    const d = STARTER.items[name];
+    return d ? {emoji:d[0], desc:d[1], rarity:d[2], cat:d[3], color:d[4]} : null;
+  }
+
+  // 把結果記進存檔，回傳是不是新發現
+  function addResult(k, name, from, data){
+    let isNew = false;
+    const old = save.items[name];
+    if (old){ if (!old.desc){ const d = {...data}; if (old.catLocked) delete d.cat; delete d.emoji; Object.assign(old, d); } }
+    else { save.items[name] = {t:Date.now(), from, ...data}; isNew = true; }
+    save.recipes[k] = [...new Set([...(save.recipes[k] || []), name])];
+    persist();
+    return isNew;
+  }
+  function showResult(name, x, y, isNew){
+    const el = makeItem(name, x, y); el.classList.add('pop');
+    if (isNew){
+      el.classList.add('fresh'); setTimeout(() => el.classList.remove('fresh'), 4000);
+      const it = save.items[name], r = it.rarity;
+      toast(`${r >= 4 ? RARITY[r-1] + '發現！' : '新發現！'}${it.emoji} ${name}`);
+    }
+    renderList();
+  }
+
   async function combine(a, b){
     const na = a.dataset.name, nb = b.dataset.name;
     const k = pairKey(na, nb);
@@ -630,6 +665,14 @@
       a.remove(); b.remove();
       const el = makeItem(n, x, y); el.classList.add('pop');
     };
+    // 內建配方：第一次合直接給寫好的結果（不花次數）
+    const sr = STARTER_MAP.get(k);
+    if (sr && !known.includes(sr)){
+      a.remove(); b.remove();
+      const d = starterData(sr) || {...save.items[sr]};
+      showResult(sr, x, y, addResult(k, sr, [na, nb], d));
+      return;
+    }
     // 設定成「固定結果」或沒鑰匙時，合過的組合直接用以前的結果（不花次數）
     if (known.length && (prefs.reroll === 'off' || !getKey())){ useKnown(); return; }
     if (!getKey()){ place(a, parseFloat(a.style.left), parseFloat(a.style.top)); openSettings('先貼上 Gemini 鑰匙才能煉出新東西'); return; }
@@ -640,20 +683,11 @@
     try {
       const res = await askGemini(na, nb, known);
       const name = res.name;
-      let isNew = false;
-      const old = save.items[name];
-      if (old){ if (!old.desc) Object.assign(old, cleanDetail(res)); }
-      else { save.items[name] = {emoji:res.emoji, t:Date.now(), from:[na, nb], ...cleanDetail(res)}; isNew = true; }
-      save.recipes[k] = [...new Set([...(save.recipes[k] || []), name])];
-      persist();
+      // AI 剛好煉出內建圖鑑裡的東西：用寫好的資料，讓介紹一致
+      const data = starterData(name) || {emoji:res.emoji, ...cleanDetail(res)};
+      const isNew = addResult(k, name, [na, nb], data);
       b.remove();
-      const el = makeItem(name, x, y); el.classList.add('pop');
-      if (isNew){
-        el.classList.add('fresh'); setTimeout(() => el.classList.remove('fresh'), 4000);
-        const r = save.items[name].rarity;
-        toast(`${r >= 4 ? RARITY[r-1] + '發現！' : '新發現！'}${res.emoji} ${name}`);
-      }
-      renderList();
+      showResult(name, x, y, isNew);
     } catch(err){
       // 問不到 AI，但這組以前合過：先用以前的結果
       if (known.length){
@@ -668,6 +702,7 @@
       toast(err.message || '煉製失敗，再試一次', true);
     }
   }
+
 
   function getKey(){ return (store.get(KEY_KEY) || '').trim(); }
   function getOverride(){ return (store.get(MODEL_KEY) || '').trim(); }
