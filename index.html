@@ -517,7 +517,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.24';
+  const VERSION = '0.0.25';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -568,6 +568,8 @@
       for (const n of oldFav){ if (!f.items.includes(n)) f.items.push(n); delete s.items[n].fav; }
     }
     for (const f of s.folders) f.items = (f.items || []).filter(n => s.items[n]);
+    // 補記「萃取過」：有東西是從它萃取出來的（ext 指向它），代表以前萃取過
+    for (const it of Object.values(s.items)) if (it && it.ext && s.items[it.ext]) s.items[it.ext].extracted = true;
     // 合成出來的東西，萃取時直接拆回它的材料：補上反向萃取（還沒萃取過的才補）
     for (const [k, v] of Object.entries(s.recipes)){
       const r = v[0];
@@ -866,6 +868,8 @@
     let names = Object.keys(save.items);
     $('count').innerHTML = `已發現 <b>${names.length}</b> 樣`;
     renderFolderTabs();
+    const unext = names.filter(n => !save.items[n].extracted).length;
+    $('f-unext').textContent = `未萃取 ${unext}`;
     renderCatFilter();
     const cat = catFilter;
     if (q) names = names.filter(n => n.toLowerCase().includes(q) || (save.items[n].desc || '').toLowerCase().includes(q));
