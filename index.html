@@ -77,6 +77,9 @@
   .rchip .em{font-size:1.4em;line-height:1}
   .rchip.fresh{outline:2px solid var(--accent);outline-offset:3px}
   .rchip .newtag{font-size:.65em;color:var(--accent);font-weight:700}
+  .boom{font-size:1.3rem;padding:.7rem 1.3rem;border-radius:.9rem;border:1px dashed var(--danger);color:var(--danger);
+    animation:boom .55s ease-out}
+  @keyframes boom{0%{transform:scale(.3);opacity:0}35%{transform:scale(1.3) rotate(-5deg);opacity:1}55%{transform:scale(.95) rotate(4deg)}75%{transform:rotate(-2deg)}100%{transform:scale(1)}}
   #r-busy{color:var(--muted);animation:pulse 1.1s ease-in-out infinite}
   #btn-really{border-color:var(--accent);color:var(--accent)}
   #hint{color:var(--muted);font-size:.9rem;text-align:center;line-height:1.9}
@@ -370,7 +373,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.3';
+  const VERSION = '0.0.4';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -417,7 +420,7 @@
     // 萃取出來的東西要合得回去：補上反向配方（這組還沒有結果時才補）
     for (const [src, parts] of Object.entries(s.extracts)){
       const k = [...parts].sort().join('+');
-      if (parts.length >= 2 && !s.recipes[k]) s.recipes[k] = [src];
+      if (parts.length >= 2 && (!s.recipes[k] || s.recipes[k][0] === '💥')) s.recipes[k] = [src];
     }
     for (const k in s.recipes) if (!Array.isArray(s.recipes[k])) s.recipes[k] = [s.recipes[k]];
     for (const b of BASE){
@@ -443,6 +446,7 @@
     if (!store.set(SAVE_KEY, JSON.stringify(save))) toast('存檔失敗，瀏覽器可能不讓這個網頁存資料', true);
   }
   const comboKey = names => [...names].sort().join('+');
+  const FAIL = '💥';  // 合成失敗（爆炸）的記號，存在配方裡：這組永遠合不起來，除非按「真的嗎？」
 
   // 內建配方（starter.js）
   const STARTER = window.STARTER || {items:{}, recipes:[]};
@@ -667,13 +671,18 @@
       ? `${last.inputs.map(nm).join(' ＋ ')} ＝`
       : `萃取 ${nm(last.inputs[0])} 得到`;
     const out = document.createElement('div'); out.id = 'r-out';
+    if (last.fail){
+      const boom = document.createElement('div'); boom.className = 'boom';
+      boom.textContent = '💥 合成失敗';
+      out.append(boom);
+    }
     for (const n of last.outputs){
       const c = chip('rchip', n);
       if (last.fresh.includes(n)){ c.classList.add('fresh'); const t = document.createElement('span'); t.className = 'newtag'; t.textContent = '新'; c.append(t); }
       out.append(c);
     }
     const tip = document.createElement('div'); tip.className = 'muted'; tip.style.cssText = 'font-size:.78rem;color:var(--muted)';
-    tip.textContent = '點結果可以放進槽位，長按看卡片';
+    tip.textContent = last.fail ? '這幾樣合不起來。覺得可以的話，按「真的嗎？」請 AI 再想想' : '點結果可以放進槽位，長按看卡片';
     const really = document.createElement('button'); really.className = 'btn'; really.id = 'btn-really';
     really.textContent = '真的嗎？'; really.title = '請 AI 想像另一種可能';
     really.onclick = doReally;
@@ -697,11 +706,20 @@
   }
 
   // ---------- 合成 ----------
+  function finishFail(inputs, tried){
+    last = {type:'combine', inputs, outputs:[], fresh:[], fail:true, tried:tried || [FAIL]};
+    persist();
+    slots.fill(null);
+    setBusy(false);
+    renderResult();
+    toast('💥 砰！合成失敗', true);
+  }
   $('btn-craft').onclick = craft;
   async function craft(){
     const names = filled();
     if (busy || names.length < 2) return;
     const k = comboKey(names);
+    if ((save.recipes[k] || [])[0] === FAIL) return finishFail(names);
     // 合過的組合：永遠是同一個結果（不花次數）
     const known = (save.recipes[k] || []).find(n => save.items[n]);
     if (known){ recordExtract(known, names); return finish('combine', names, [known], []); }
@@ -717,6 +735,7 @@
     setBusy(true, '煉製中……');
     try {
       const res = await askCombine(names);
+      if (res.fail){ save.recipes[k] = [FAIL]; return finishFail(names); }
       const isNew = addItem(res.name, starterData(res.name) || {emoji:res.emoji, ...cleanDetail(res)}, {from:names});
       save.recipes[k] = [res.name];
       recordExtract(res.name, names);
@@ -735,7 +754,7 @@
   // 萃取出來的東西合回去，會變回原本的東西（這組已經有結果就不動，維持同一組同一結果）
   function linkBack(src, parts){
     const k = comboKey(parts);
-    if (parts.length >= 2 && !save.recipes[k]) save.recipes[k] = [src];
+    if (parts.length >= 2 && (!save.recipes[k] || save.recipes[k][0] === FAIL)) save.recipes[k] = [src];
   }
   $('btn-extract').onclick = extract;
   async function extract(){
@@ -772,6 +791,13 @@
       let outputs, fresh = [];
       if (L.type === 'combine'){
         const res = await askCombine(L.inputs, L.tried);
+        if (res.fail){
+          if (L.fail) throw new Error('AI 想了想，還是覺得合不起來');
+          save.recipes[comboKey(L.inputs)] = [FAIL];
+          finishFail(L.inputs, [...L.tried, FAIL]);
+          keepSlots.forEach((n, i) => slots[i] = n); renderSlots();
+          return;
+        }
         if (L.tried.includes(res.name)) throw new Error('AI 想了想，還是覺得一樣，再按一次試試');
         if (addItem(res.name, starterData(res.name) || {emoji:res.emoji, ...cleanDetail(res)}, {from:L.inputs})) fresh.push(res.name);
         save.recipes[comboKey(L.inputs)] = [res.name];  // 這組的答案換成新的；舊的東西還留在圖鑑裡
@@ -827,19 +853,39 @@ ${catRule()}
     desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, color:{type:'STRING'}
   };
   const ITEM_SCHEMA = {name:{type:'STRING'}, emoji:{type:'STRING'}, ...DETAIL_SCHEMA};
-  const NAME_RULE = '- name：一個名詞，可以是物品、自然現象、生物、地點、人物、概念、作品或流行文化。使用繁體中文（台灣用語），專有名詞若中文少見可保留原文。最多 8 個字，不要解釋、不要標點。\n- emoji：一個最貼切的 emoji。';
+  const NAME_LIMIT = 6;
+  const NAME_RULE = `- name：一個常見、具體、在字典或百科查得到的名詞（物品、自然現象、生物、地點、人物、作品等）。使用繁體中文（台灣用語）。2 到 4 個字最好，最多 ${NAME_LIMIT} 個字。
+  不要自己發明詞，不要用「形容詞＋名詞」拼湊（例如「憤怒的火」「魔法水晶球」），不要解釋、不要標點。
+- emoji：一個最貼切的 emoji。`;
 
+  const COMBINE_SCHEMA = {ok:{type:'BOOLEAN'}, ...ITEM_SCHEMA};
+  const isFail = o => o.ok === false || String(o.ok).toLowerCase() === 'false' || !String(o.name || '').trim();
+  function againRule(avoid){
+    if (!avoid || !avoid.length) return '';
+    const prev = avoid.filter(n => n !== FAIL);
+    if (avoid[avoid.length - 1] === FAIL)
+      return `- 這一組原本判定合成失敗，但玩家問：「真的嗎？」請再想想有沒有說得通的結果；真的沒有才回 ok＝false。${prev.length ? `不能是：${prev.join('、')}。` : ''}\n`;
+    return `- 這一組原本的答案是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請想出另一種說得通的結果，不能是：${prev.join('、')}。\n`;
+  }
   async function askCombine(names, avoid){
     const list = names.map(n => `「${n}」`).join('、');
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家把 ${list} 這 ${names.length} 樣東西合在一起，請決定會產生什麼。
 規則：
 ${NAME_RULE}
-- 要讓人看得出跟每一樣材料的關聯；可以有趣、有梗、出乎意料。
-- 盡量產生新的東西，避免直接回傳材料本身。
-${avoid && avoid.length ? `- 這一組原本的答案是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請發揮想像力，想出另一種說得通又有趣的結果，不能是：${avoid.join('、')}。\n` : ''}${DETAIL_RULES()}`;
-    const out = await ask(prompt, ITEM_SCHEMA);
-    const name = cleanName(out.name);
+- 結果要合理、符合常識，大多數人一看就懂為什麼會變成這個。寧可普通，也不要天馬行空。
+- 避免直接回傳材料本身。
+- ok：如果這些東西合在一起真的說不通、想不出合理的結果，ok＝false（合成失敗），其他欄位留空字串。說得通就 ok＝true。
+${againRule(avoid)}${DETAIL_RULES()}`;
+    let out = await ask(prompt, COMBINE_SCHEMA);
+    if (isFail(out)) return {fail:true};
+    let name = cleanName(out.name);
+    // 名字太長：請 AI 再短一點（只重問一次）
+    if (name.length > NAME_LIMIT){
+      out = await ask(`${prompt}\n\n注意：你上次回答「${name}」太長了，名字一定要在 ${NAME_LIMIT} 個字以內。`, COMBINE_SCHEMA);
+      if (isFail(out)) return {fail:true};
+      name = cleanName(out.name);
+    }
     if (!name) throw new Error('AI 沒想出東西，再試一次');
     return {...out, name, emoji:String(out.emoji || '').trim().slice(0, 8) || '✨'};
   }
@@ -946,7 +992,7 @@ ${DETAIL_RULES()}`;
           body:JSON.stringify({
             contents:[{role:'user', parts:[{text:prompt}]}],
             generationConfig:{
-              temperature:0.9,
+              temperature:0.5,
               responseMimeType:'application/json',
               responseSchema:{type:'OBJECT', properties:props, required:Object.keys(props)}
             }
@@ -968,6 +1014,7 @@ ${DETAIL_RULES()}`;
 
   // ---------- 手動問 AI ----------
   function example(schema){
+    if (schema.type === 'BOOLEAN') return true;
     if (schema.type === 'ARRAY') return [example(schema.items), example(schema.items)];
     if (schema.type === 'OBJECT') return Object.fromEntries(Object.entries(schema.properties).map(([k, v]) => [k, example(v)]));
     if (schema.type === 'INTEGER') return 1;
@@ -1121,7 +1168,7 @@ ${lines}
     else if (it.from){ from.append('煉法：'); it.from.forEach((n, j) => { if (j) from.append('＋'); from.append(link(n)); }); }
     else if (it.ext){ from.append('從 '); from.append(link(it.ext)); from.append(' 萃取出來'); }
     else from.append('最初的元素');
-    const makes = [...new Set(Object.entries(save.recipes).filter(([k]) => k.split('+').includes(name)).flatMap(([,v]) => v))];
+    const makes = [...new Set(Object.entries(save.recipes).filter(([k]) => k.split('+').includes(name)).flatMap(([,v]) => v))].filter(n => save.items[n]);
     const mk = $('c-makes'); mk.textContent = '';
     if (makes.length){ mk.append('能煉出：'); makes.forEach((n, i) => { if (i) mk.append('、'); mk.append(link(n)); }); }
     const ex = $('c-ext'); ex.textContent = '';
