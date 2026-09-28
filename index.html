@@ -210,6 +210,9 @@
   .meta.small{font-size:.75rem}
   .meta:empty{display:none}
   .clink{color:var(--text);cursor:pointer;border-bottom:1px dashed var(--muted)}
+  .xdel{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:.75rem;padding:0 .25rem;margin-left:.1rem;
+    border-radius:.3rem;font-family:inherit;vertical-align:middle}
+  .xdel:hover{color:var(--danger);background:var(--accent-soft)}
   .clink:hover{color:var(--accent);border-color:var(--accent)}
   .cbox .actions{display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap}
   #c-fav.on{color:var(--accent);border-color:var(--accent)}
@@ -293,6 +296,8 @@
       <div class="actions">
         <button class="btn" id="c-fav">☆ 收藏</button>
         <button class="btn" id="c-drop">放進槽位</button>
+        <button class="btn" id="c-redesc" title="請 AI 只看這個詞本身，重寫介紹">重寫介紹</button>
+        <button class="btn danger" id="c-del">刪除</button>
         <div style="flex:1"></div>
         <button class="btn" id="c-close">關閉</button>
       </div>
@@ -373,7 +378,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.4';
+  const VERSION = '0.0.5';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -686,7 +691,14 @@
     const really = document.createElement('button'); really.className = 'btn'; really.id = 'btn-really';
     really.textContent = '真的嗎？'; really.title = '請 AI 想像另一種可能';
     really.onclick = doReally;
-    r.append(eq, out, tip, really);
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center';
+    row.append(really);
+    if (last.type === 'combine' && save.recipes[comboKey(last.inputs)]){
+      const del = document.createElement('button'); del.className = 'btn danger'; del.textContent = '刪掉這個配方';
+      del.onclick = () => askDeleteRecipe(comboKey(last.inputs));
+      row.append(del);
+    }
+    r.append(eq, out, tip, row);
   }
   function announce(fresh){
     if (!fresh.length) return;
@@ -845,7 +857,8 @@
     return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。`;
   }
   const DETAIL_RULES = () =>
-`- desc：一到兩句話的介紹，繁體中文，40 字以內，可以帶一點趣味。
+`- desc：像百科的一到兩句話，繁體中文，40 字以內，只介紹「這個東西本身」是什麼、有什麼特色。
+  不要提到合成的材料，不要解釋為什麼會合出它，不要硬扯關係。例如「蒸氣」要寫「水加熱後變成的白色氣體……」，不要寫「風和火相遇時……」。
 - rarity：1 到 5 的整數，代表這個東西在一般人心中有多偏門。1＝人人都知道的日常事物，2＝普通，3＝少見，4＝稀有偏門，5＝傳說級冷門或極度奇特抽象。
 ${catRule()}
 - color：這個東西最常讓人聯想到的顏色，用 #RRGGBB 格式。`;
@@ -1134,6 +1147,46 @@ ${lines}
   }
   $('btn-reorg').addEventListener('click', reorganize);
 
+  // ---------- 刪除 ----------
+  // 刪掉一條配方：下次合這組會重新問 AI。它帶出來的反向萃取也一起刪
+  function askDeleteRecipe(k){
+    const r = (save.recipes[k] || [])[0];
+    const txt = `${k.split('+').join('＋')}＝${r === FAIL ? '💥 合成失敗' : r}`;
+    if (!confirm(`確定刪掉這個配方嗎？\n\n${txt}\n\n刪掉之後再合這組，會重新問 AI。「${r}」這樣東西本身不會被刪。`)) return;
+    delete save.recipes[k];
+    if (r && save.extracts[r] && comboKey(save.extracts[r]) === k) delete save.extracts[r];
+    afterDelete('配方已刪除');
+  }
+  function askDeleteExtract(name){
+    const parts = save.extracts[name] || [];
+    if (!confirm(`確定刪掉這個萃取結果嗎？\n\n萃取 ${name} → ${parts.join('、')}\n\n刪掉之後再萃取「${name}」，會重新問 AI。萃取出來的東西本身不會被刪。`)) return;
+    delete save.extracts[name];
+    afterDelete('萃取結果已刪除');
+  }
+  // 刪掉一樣東西：跟它有關的配方、萃取紀錄一起刪
+  function askDeleteItem(name){
+    if (BASE.some(b => b.name === name)){ toast('水、火、風、土是最初的元素，不能刪', true); return; }
+    const recipeKeys = Object.entries(save.recipes)
+      .filter(([k, v]) => v.includes(name) || k.split('+').includes(name)).map(([k]) => k);
+    const extractKeys = Object.entries(save.extracts)
+      .filter(([k, v]) => k === name || v.includes(name)).map(([k]) => k);
+    const n = recipeKeys.length + extractKeys.length;
+    if (!confirm(`確定刪掉「${name}」嗎？\n\n它會從圖鑑消失${n ? `，跟它有關的 ${n} 條配方和萃取紀錄也會一起刪掉` : ''}。之後再合出來，會重新問 AI。\n\n刪掉就救不回來。`)) return;
+    delete save.items[name];
+    recipeKeys.forEach(k => delete save.recipes[k]);
+    extractKeys.forEach(k => delete save.extracts[k]);
+    for (let i = 0; i < slots.length; i++) if (slots[i] === name) slots[i] = null;
+    const rest = slots.filter(Boolean); slots.fill(null); rest.forEach((x, j) => slots[j] = x);
+    if (last && (last.inputs.includes(name) || last.outputs.includes(name))) last = null;
+    closeCard();
+    afterDelete(`「${name}」已刪除`);
+  }
+  function afterDelete(msg){
+    persist(); renderList(); renderSlots(); renderResult();
+    if (cardName && save.items[cardName]) openCard(cardName);
+    toast(msg);
+  }
+
   // ---------- 卡片 ----------
   let cardName = null;
   function openCard(name){
@@ -1162,10 +1215,14 @@ ${lines}
     const ways = Object.entries(save.recipes).filter(([, v]) => v.includes(name)).map(([k]) => k.split('+'));
     if (ways.length){
       from.append('煉法：');
-      ways.slice(0, 12).forEach((w, i) => { if (i) from.append('、'); w.forEach((n, j) => { if (j) from.append('＋'); from.append(link(n)); }); });
+      ways.slice(0, 12).forEach((w, i) => {
+        if (i) from.append('、');
+        w.forEach((n, j) => { if (j) from.append('＋'); from.append(link(n)); });
+        from.append(delBtn('刪掉這個配方', () => askDeleteRecipe(comboKey(w))));
+      });
       if (ways.length > 12) from.append(` 等 ${ways.length} 種`);
     }
-    else if (it.from){ from.append('煉法：'); it.from.forEach((n, j) => { if (j) from.append('＋'); from.append(link(n)); }); }
+    else if (it.from){ from.append('當初由 '); it.from.forEach((n, j) => { if (j) from.append('＋'); from.append(link(n)); }); from.append(' 煉出（配方已刪）'); }
     else if (it.ext){ from.append('從 '); from.append(link(it.ext)); from.append(' 萃取出來'); }
     else from.append('最初的元素');
     const makes = [...new Set(Object.entries(save.recipes).filter(([k]) => k.split('+').includes(name)).flatMap(([,v]) => v))].filter(n => save.items[n]);
@@ -1173,7 +1230,11 @@ ${lines}
     if (makes.length){ mk.append('能煉出：'); makes.forEach((n, i) => { if (i) mk.append('、'); mk.append(link(n)); }); }
     const ex = $('c-ext'); ex.textContent = '';
     const exs = (save.extracts[name] || []).filter(n => save.items[n]);
-    if (exs.length){ ex.append('能萃取出：'); exs.forEach((n, i) => { if (i) ex.append('、'); ex.append(link(n)); }); }
+    if (exs.length){
+      ex.append('能萃取出：'); exs.forEach((n, i) => { if (i) ex.append('、'); ex.append(link(n)); });
+      ex.append(delBtn('刪掉這個萃取結果', () => askDeleteExtract(name)));
+    }
+    $('c-del').hidden = BASE.some(b => b.name === name);
     $('c-time').textContent = it.t > 1e12 ? `發現於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
     $('c-fav').textContent = it.fav ? '★ 已收藏' : '☆ 收藏';
     $('c-fav').classList.toggle('on', !!it.fav);
@@ -1182,20 +1243,25 @@ ${lines}
     // 用 Gemini 時自動補介紹；手動模式由玩家按「補上介紹」
     if (!it.desc && !asking && prefs.ai !== 'manual' && getKey()) fillDetail(name);
   }
+  function delBtn(title, fn){
+    const b = document.createElement('button'); b.className = 'xdel'; b.textContent = '✕'; b.title = title;
+    b.onclick = e => { e.stopPropagation(); fn(); };
+    return b;
+  }
   function link(n){
     const a = document.createElement('span'); a.className = 'clink';
     a.textContent = (save.items[n] ? save.items[n].emoji + ' ' : '') + n;
     a.onclick = () => openCard(n);
     return a;
   }
-  async function fillDetail(name){
+  async function fillDetail(name, descOnly){
     const it = save.items[name];
     it._asking = true;
-    if (cardName === name) openCard(name);
+    if (cardName === name){ openCard(name); if (descOnly) $('c-desc').textContent = '重寫中……'; }
     try {
       const d = await askDetail(name);
       if (it.catLocked) delete d.cat;
-      Object.assign(it, d);
+      if (descOnly) it.desc = d.desc || it.desc; else Object.assign(it, d);
       persist(); renderList(); renderSlots(); if (last) renderResult();
     } catch(e){
       if (!e.cancelled && cardName === name) toast('介紹生成失敗：' + e.message, true);
@@ -1204,6 +1270,8 @@ ${lines}
       if (cardName === name && $('card').classList.contains('open')) openCard(name);
     }
   }
+  $('c-redesc').onclick = () => { if (cardName && aiReady()) fillDetail(cardName, true); };
+  $('c-del').onclick = () => { if (cardName) askDeleteItem(cardName); };
   $('c-fill').onclick = () => { if (cardName && aiReady()) fillDetail(cardName); };
   $('c-cat').onclick = () => {
     const it = save.items[cardName]; if (!it) return;
