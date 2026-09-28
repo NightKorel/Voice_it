@@ -188,9 +188,9 @@
     <p class="muted">鑰匙只存在這台裝置的這個瀏覽器裡，不會上傳到任何地方（只會拿去問 Gemini）。換手機或換瀏覽器要重新貼一次。</p>
     <label for="key">鑰匙</label>
     <input id="key" type="password" placeholder="貼上你的鑰匙" autocomplete="off">
-    <label for="model">模型（通常不用動）</label>
-    <input id="model" type="text" autocomplete="off">
-    <p class="muted">預設 gemini-2.5-flash-lite：免費版每天約 1000 次、每分鐘 15 次。合過的組合會記住，重複合不會花次數。</p>
+    <label for="model">模型（通常選「自動」就好）</label>
+    <select id="model" class="sel" style="width:100%;padding:.5rem .6rem;font-size:.9rem"><option value="">自動（推薦）</option></select>
+    <p class="muted" id="model-note">自動會去問 Google 你的鑰匙能用哪些模型，挑免費次數最多的 Flash-Lite。Google 換新模型時也會自己跟上。合過的組合會記住，重複合不會花次數。</p>
     <div class="actions">
       <button class="btn primary" id="btn-save">儲存鑰匙</button>
       <button class="btn" id="btn-test">測試鑰匙</button>
@@ -214,7 +214,8 @@
   const SAVE_KEY = 'wuxian_save_v1';
   const KEY_KEY = 'wuxian_gemini_key';
   const MODEL_KEY = 'wuxian_gemini_model';
-  const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
+  const AUTO_KEY = 'wuxian_gemini_auto';
+  const API = 'https://generativelanguage.googleapis.com/v1beta';
   const BASE = [
     {name:'水', emoji:'💧'}, {name:'火', emoji:'🔥'}, {name:'風', emoji:'🌬️'}, {name:'土', emoji:'🌍'}
   ];
@@ -444,7 +445,52 @@
   }
 
   function getKey(){ return (store.get(KEY_KEY) || '').trim(); }
-  function getModel(){ return (store.get(MODEL_KEY) || '').trim() || DEFAULT_MODEL; }
+  function getOverride(){ return (store.get(MODEL_KEY) || '').trim(); }
+
+  // 問 Google：這把鑰匙能用哪些模型
+  async function listModels(){
+    let resp;
+    try { resp = await fetch(`${API}/models?pageSize=1000`, {headers:{'x-goog-api-key':getKey()}}); }
+    catch(e){ throw new Error('連不上 Gemini，檢查一下網路'); }
+    if (!resp.ok) throw await apiError(resp);
+    const data = await resp.json();
+    return (data.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => m.name.replace(/^models\//, ''))
+      .filter(n => /^gemini/.test(n) && !/(tts|image|audio|live|embed|vision|thinking|computer|robot|native|learnlm|aqa|exp)/.test(n));
+  }
+  // 挑最適合的：Flash-Lite 優先（免費次數最多），正式版優先於預覽版，版本新的優先
+  function pickModel(names){
+    const ver = n => { const m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; };
+    const score = n => {
+      let s = 0;
+      if (n.includes('flash-lite')) s += 3000; else if (n.includes('flash')) s += 2000; else return -1;
+      if (!/preview/.test(n)) s += 500;
+      if (/latest$/.test(n)) s += 400;
+      return s + ver(n) * 10;
+    };
+    const ok = names.filter(n => score(n) >= 0).sort((a, b) => score(b) - score(a));
+    return ok[0] || null;
+  }
+  async function getModel(refresh){
+    const o = getOverride();
+    if (o) return o;
+    let m = refresh ? '' : (store.get(AUTO_KEY) || '');
+    if (!m){
+      m = pickModel(await listModels());
+      if (!m) throw new Error('你的鑰匙找不到可以用的免費模型');
+      store.set(AUTO_KEY, m);
+    }
+    return m;
+  }
+  async function apiError(resp){
+    let msg = '';
+    try { msg = (await resp.json())?.error?.message || ''; } catch(e){}
+    if (resp.status === 429) return new Error('免費次數暫時用完了（太快或今天用滿），等一下再試');
+    if (/api key|API_KEY/i.test(msg) || resp.status === 401 || resp.status === 403) return new Error('鑰匙好像不對，到設定檢查一下');
+    if (resp.status === 404) { const e = new Error('找不到這個模型'); e.notFound = true; return e; }
+    return new Error(`Gemini 出錯了（${resp.status}）${msg ? '：' + msg.slice(0, 80) : ''}`);
+  }
 
   async function askGemini(a, b){
     const prompt =
@@ -456,9 +502,19 @@
 - 要讓人看得出跟「${a}」和「${b}」的關聯；可以有趣、有梗、出乎意料。
 - 盡量產生新的東西，避免直接回傳「${a}」或「${b}」本身。
 - 附上一個最貼切的 emoji。`;
+    try { return await generate(prompt, await getModel()); }
+    catch(e){
+      // 模型被 Google 下架了：自動重新挑一次
+      if (e.notFound && !getOverride()) return await generate(prompt, await getModel(true));
+      if (e.notFound) throw new Error('找不到你選的模型，到設定把模型改回「自動」');
+      throw e;
+    }
+  }
+
+  async function generate(prompt, model){
     let resp;
     try {
-      resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(getModel())}:generateContent`, {
+      resp = await fetch(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
         method:'POST',
         headers:{'Content-Type':'application/json', 'x-goog-api-key':getKey()},
         body:JSON.stringify({
@@ -473,12 +529,7 @@
     } catch(e){
       throw new Error('連不上 Gemini，檢查一下網路');
     }
-    if (!resp.ok){
-      if (resp.status === 429) throw new Error('免費次數暫時用完了（太快或今天用滿），等一下再試');
-      if (resp.status === 400 || resp.status === 401 || resp.status === 403) throw new Error('鑰匙好像不對，到設定檢查一下');
-      if (resp.status === 404) throw new Error('找不到這個模型，到設定把模型改回預設');
-      throw new Error(`Gemini 出錯了（${resp.status}），等一下再試`);
-    }
+    if (!resp.ok) throw await apiError(resp);
     const data = await resp.json();
     const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
     let out;
@@ -492,30 +543,48 @@
   // ---------- 設定 ----------
   function openSettings(msg){
     $('key').value = getKey();
-    $('model').value = getModel();
+    fillModels();
     $('modal').classList.add('open');
     if (msg) toast(msg, true);
   }
+  async function fillModels(){
+    const sel = $('model'), o = getOverride();
+    const opts = [''];
+    if (getKey()){ try { opts.push(...(await listModels())); } catch(e){} }
+    if (o && !opts.includes(o)) opts.push(o);
+    sel.textContent = '';
+    for (const n of opts){
+      const op = document.createElement('option');
+      op.value = n; op.textContent = n || `自動（推薦）${store.get(AUTO_KEY) ? '：' + store.get(AUTO_KEY) : ''}`;
+      sel.append(op);
+    }
+    sel.value = o;
+  }
+  function saveModel(){ const m = $('model').value; if (m) store.set(MODEL_KEY, m); else store.del(MODEL_KEY); }
+  $('model').addEventListener('change', saveModel);
   function closeSettings(){ $('modal').classList.remove('open'); }
   $('btn-settings').onclick = () => openSettings();
   $('btn-close').onclick = closeSettings;
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeSettings(); });
   $('btn-save').onclick = () => {
-    const k = $('key').value.trim(), m = $('model').value.trim();
+    const k = $('key').value.trim();
+    if (k !== getKey()) store.del(AUTO_KEY);
     if (k) store.set(KEY_KEY, k); else store.del(KEY_KEY);
-    if (m && m !== DEFAULT_MODEL) store.set(MODEL_KEY, m); else store.del(MODEL_KEY);
+    saveModel();
     toast(k ? '鑰匙已儲存' : '鑰匙已清除');
+    fillModels();
   };
   $('btn-test').onclick = async () => {
     const k = $('key').value.trim();
     if (!k){ toast('先貼上鑰匙', true); return; }
+    if (k !== getKey()) store.del(AUTO_KEY);
     store.set(KEY_KEY, k);
-    const m = $('model').value.trim();
-    if (m && m !== DEFAULT_MODEL) store.set(MODEL_KEY, m); else store.del(MODEL_KEY);
+    saveModel();
     toast('測試中……');
     try {
       const r = await askGemini('水', '火');
-      toast(`成功！試煉一次：水＋火＝${r.emoji} ${r.name}`);
+      toast(`成功！用 ${getOverride() || store.get(AUTO_KEY)} 試煉：水＋火＝${r.emoji} ${r.name}`);
+      fillModels();
     } catch(e){ toast(e.message, true); }
   };
   $('btn-clear').onclick = () => { board.querySelectorAll('.item').forEach(el => { if (!el.classList.contains('busy')) el.remove(); }); updateHint(); };
