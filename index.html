@@ -517,7 +517,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.26';
+  const VERSION = '0.0.27';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1236,13 +1236,21 @@ ${catRule()}
   // 算字數：中文一個字算一個，英文一個單字算一個
   const nameLen = n => (n.match(/[^\x00-\x7F]/g) || []).length + (n.match(/[A-Za-z0-9]+/g) || []).length;
   const isFail = o => o.ok === false || String(o.ok).toLowerCase() === 'false' || !String(o.name || '').trim();
-  function againRule(avoid){
+  // 「真的嗎？」：把原本的配方完整附上，請 AI 想一個新的
+  function againRule(avoid, names){
     if (!avoid || !avoid.length) return '';
+    const left = names.join('＋');
     const prev = avoid.filter(n => n !== FAIL);
-    if (avoid[avoid.length - 1] === FAIL)
-      return `- 這一組原本判定合成失敗，但玩家問：「真的嗎？」請再想想有沒有說得通的結果；真的沒有才回 ok＝false。${prev.length ? `不能是：${prev.join('、')}。` : ''}\n`;
-    return `- 這一組原本的答案是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請想出另一種說得通的結果，不能是：${prev.join('、')}。\n`;
+    const history = avoid.map(n => `${left}＝${n === FAIL ? '合成失敗' : n}`).join('；');
+    const now = avoid[avoid.length - 1];
+    return `
+【玩家問「真的嗎？」】
+- 原本的配方：${left}＝${now === FAIL ? '合成失敗（爆炸）' : now}
+- 之前出現過的答案：${history}
+- 玩家覺得原本的答案不對，請重新想一個新的、說得通的結果${prev.length ? `，不能是：${prev.join('、')}` : ''}。
+${now === FAIL ? '- 原本判定合成失敗，請再想想有沒有合理的結果；真的沒有才回 ok＝false。\n' : ''}`;
   }
+
   async function askCombine(names, avoid){
     const list = names.map(n => `「${n}」`).join('、');
     const prompt =
@@ -1253,7 +1261,7 @@ ${NAME_RULE}
 - 避免直接回傳材料本身。
 ${knownRule()}
 - ok：如果這些東西合在一起真的說不通、想不出合理的結果，ok＝false（合成失敗），其他欄位留空字串。說得通就 ok＝true。
-${againRule(avoid)}${DETAIL_RULES()}`;
+${againRule(avoid, names)}${DETAIL_RULES()}`;
     let out = await ask(prompt, COMBINE_SCHEMA);
     if (isFail(out)) return {fail:true};
     let name = canonical(cleanName(out.name));
@@ -1273,7 +1281,12 @@ ${againRule(avoid)}${DETAIL_RULES()}`;
 - 回傳 parts，2 到 3 樣東西，每一樣都要比「${name}」更原始、更基本，而且合在一起說得通能變成「${name}」。
 - 不能是「${name}」本身。
 ${knownRule()}
-${avoid && avoid.length ? `- 原本萃取出的是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請想出另一種拆法，不能跟這些完全一樣：${avoid.join('；')}。\n` : ''}- 每一樣的欄位規則：
+${avoid && avoid.length ? `
+【玩家問「真的嗎？」】
+- 原本的萃取：${name} → ${avoid[avoid.length - 1]}
+- 之前出現過的拆法：${avoid.map(a => `${name} → ${a}`).join('；')}
+- 玩家覺得原本的拆法不對，請重新想一種新的、說得通的拆法，不能跟上面任何一種完全一樣。
+` : ''}- 每一樣的欄位規則：
 ${NAME_RULE}
 ${DETAIL_RULES()}`;
     const out = await ask(prompt, {parts:{type:'ARRAY', items:{type:'OBJECT', properties:ITEM_SCHEMA, required:Object.keys(ITEM_SCHEMA)}}});
