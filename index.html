@@ -142,6 +142,10 @@
   .litem .star{width:.4rem;height:.4rem;border-radius:50%;background:var(--accent);display:inline-block}
   .sel{font-size:.82rem;padding:.25rem .4rem;border-radius:.5rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-family:inherit}
 
+  /* 電腦版：滑鼠指著東西時的純文字詳情 */
+  #tip{position:fixed;z-index:60;max-width:18rem;background:var(--panel);color:var(--text);border:1px solid var(--line);
+    border-radius:.6rem;padding:.55rem .7rem;font-size:.8rem;line-height:1.6;box-shadow:var(--lift);pointer-events:none;white-space:pre-line}
+  #tip[hidden]{display:none}
   #toast{position:fixed;left:50%;top:4rem;transform:translate(-50%,-6px);background:var(--panel);color:var(--text);
     border:1px solid var(--accent);padding:.6rem 1.1rem;border-radius:.8rem;font-size:.95rem;opacity:0;
     transition:opacity .25s,transform .25s;pointer-events:none;z-index:50;max-width:90vw;text-align:center;box-shadow:var(--lift)}
@@ -290,6 +294,7 @@
 </div>
 
 <div id="toast"></div>
+<div id="tip" hidden></div>
 
 <div id="card">
   <div class="cbox" id="card-box">
@@ -444,7 +449,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.13';
+  const VERSION = '0.0.14';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -592,6 +597,54 @@
   window.addEventListener('pointercancel', () => { if (press){ clearTimeout(press.timer); press = null; } });
   list.addEventListener('scroll', () => { if (press){ clearTimeout(press.timer); press = null; } });
 
+  // ---------- 電腦版滑鼠提示 ----------
+  // 只在有滑鼠的電腦上：指著東西停一下，就跳出純文字的詳情
+  const canHover = window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
+  let tipTimer = null, tipEl = null;
+  function tipText(name, hint){
+    const it = save.items[name];
+    if (!it) return '';
+    const lines = [`${it.emoji} ${name}${it.fav ? '  ★' : ''}`];
+    const meta = [];
+    if (it.rarity) meta.push(`稀有度：${RARITY[it.rarity - 1]}（${it.rarity}／5）`);
+    if (it.cat) meta.push(`分類：${it.cat}`);
+    if (meta.length) lines.push(meta.join('　'));
+    if (it.desc) lines.push(it.desc);
+    const ways = Object.entries(save.recipes).filter(([, v]) => v[0] === name).map(([k]) => k.split('+').join('＋'));
+    if (ways.length) lines.push(`煉法：${ways[0]}${ways.length > 1 ? `（還有 ${ways.length - 1} 種）` : ''}`);
+    else if (it.ext) lines.push(`從 ${it.ext} 萃取出來`);
+    else if (!it.from) lines.push('最初的元素');
+    lines.push(hint || '點一下放進槽位，長按或右鍵看卡片');
+    return lines.join('\n');
+  }
+  function hideTip(){ clearTimeout(tipTimer); tipEl = null; $('tip').hidden = true; }
+  function placeTip(x, y){
+    const t = $('tip'), w = t.offsetWidth, h = t.offsetHeight;
+    let left = x + 14, top = y + 16;
+    if (left + w > innerWidth - 8) left = x - w - 14;
+    if (top + h > innerHeight - 8) top = y - h - 12;
+    t.style.left = Math.max(8, left) + 'px'; t.style.top = Math.max(8, top) + 'px';
+  }
+  if (canHover){
+    document.addEventListener('mouseover', e => {
+      const el = e.target.closest && e.target.closest('[data-tip]');
+      if (el === tipEl) return;
+      hideTip();
+      if (!el) return;
+      tipEl = el;
+      const x = e.clientX, y = e.clientY;
+      tipTimer = setTimeout(() => {
+        const txt = tipText(el.dataset.tip, el.dataset.tipHint);
+        if (!txt || tipEl !== el) return;
+        const t = $('tip'); t.textContent = txt; t.hidden = false; placeTip(x, y);
+      }, 350);
+    });
+    document.addEventListener('mousemove', e => { if (!$('tip').hidden) placeTip(e.clientX, e.clientY); });
+    document.addEventListener('mousedown', hideTip);
+    document.addEventListener('scroll', hideTip, true);
+    document.addEventListener('mouseleave', hideTip);
+  }
+
   // ---------- 清單 ----------
   let filterFav = false;
   function catCounts(){
@@ -616,6 +669,7 @@
     el.append(em, tx);
     paint(el, it);
     pressable(el, name);
+    el.dataset.tip = name;
     return el;
   }
   function renderList(){
@@ -684,12 +738,12 @@
         const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = n;
         el.append(em, nm);
         paint(el, it);
-        el.title = '點一下拿掉';
+        el.dataset.tip = n; el.dataset.tipHint = '點一下拿掉';
       } else {
         paint(el, null);
         const ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = '＋';
         el.append(ph);
-        el.title = '';
+        delete el.dataset.tip; delete el.dataset.tipHint;
       }
       if (i === popIndex){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
     });
