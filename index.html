@@ -665,7 +665,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.46';
+  const VERSION = '0.0.47';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1323,9 +1323,9 @@
       del.onclick = () => askDeleteRecipe(comboKey(last.inputs));
       row.append(del);
     }
-    r.append(eq, out, tip, row);
+    // 有收藏夾建議時，放在原本提示字的位置（比較上面、比較顯眼）；收起來之後提示字再回來
     const sug = folderSuggest();
-    if (sug) r.append(sug);
+    r.append(eq, out, sug || tip, row);
   }
   // 合成材料來自某些收藏夾時，小提示問要不要把結果也收進去（萃取不問）
   function folderSuggest(){
