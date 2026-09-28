@@ -1,0 +1,16 @@
+{
+  "name": "1+1=?",
+  "short_name": "1+1=?",
+  "description": "只屬於自己的無限煉製",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#14151a",
+  "theme_color": "#14151a",
+  "lang": "zh-Hant",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
