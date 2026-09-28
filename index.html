@@ -516,7 +516,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.20';
+  const VERSION = '0.0.21';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1500,6 +1500,11 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
   $('rg-cancel').onclick = () => $('reorg').classList.remove('open');
   $('rg-go').onclick = runReorg;
 
+  // 分類裡面的東西（給 AI 看內容，而不是只看分類名稱）；太多時列前面的，後面寫還有幾樣
+  function catMembers(c, max = 120){
+    const xs = Object.keys(save.items).filter(x => save.items[x].cat === c);
+    return xs.slice(0, max).join('、') + (xs.length > max ? `……等 ${xs.length} 樣` : '');
+  }
   async function runReorg(){
     const doItems = $('rg-items').checked, doCat = $('rg-cat').checked, doMove = $('rg-move').checked;
     $('reorg').classList.remove('open');
@@ -1547,15 +1552,16 @@ ${part.join('、')}
         if (counts.length > 1){
           await pace(); progress('整理分類……');
           const all = Object.keys(save.items);
-          const lines = counts.map(([c, n]) => `${c}（${n} 樣）：${all.filter(x => save.items[x].cat === c).slice(0, 6).join('、')}`).join('\n');
+          const lines = counts.map(([c, n]) => `${c}（${n} 樣）：${catMembers(c)}`).join('\n');
           const out = await ask(
-`你是遊戲圖鑑的分類整理員。下面是目前所有的分類，每行一個，格式是「分類名稱（有幾樣東西）：舉例」：
+`你是遊戲圖鑑的分類整理員。下面是目前所有的分類，每行一個，格式是「分類名稱（有幾樣東西）：裡面所有的東西」：
 ${lines}
 
 任務：找出「意思重複」「太像」或「太零碎（只有一兩樣、可以併進更大的類）」的分類，決定把它們併到哪個分類。
 
 輸出 merges 陣列，每一筆是 {"from":"要被併掉的分類","to":"併進去的分類"}。
-- from 必須一字不差地從上面的分類名稱抄（不要抄括號和舉例）。
+- 請看每個分類「裡面實際放了什麼東西」來判斷，不要只看分類名稱。
+- from 必須一字不差地從上面的分類名稱抄（不要抄括號和冒號後面的東西）。
 - to 可以是上面已有的分類，也可以是新的 2 到 4 個字的大類名稱。
 - 不需要合併的分類不要寫。都不需要合併就回 {"merges":[]}。
 - 整理完分類總數最好不超過 20 個左右。
@@ -1580,7 +1586,8 @@ ${lines}
           const lines = parts[i].map(n => `${n}：${save.items[n].cat || '未分類'}`).join('\n');
           const out = await ask(
 `你是遊戲圖鑑的分類整理員。
-現有分類：${cats.join('、') || '（還沒有）'}
+現有分類和裡面目前放的東西（每行一個分類）：
+${cats.map(c => `${c}：${catMembers(c, 30)}`).join('\n') || '（還沒有）'}
 
 下面每行是一樣東西，格式是「東西名稱：目前分類」：
 ${lines}
@@ -1588,6 +1595,7 @@ ${lines}
 任務：檢查每樣東西放的分類對不對。
 輸出 moves 陣列，只列出「需要換分類」的東西（包含未分類的），每一筆是 {"name":"東西名稱","category":"新的分類"}。
 - name 必須一字不差地從上面抄（冒號前面那段）。
+- 參考上面每個分類裡已經放了什麼，放進最像的那一類。
 - category 優先用現有分類；真的都不適合才開新的 2 到 4 個字的大類。
 - 分得對的不要列。全部都對就回 {"moves":[]}。
 範例：{"moves":[{"name":"蘋果","category":"食物"}]}`, MOVE_SCHEMA);
