@@ -112,7 +112,6 @@
   .co-btn{padding:.2rem .6rem;font-size:.9rem}
   .tabrow{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
   .tabrow::-webkit-scrollbar{height:4px}
-  .tabrow::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
   .cattab{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:1rem;padding:.25rem .7rem;
     font-size:.8rem;cursor:pointer;font-family:inherit;white-space:nowrap}
   .cattab:hover{border-color:var(--accent);color:var(--text)}
@@ -170,8 +169,6 @@
     color:var(--text);font-size:.92rem;font-family:inherit;-webkit-user-select:text;user-select:text;outline:none}
   #search:focus{border-color:var(--accent)}
   #list{flex:1;overflow-y:auto;padding:.7rem;display:flex;flex-wrap:wrap;gap:.4rem;align-content:flex-start}
-  #list::-webkit-scrollbar{width:8px}
-  #list::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
   .litem{display:inline-flex;align-items:center;gap:.35rem;padding:.33rem .65rem;border:2px solid var(--chip-line);
     border-radius:.7rem;background:var(--chip);font-size:.94rem;cursor:pointer;white-space:nowrap;transition:border-color .12s,background .12s}
   .litem:hover{border-color:var(--accent);background:var(--chip-hover)}
@@ -283,6 +280,14 @@
   :root[data-motion="off"] *{animation:none!important;transition:none!important}
 
   /* ===== 美化（純 CSS，不耗資源） ===== */
+  /* 捲動條：細細的、跟主題同色，底是透明的，指上去才變金色 */
+  *{scrollbar-width:thin;scrollbar-color:var(--chip-line) transparent}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--chip-line);border-radius:10px;border:3px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--accent);background-clip:padding-box}
+  ::-webkit-scrollbar-corner{background:transparent}
+  .tabrow::-webkit-scrollbar-thumb{border-width:1px}
   /* 工作台：三個槽位放在一個淡淡的框裡，像煉成陣 */
   #slots{padding:1rem 1.2rem;border:1px solid var(--line);border-radius:1.4rem;
     background:radial-gradient(ellipse at 50% 0%, var(--bg-glow), transparent 70%), color-mix(in srgb, var(--panel) 65%, transparent);
@@ -612,7 +617,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.37';
+  const VERSION = '0.0.38';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -680,12 +685,14 @@
     const sorted = {};
     for (const [k, v] of Object.entries(s.recipes)){ const nk = k.split('+').sort().join('+'); if (!(nk in sorted)) sorted[nk] = v; }
     s.recipes = sorted;
+    // 合成失敗不記錄：舊存檔裡的失敗配方清掉
+    for (const [k, v] of Object.entries(s.recipes)) if (!v.length || v[0] === '💥') delete s.recipes[k];
     // 以前失敗時被存成「……」之類的東西：從圖鑑拿掉，合出它的配方改成合成失敗
     const bad = n => { n = String(n || '').trim(); return !n || /^[\s.…。、,，\-—_~～?？!！*＊·•]+$/.test(n) || ['東西的名字','名字','名稱'].includes(n); };
     for (const n of Object.keys(s.items)) if (bad(n)) delete s.items[n];
     for (const [k, v] of Object.entries(s.recipes)){
       if (k.split('+').some(bad)) delete s.recipes[k];
-      else if (bad(v[0])) s.recipes[k] = ['💥'];
+      else if (bad(v[0])) delete s.recipes[k];
     }
     for (const [k, v] of Object.entries(s.extracts || {})){ if (bad(k) || (v || []).some(bad)) delete s.extracts[k]; }
     for (const f of s.folders || []) f.items = (f.items || []).filter(n => !bad(n));
@@ -712,7 +719,7 @@
     if (!store.set(SAVE_KEY, JSON.stringify(save))) toast('存檔失敗，瀏覽器可能不讓這個網頁存資料', true);
   }
   const comboKey = names => [...names].sort().join('+');
-  const FAIL = '💥';  // 合成失敗（爆炸）的記號，存在配方裡：這組永遠合不起來，除非按「真的嗎？」
+  const FAIL = '💥';  // 合成失敗（爆炸）的記號：只用在「真的嗎？」的歷史紀錄裡，不會存進配方（失敗不記錄，下次再合會重新問）
 
   // 內建配方（starter.js）
   const STARTER = window.STARTER || {items:{}, recipes:[]};
@@ -1228,7 +1235,7 @@
       out.append(c);
     }
     const tip = document.createElement('div'); tip.className = 'muted'; tip.style.cssText = 'font-size:.78rem;color:var(--muted)';
-    tip.textContent = last.fail ? '這幾樣合不起來。覺得可以的話，按「真的嗎？」請 AI 再想想'
+    tip.textContent = last.fail ? '這幾樣合不起來。失敗不會記錄，之後可以再合一次試試，或按「真的嗎？」請 AI 再想想'
       : last.fromRecipe ? '有配方的東西，萃取出來固定是它的第一個配方。點結果可以放進槽位'
       : '點結果可以放進槽位，長按看卡片';
     const really = document.createElement('button'); really.className = 'btn'; really.id = 'btn-really';
@@ -1305,7 +1312,6 @@
     const names = filled();
     if (busy || names.length < 2) return;
     const k = comboKey(names);
-    if ((save.recipes[k] || [])[0] === FAIL) return finishFail(names);
     // 合過的組合：永遠是同一個結果（不花次數）
     const known = (save.recipes[k] || []).find(n => save.items[n]);
     if (known){ recordExtract(known, names); return finish('combine', names, [known], []); }
@@ -1321,7 +1327,7 @@
     setBusy(true, '煉製中……');
     try {
       const res = await askCombine(names);
-      if (res.fail){ save.recipes[k] = [FAIL]; return finishFail(names); }
+      if (res.fail) return finishFail(names);  // 合成失敗不記錄，下次再合會重新問
       const isNew = addItem(res.name, starterData(res.name) || aiData(res), {from:names});
       save.recipes[k] = [res.name];
       recordExtract(res.name, names);
@@ -1387,11 +1393,8 @@
       if (L.type === 'combine'){
         const res = await askCombine(L.inputs, L.tried);
         if (res.fail){
-          if (L.fail) throw new Error('AI 想了想，還是覺得合不起來');
-          save.recipes[comboKey(L.inputs)] = [FAIL];
-          finishFail(L.inputs, [...L.tried, FAIL]);
-          keepSlots.forEach((n, i) => slots[i] = n); renderSlots();
-          return;
+          // 失敗不記錄：原本有結果就維持原本的
+          throw new Error(L.fail ? 'AI 想了想，還是覺得合不起來' : 'AI 想不出別的結果，維持原本的');
         }
         if (L.tried.includes(res.name)) throw new Error('AI 想了想，還是覺得一樣，再按一次試試');
         if (addItem(res.name, starterData(res.name) || aiData(res), {from:L.inputs})) fresh.push(res.name);
