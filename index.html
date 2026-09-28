@@ -400,6 +400,11 @@
   }
   function fillBase(s){
     s.extracts = s.extracts || {};
+    // 萃取出來的東西要合得回去：補上反向配方（這組還沒有結果時才補）
+    for (const [src, parts] of Object.entries(s.extracts)){
+      const k = [...parts].sort().join('+');
+      if (parts.length >= 2 && !s.recipes[k]) s.recipes[k] = [src];
+    }
     for (const k in s.recipes) if (!Array.isArray(s.recipes[k])) s.recipes[k] = [s.recipes[k]];
     for (const b of BASE){
       const it = s.items[b.name];
@@ -707,6 +712,11 @@
   }
 
   // ---------- 萃取 ----------
+  // 萃取出來的東西合回去，會變回原本的東西（這組已經有結果就不動，維持同一組同一結果）
+  function linkBack(src, parts){
+    const k = comboKey(parts);
+    if (parts.length >= 2 && !save.recipes[k]) save.recipes[k] = [src];
+  }
   $('btn-extract').onclick = extract;
   async function extract(){
     const names = filled();
@@ -723,6 +733,7 @@
         if (addItem(p.name, starterData(p.name) || {emoji:p.emoji, ...cleanDetail(p)}, {ext:name})) fresh.push(p.name);
       }
       save.extracts[name] = parts.map(p => p.name);
+      linkBack(name, save.extracts[name]);
       finish('extract', [name], save.extracts[name], fresh);
     } catch(e){
       setBusy(false); renderResult();
@@ -751,6 +762,7 @@
           if (addItem(p.name, starterData(p.name) || {emoji:p.emoji, ...cleanDetail(p)}, {ext:L.inputs[0]})) fresh.push(p.name);
         outputs = parts.map(p => p.name);
         save.extracts[L.inputs[0]] = outputs;
+        linkBack(L.inputs[0], outputs);
       }
       const tried = [...L.tried, outputs.join('、')];
       finish(L.type, L.inputs, outputs, fresh);
