@@ -296,8 +296,8 @@
         <span id="count"></span>
         <div style="flex:1"></div>
         <select id="sort" class="sel">
+          <option value="new" selected>最新在前</option>
           <option value="time">發現順序</option>
-          <option value="new">最新在前</option>
           <option value="name">名稱</option>
           <option value="rareHigh">稀有度：高到低</option>
           <option value="rareLow">稀有度：低到高</option>
@@ -518,7 +518,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.30';
+  const VERSION = '0.0.31';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -917,7 +917,7 @@
     }
   }
   $('search').addEventListener('input', renderList);
-  $('sort').addEventListener('change', renderList);
+  $('sort').addEventListener('change', () => { setPref('sort', $('sort').value); renderList(); });
 
   $('f-unext').addEventListener('click', () => { filterUnext = !filterUnext; $('f-unext').classList.toggle('on', filterUnext); renderList(); list.scrollTop = 0; });
 
@@ -2139,7 +2139,7 @@ ${lines}
 
   // ---------- 外觀與 AI 來源 ----------
   const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-border','border'], ['seg-ai','ai']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick'};
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
   function applyPrefs(){
@@ -2148,6 +2148,7 @@ ${lines}
     r.dataset.font = prefs.font;
     r.dataset.motion = prefs.motion;
     r.dataset.border = prefs.border;
+    if ([...$('sort').options].some(o => o.value === prefs.sort)) $('sort').value = prefs.sort;  // 清單排序：預設最新在前，會記住上次選的
     r.style.setProperty('--scale', prefs.scale);
     $('scale').value = prefs.scale;
     r.style.setProperty('--side-w', prefs.sidew + '%');
