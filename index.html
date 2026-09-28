@@ -340,8 +340,23 @@
     <hr>
     <h3>AI 來源</h3>
     <div class="setrow"><span class="lbl">來源</span>
-      <div class="seg" id="seg-ai"><button data-v="gemini">Gemini 自動</button><button data-v="manual">手動複製貼上</button></div></div>
-    <p class="muted">手動：每次需要 AI 時會跳出一段問題，你複製去問任何 AI，再把回答貼回來。Gemini 太忙或次數用完時可以用這個。用 Gemini 時如果它太忙，也會問你要不要改用手動。</p>
+      <div class="seg" id="seg-ai"><button data-v="gemini">Gemini</button><button data-v="openrouter">OpenRouter</button><button data-v="manual">手動複製貼上</button></div></div>
+    <p class="muted">手動：每次需要 AI 時會跳出一段問題，你複製去問任何 AI，再把回答貼回來。自動的 AI 太忙或次數用完時，也會問你要不要改用手動。</p>
+
+    <h3>OpenRouter 鑰匙</h3>
+    <p>OpenRouter 集合了很多家的免費 AI（DeepSeek、Qwen、Llama 等），一把鑰匙全部能用，免費、不用綁信用卡。某一個 AI 太忙時，遊戲會自動換下一個免費的試。</p>
+    <ol>
+      <li>打開 <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter 的鑰匙頁面</a>，註冊或登入。</li>
+      <li>按「Create Key」（建立鑰匙），名字隨便取，建好後按複製。</li>
+      <li>貼到下面的格子，按「儲存鑰匙」，再把上面的來源選成 OpenRouter。</li>
+    </ol>
+    <p class="muted">免費額度：每分鐘 20 次、每天 50 次（在 OpenRouter 儲值過 10 美元以上，免費額度會變成每天 1000 次）。合過的組合不會再花次數。</p>
+    <label for="orkey">鑰匙</label>
+    <input id="orkey" type="password" placeholder="貼上 OpenRouter 鑰匙（sk-or- 開頭）" autocomplete="off">
+    <div class="actions">
+      <button class="btn primary" id="btn-orsave">儲存鑰匙</button>
+      <button class="btn" id="btn-ortest">測試鑰匙</button>
+    </div>
 
     <h3>Gemini 鑰匙</h3>
     <p>用 Google 的 Gemini 免費方案來想「合出來是什麼」。你需要一把自己的鑰匙（API key），免費、不用綁信用卡。</p>
@@ -378,7 +393,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.5';
+  const VERSION = '0.0.6';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -389,6 +404,7 @@
   const MODEL_KEY = 'wuxian_gemini_model';
   const AUTO_KEY = 'wuxian_gemini_auto';
   const PREF_KEY = 'wuxian_prefs';
+  const OR_KEY = 'wuxian_or_key';
   const API = 'https://generativelanguage.googleapis.com/v1beta';
   // 分類是活的：AI 會優先用已有的分類，都不適合才自己開新分類。一開始沒什麼分類時，拿這些當參考
   const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話奇幻','科技','文化娛樂','概念','天文'];
@@ -838,9 +854,11 @@
   // ---------- AI ----------
   function getKey(){ return (store.get(KEY_KEY) || '').trim(); }
   function getOverride(){ return (store.get(MODEL_KEY) || '').trim(); }
+  function getOrKey(){ return (store.get(OR_KEY) || '').trim(); }
+  function hasAutoKey(){ return prefs.ai === 'openrouter' ? !!getOrKey() : prefs.ai === 'gemini' ? !!getKey() : false; }
   function aiReady(){
-    if (prefs.ai === 'manual' || getKey()) return true;
-    openSettings('先貼上 Gemini 鑰匙，或把 AI 來源改成「手動複製貼上」');
+    if (prefs.ai === 'manual' || hasAutoKey()) return true;
+    openSettings(`先貼上 ${prefs.ai === 'openrouter' ? 'OpenRouter' : 'Gemini'} 鑰匙，或把 AI 來源改成「手動複製貼上」`);
     return false;
   }
   const cleanName = n => String(n || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
@@ -931,7 +949,7 @@ ${DETAIL_RULES()}`;
   // 問 AI：手動模式跳視窗；Gemini 太忙時問要不要改手動
   async function ask(prompt, props){
     if (prefs.ai === 'manual') return manualAsk(prompt, props);
-    try { return await askGemini(prompt, props); }
+    try { return prefs.ai === 'openrouter' ? await askOpenRouter(prompt, props) : await askGemini(prompt, props); }
     catch(e){
       if (e.busy) return manualAsk(prompt, props, e.message + '。可以改用手動：');
       throw e;
@@ -1025,6 +1043,56 @@ ${DETAIL_RULES()}`;
     }
   }
 
+  // ---------- OpenRouter ----------
+  // 免費模型清單（不用鑰匙就能查），挑中文好的優先；一個太忙就換下一個
+  let orModels = null;
+  async function orFreeModels(){
+    if (orModels) return orModels;
+    let data;
+    try { data = await (await fetch('https://openrouter.ai/api/v1/models')).json(); }
+    catch(e){ const er = new Error('連不上 OpenRouter'); er.busy = true; throw er; }
+    const free = (data.data || []).map(m => m.id).filter(id => /:free$/.test(id) && !/(vision|vl|image|audio|embed|guard|tts)/i.test(id));
+    const rank = id => {
+      const order = ['deepseek-chat', 'deepseek-v', 'qwen3', 'qwen', 'deepseek', 'llama-3.3-70b', 'llama-4', 'gemma-3-27b', 'mistral-small', 'gemma', 'llama'];
+      const i = order.findIndex(k => id.includes(k));
+      return i < 0 ? 99 : i;
+    };
+    orModels = free.sort((a, b) => rank(a) - rank(b));
+    if (!orModels.length) throw new Error('OpenRouter 現在沒有免費的模型');
+    return orModels;
+  }
+  async function askOpenRouter(prompt, props){
+    const models = await orFreeModels();
+    const full = jsonPrompt(prompt, props);
+    let lastErr = null;
+    for (const model of models.slice(0, 4)){
+      let resp;
+      try {
+        resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method:'POST',
+          headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + getOrKey(), 'X-Title':'1+1=?'},
+          body:JSON.stringify({model, temperature:0.5, messages:[{role:'user', content:full}]})
+        });
+      } catch(e){ lastErr = new Error('連不上 OpenRouter'); lastErr.busy = true; continue; }
+      if (resp.status === 401 || resp.status === 403){ throw new Error('OpenRouter 鑰匙好像不對，到設定檢查一下'); }
+      if (!resp.ok){
+        let msg = ''; try { msg = (await resp.json())?.error?.message || ''; } catch(e){}
+        // 今天的免費次數用完了：換模型也沒用
+        if (resp.status === 429 && /per-day|daily|free-models-per-day/i.test(msg)){ const e = new Error('OpenRouter 今天的免費次數用完了'); e.busy = true; throw e; }
+        lastErr = new Error(`OpenRouter 太忙（${resp.status}）`); lastErr.busy = true;
+        continue;  // 太忙或模型掛了：換下一個
+      }
+      const data = await resp.json();
+      const text = data?.choices?.[0]?.message?.content || '';
+      try {
+        const out = extractJSON(text);
+        if (Object.keys(props).every(k => k in out)) return out;
+      } catch(e){}
+      lastErr = new Error('OpenRouter 回了看不懂的東西');  // 格式不對：換下一個
+    }
+    throw lastErr || new Error('OpenRouter 沒有回應');
+  }
+
   // ---------- 手動問 AI ----------
   function example(schema){
     if (schema.type === 'BOOLEAN') return true;
@@ -1040,11 +1108,14 @@ ${DETAIL_RULES()}`;
     return JSON.parse(t.slice(a, b + 1));
   }
   let manualPending = null;
-  function manualAsk(prompt, props, reason){
-    const full = `${prompt}
+  function jsonPrompt(prompt, props){
+    return `${prompt}
 
 【回答格式】只回一段 JSON，不要加任何說明文字、不要用程式碼框。格式像這樣：
 ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
+  }
+  function manualAsk(prompt, props, reason){
+    const full = jsonPrompt(prompt, props);
     $('m-prompt').value = full;
     $('m-answer').value = '';
     $('m-err').textContent = '';
@@ -1241,7 +1312,7 @@ ${lines}
     $('card').classList.add('open');
     box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
     // 用 Gemini 時自動補介紹；手動模式由玩家按「補上介紹」
-    if (!it.desc && !asking && prefs.ai !== 'manual' && getKey()) fillDetail(name);
+    if (!it.desc && !asking && hasAutoKey()) fillDetail(name);
   }
   function delBtn(title, fn){
     const b = document.createElement('button'); b.className = 'xdel'; b.textContent = '✕'; b.title = title;
@@ -1310,6 +1381,7 @@ ${lines}
   // ---------- 設定 ----------
   function openSettings(msg){
     $('key').value = getKey();
+    $('orkey').value = getOrKey();
     fillModels();
     $('modal').classList.add('open');
     if (msg) toast(msg, true);
@@ -1340,6 +1412,21 @@ ${lines}
     saveModel();
     toast(k ? '鑰匙已儲存' : '鑰匙已清除');
     fillModels();
+  };
+  $('btn-orsave').onclick = () => {
+    const k = $('orkey').value.trim();
+    if (k) store.set(OR_KEY, k); else store.del(OR_KEY);
+    toast(k ? 'OpenRouter 鑰匙已儲存' : 'OpenRouter 鑰匙已清除');
+  };
+  $('btn-ortest').onclick = async () => {
+    const k = $('orkey').value.trim();
+    if (!k){ toast('先貼上 OpenRouter 鑰匙', true); return; }
+    store.set(OR_KEY, k);
+    toast('測試中……');
+    try {
+      const r = await askOpenRouter('請回傳 name＝「測試成功」、emoji＝「✅」。', {name:{type:'STRING'}, emoji:{type:'STRING'}});
+      toast(`成功！OpenRouter 回應：${r.emoji || ''} ${r.name || ''}`);
+    } catch(e){ toast(e.message, true); }
   };
   $('btn-test').onclick = async () => {
     const k = $('key').value.trim();
@@ -1396,7 +1483,7 @@ ${lines}
     for (const [id, k] of SEGS)
       $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs[k]));
     const am = $('aimode');
-    am.textContent = prefs.ai === 'manual' ? 'AI：手動' : 'AI：Gemini';
+    am.textContent = 'AI：' + ({gemini:'Gemini', openrouter:'OpenRouter', manual:'手動'}[prefs.ai] || 'Gemini');
     am.classList.toggle('manual', prefs.ai === 'manual');
   }
   function setPref(k, v){ prefs[k] = v; store.set(PREF_KEY, JSON.stringify(prefs)); applyPrefs(); }
@@ -1404,8 +1491,9 @@ ${lines}
     $(id).addEventListener('click', e => { const v = e.target.dataset && e.target.dataset.v; if (v) setPref(k, v); });
   $('scale').addEventListener('input', e => setPref('scale', parseFloat(e.target.value)));
   $('aimode').onclick = () => {
-    setPref('ai', prefs.ai === 'manual' ? 'gemini' : 'manual');
-    toast(prefs.ai === 'manual' ? '改成手動：需要 AI 時會跳出問題讓你複製' : '改回 Gemini 自動');
+    const order = ['gemini', 'openrouter', 'manual'];
+    setPref('ai', order[(order.indexOf(prefs.ai) + 1) % order.length]);
+    toast({gemini:'改用 Gemini', openrouter:'改用 OpenRouter', manual:'改成手動：需要 AI 時會跳出問題讓你複製'}[prefs.ai]);
   };
   applyPrefs();
 
@@ -1413,7 +1501,7 @@ ${lines}
   persist();
   renderList();
   renderSlots();
-  if (!getKey() && prefs.ai !== 'manual') setTimeout(() => openSettings(), 300);
+  if (prefs.ai !== 'manual' && !hasAutoKey()) setTimeout(() => openSettings(), 300);
 })();
 </script>
 </body>
