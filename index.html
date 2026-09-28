@@ -306,6 +306,7 @@
       </div>
       <input id="search" type="search" placeholder="搜尋名稱或介紹……" autocomplete="off">
       <div class="row">
+        <button class="chipbtn" id="f-unext" title="只看還沒萃取過的東西">未萃取</button>
         <div style="flex:1"></div>
         <button class="chipbtn" id="btn-catorder" title="自己排分類的順序">排序分類</button>
         <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、合併分類、檢查分類">整理</button>
@@ -516,7 +517,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.23';
+  const VERSION = '0.0.24';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -734,6 +735,7 @@
   // ---------- 清單 ----------
   // ---------- 收藏夾 ----------
   let folderFilter = '';
+  let filterUnext = false;  // 只看還沒萃取過的
   const foldersOf = n => save.folders.filter(f => f.items.includes(n)).map(f => f.name);
   function renderFolderTabs(){
     const box = $('favtabs'); box.textContent = '';
@@ -868,6 +870,7 @@
     const cat = catFilter;
     if (q) names = names.filter(n => n.toLowerCase().includes(q) || (save.items[n].desc || '').toLowerCase().includes(q));
     if (folderFilter){ const f = save.folders.find(x => x.name === folderFilter); names = names.filter(n => f && f.items.includes(n)); }
+    if (filterUnext) names = names.filter(n => !save.items[n].extracted);
     if (cat) names = names.filter(n => save.items[n].cat === cat);
     const I = save.items, mode = $('sort').value;
     const byTime = (a,b) => I[a].t - I[b].t;
@@ -887,7 +890,7 @@
     if (!names.length){
       const e = document.createElement('div'); e.className = 'empty';
       const ff = folderFilter && save.folders.find(x => x.name === folderFilter);
-      e.textContent = ff && !ff.items.length ? `「${folderFilter}」裡還沒有東西。長按東西打開卡片，按「收藏」就能放進來。` : '找不到符合的東西';
+      e.textContent = filterUnext && !ff && !catFilter && !q ? '全部都萃取過了！' : ff && !ff.items.length ? `「${folderFilter}」裡還沒有東西。長按東西打開卡片，按「收藏」就能放進來。` : '找不到符合的東西';
       list.append(e); return;
     }
     const recent = Date.now() - 10 * 60 * 1000;
@@ -907,6 +910,8 @@
   }
   $('search').addEventListener('input', renderList);
   $('sort').addEventListener('change', renderList);
+
+  $('f-unext').addEventListener('click', () => { filterUnext = !filterUnext; $('f-unext').classList.toggle('on', filterUnext); renderList(); list.scrollTop = 0; });
 
   // ---------- 槽位 ----------
   const slots = [null, null, null];
@@ -1017,6 +1022,7 @@
   }
   function finish(type, inputs, outputs, fresh){
     last = {type, inputs, outputs, fresh, tried:[outputs.join('、')]};
+    if (type === 'extract' && save.items[inputs[0]]) save.items[inputs[0]].extracted = true;  // 記下這樣東西萃取過了
     persist();
     slots.fill(null);
     setBusy(false);
@@ -2053,7 +2059,7 @@ ${lines}
       const now = Date.now();
       pickItems.forEach((n, i) => {
         const it = {...fr.items[n]};
-        delete it.fav; delete it._asking;  // 收藏夾是朋友自己的，不帶過來
+        delete it.fav; delete it._asking; delete it.extracted;  // 收藏夾、萃取進度是朋友自己的，不帶過來
         it.t = now + i;                    // 算成你剛拿到的
         it.friend = true;
         save.items[n] = it;
