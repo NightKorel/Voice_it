@@ -137,6 +137,7 @@
   .empty{color:var(--muted);font-size:.88rem;padding:1rem .3rem;line-height:1.7}
   .chipbtn{border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:.5rem;padding:.25rem .6rem;
     font-size:.82rem;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .chipbtn:disabled{opacity:.6;cursor:wait}
   .chipbtn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
 
   /* 卡片 */
@@ -194,7 +195,8 @@
       <input id="search" type="search" placeholder="搜尋名稱或介紹……" autocomplete="off">
       <div class="row">
         <button class="chipbtn" id="f-fav">★ 收藏</button>
-        <select id="cat" class="sel" style="flex:1"></select>
+        <select id="cat" class="sel" style="flex:1;min-width:0"></select>
+        <button class="chipbtn" id="btn-reorg" title="請 AI 合併重複或太像的分類，並檢查每樣東西分得對不對">整理分類</button>
       </div>
     </div>
     <div id="list"></div>
@@ -277,7 +279,8 @@
   const MODEL_KEY = 'wuxian_gemini_model';
   const AUTO_KEY = 'wuxian_gemini_auto';
   const API = 'https://generativelanguage.googleapis.com/v1beta';
-  const CATS = ['自然','元素','生物','植物','食物','物品','工具','建築地點','人物角色','神話奇幻','科技','文化娛樂','概念情緒','天文宇宙','其他'];
+  // 分類是活的：AI 會優先用已有的分類，都不適合才自己開新分類。一開始沒什麼分類時，拿這些當參考
+  const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話奇幻','科技','文化娛樂','概念','天文'];
   const RARITY = ['常見','普通','少見','稀有','傳說'];
   const BASE = [
     {name:'水', emoji:'💧', desc:'萬物生命的源頭，會流動、會蒸發，也能把火澆熄。', rarity:1, cat:'自然', color:'#3d8bd4'},
@@ -362,13 +365,19 @@
 
   // ---------- 清單 ----------
   let filterFav = false;
+  // 現有分類與數量，多的排前面
+  function catCounts(){
+    const m = new Map();
+    for (const it of Object.values(save.items)) if (it.cat) m.set(it.cat, (m.get(it.cat) || 0) + 1);
+    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
+  }
   function renderCatFilter(){
     const sel = $('cat'), cur = sel.value;
-    const used = new Set(Object.values(save.items).map(it => it.cat).filter(Boolean));
+    const counts = catCounts();
     sel.textContent = '';
     const all = document.createElement('option'); all.value = ''; all.textContent = '全部分類'; sel.append(all);
-    for (const c of CATS) if (used.has(c)){ const o = document.createElement('option'); o.value = o.textContent = c; sel.append(o); }
-    sel.value = used.has(cur) ? cur : '';
+    for (const [c, n] of counts){ const o = document.createElement('option'); o.value = c; o.textContent = `${c}（${n}）`; sel.append(o); }
+    sel.value = counts.some(([c]) => c === cur) ? cur : '';
   }
   function renderList(){
     const q = $('search').value.trim().toLowerCase();
@@ -383,6 +392,8 @@
     if (cat) names = names.filter(n => save.items[n].cat === cat);
     const I = save.items, mode = $('sort').value;
     const byTime = (a,b) => I[a].t - I[b].t;
+    const catOrder = new Map(catCounts().map(([c], i) => [c, i]));
+    const co = n => catOrder.has(I[n].cat) ? catOrder.get(I[n].cat) : 9999;
     const rar = n => I[n].rarity || 0;
     const sorters = {
       time: byTime,
@@ -390,7 +401,7 @@
       name: (a,b) => a.localeCompare(b, 'zh-Hant'),
       rareHigh: (a,b) => rar(b) - rar(a) || byTime(a,b),
       rareLow: (a,b) => (rar(a) || 9) - (rar(b) || 9) || byTime(a,b),
-      cat: (a,b) => ((CATS.indexOf(I[a].cat) + 1) || 99) - ((CATS.indexOf(I[b].cat) + 1) || 99) || byTime(a,b)
+      cat: (a,b) => co(a) - co(b) || byTime(a,b)
     };
     names.sort(sorters[mode] || byTime);
     list.textContent = '';
@@ -578,10 +589,11 @@
   list.addEventListener('scroll', () => { if (press){ clearTimeout(press.timer); press = null; } });
 
   // ---------- 煉製 ----------
+  const cleanCat = c => String(c || '').replace(/[\s。，！？、「」"'.,!?（）()]/g, '').slice(0, 6) || '其他';
   const cleanDetail = o => ({
     desc: String(o.desc || '').trim().slice(0, 80),
     rarity: Math.min(5, Math.max(1, Math.round(Number(o.rarity) || 1))),
-    cat: CATS.includes(o.category) ? o.category : '其他',
+    cat: cleanCat(o.category),
     color: /^#[0-9a-f]{6}$/i.test(String(o.color || '').trim()) ? String(o.color).trim() : ''
   });
 
@@ -675,13 +687,18 @@
     return new Error(`Gemini 出錯了（${resp.status}）${msg ? '：' + msg.slice(0, 80) : ''}`);
   }
 
-  const DETAIL_RULES =
+  function catRule(){
+    const have = catCounts().map(([c]) => c);
+    const list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
+    return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。`;
+  }
+  const DETAIL_RULES = () =>
 `- desc：一到兩句話的介紹，繁體中文，40 字以內，可以帶一點趣味。
 - rarity：1 到 5 的整數，代表這個東西在一般人心中有多偏門。1＝人人都知道的日常事物，2＝普通，3＝少見，4＝稀有偏門，5＝傳說級冷門或極度奇特抽象。
-- category：從這些選一個：${CATS.join('、')}。
+${catRule()}
 - color：這個東西最常讓人聯想到的顏色，用 #RRGGBB 格式。`;
   const DETAIL_SCHEMA = {
-    desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING', enum:CATS}, color:{type:'STRING'}
+    desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, color:{type:'STRING'}
   };
 
   async function askGemini(a, b){
@@ -692,7 +709,7 @@
 - 要讓人看得出跟「${a}」和「${b}」的關聯；可以有趣、有梗、出乎意料。
 - 盡量產生新的東西，避免直接回傳「${a}」或「${b}」本身。
 - emoji：一個最貼切的 emoji。
-${DETAIL_RULES}`;
+${DETAIL_RULES()}`;
     const out = await ask(prompt, {name:{type:'STRING'}, emoji:{type:'STRING'}, ...DETAIL_SCHEMA});
     const name = String(out.name || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
     if (!name) throw new Error('Gemini 沒想出東西，再試一次');
@@ -702,7 +719,7 @@ ${DETAIL_RULES}`;
   async function askDetail(name){
     const prompt =
 `你是「1+1=?」合成遊戲的圖鑑編輯。請為遊戲裡的「${name}」寫圖鑑資料。
-${DETAIL_RULES}`;
+${DETAIL_RULES()}`;
     return cleanDetail(await ask(prompt, DETAIL_SCHEMA));
   }
   async function ask(prompt, props){
@@ -738,6 +755,79 @@ ${DETAIL_RULES}`;
     const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
     try { return JSON.parse(text); } catch(e){ throw new Error('Gemini 回了看不懂的東西，再試一次'); }
   }
+
+  // ---------- 整理分類 ----------
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let reorging = false;
+  async function reorganize(){
+    if (reorging) return;
+    if (!getKey()){ openSettings('先貼上 Gemini 鑰匙才能整理分類'); return; }
+    const names = Object.keys(save.items);
+    const BATCH = 80;
+    const batches = [];
+    for (let i = 0; i < names.length; i += BATCH) batches.push(names.slice(i, i + BATCH));
+    const total = 1 + batches.length;
+    if (!confirm(`整理分類會請 AI 做兩件事：\n1. 合併重複、意思太像或太零碎的分類\n2. 檢查每樣東西分得對不對\n\n大約用掉 ${total} 次免費次數，要開始嗎？`)) return;
+    reorging = true;
+    const btn = $('btn-reorg'); btn.disabled = true;
+    let merged = 0, moved = 0, step = 0;
+    const progress = () => { btn.textContent = `整理中 ${step}/${total}`; };
+    try {
+      // 第一步：合併分類標籤
+      step = 1; progress();
+      const counts = catCounts();
+      if (counts.length > 1){
+        const lines = counts.map(([c, n]) =>
+          `${c}（${n} 樣，例如：${names.filter(x => save.items[x].cat === c).slice(0, 6).join('、')}）`).join('\n');
+        const out = await ask(
+`你是「1+1=?」合成遊戲的圖鑑分類管理員。以下是目前所有的分類：
+${lines}
+
+請找出重複、意思太像、或太細太零碎的分類，把它們合併。
+- 回傳 merges，每筆 from＝要被合併的舊分類（跟上面一字不差），to＝合併後的分類名稱（可以是現有分類，也可以取一個更好的新名字，2 到 4 個字）。
+- 沒問題的分類不要列出來。
+- 分類總數最好不要超過 20 個左右，每個分類都要是一個清楚的大類。`,
+          {merges:{type:'ARRAY', items:{type:'OBJECT', properties:{from:{type:'STRING'}, to:{type:'STRING'}}, required:['from','to']}}});
+        const map = new Map();
+        for (const m of out.merges || []){
+          const to = cleanCat(m.to);
+          if (m.from && m.from !== to && counts.some(([c]) => c === m.from)) map.set(m.from, to);
+        }
+        for (const it of Object.values(save.items)) if (map.has(it.cat)) it.cat = map.get(it.cat);
+        merged = map.size;
+        persist(); renderList();
+      }
+      // 第二步：一批一批檢查每樣東西
+      for (const group of batches){
+        await sleep(4000);  // 放慢一點，避免撞到免費版每分鐘的次數上限
+        step++; progress();
+        const cats = catCounts().map(([c]) => c);
+        const lines = group.map(n => `${n}：${save.items[n].cat || '（未分類）'}`).join('\n');
+        const out = await ask(
+`你是「1+1=?」合成遊戲的圖鑑分類管理員。現有分類：${cats.join('、') || '（還沒有）'}。
+以下是「東西：目前分類」：
+${lines}
+
+請檢查每樣東西的分類是否合適。
+- 只列出需要換分類的東西（包含未分類的），沒問題的不要列。
+- 優先用現有分類；只有真的都不適合時才開新分類（2 到 4 個字的大類）。
+- 回傳 moves，每筆 name＝東西名稱（一字不差），category＝新的分類。`,
+          {moves:{type:'ARRAY', items:{type:'OBJECT', properties:{name:{type:'STRING'}, category:{type:'STRING'}}, required:['name','category']}}});
+        for (const m of out.moves || []){
+          const it = save.items[m.name];
+          const c = cleanCat(m.category);
+          if (it && it.cat !== c){ it.cat = c; moved++; }
+        }
+        persist(); renderList();
+      }
+      toast(`整理完成：合併了 ${merged} 個分類、移動了 ${moved} 樣東西`);
+    } catch(e){
+      toast(`整理到一半停下來了（已整理的有存起來）：${e.message}`, true);
+    } finally {
+      reorging = false; btn.disabled = false; btn.textContent = '整理分類';
+    }
+  }
+  $('btn-reorg').addEventListener('click', reorganize);
 
   // ---------- 卡片 ----------
   let cardName = null;
