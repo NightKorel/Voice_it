@@ -50,6 +50,7 @@
   .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
   .btn.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.08)}
   .btn.danger{color:var(--danger)}
+  .ver{font-size:.72rem;color:var(--muted);letter-spacing:.02em}
   #aimode{font-size:.75rem;color:var(--muted);border:1px solid var(--line);border-radius:1rem;padding:.15rem .6rem;cursor:pointer;background:transparent;font-family:inherit}
   #aimode.manual{color:var(--accent);border-color:var(--accent)}
 
@@ -217,6 +218,7 @@
   <div id="board">
     <div id="topbar">
       <h1 id="logo">1+1=<span class="q">?</span></h1>
+      <span id="ver" class="ver"></span>
       <button id="aimode" title="切換 AI 來源"></button>
       <div class="sp"></div>
       <button class="btn" id="btn-settings">設定</button>
@@ -360,12 +362,19 @@
       <button class="btn danger" id="btn-reset">全部重來</button>
       <input type="file" id="file" accept=".json,application/json" style="display:none">
     </div>
+    <p class="muted" id="ver2" style="margin-top:1rem;text-align:right"></p>
   </div>
 </div>
 
 <script src="starter.js"></script>
 <script>
 (() => {
+  // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
+  const VERSION = '0.0.1';
+  document.getElementById('ver').textContent = 'v' + VERSION;
+  document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
+  document.title = `1+1=? v${VERSION}`;
+
   // ---------- 存檔 ----------
   const SAVE_KEY = 'wuxian_save_v1';
   const KEY_KEY = 'wuxian_gemini_key';
