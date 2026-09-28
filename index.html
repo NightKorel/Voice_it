@@ -72,7 +72,7 @@
   #result{display:flex;flex-direction:column;align-items:center;gap:.7rem;min-height:5rem;text-align:center}
   #r-eq{font-size:.88rem;color:var(--muted);line-height:1.8}
   #r-out{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center}
-  .rchip{display:inline-flex;align-items:center;gap:.5rem;padding:.6rem 1.1rem;border-radius:.9rem;border:1px solid var(--chip-line);
+  .rchip{display:inline-flex;align-items:center;gap:.5rem;padding:.55rem 1.05rem;border-radius:.9rem;border:2px solid var(--chip-line);
     background:var(--chip);font-size:1.15rem;cursor:pointer;box-shadow:var(--shadow);-webkit-touch-callout:none;animation:pop .4s ease-out}
   .rchip .em{font-size:1.4em;line-height:1}
   .rchip.fresh{outline:2px solid var(--accent);outline-offset:3px}
@@ -153,7 +153,7 @@
   #list{flex:1;overflow-y:auto;padding:.7rem;display:flex;flex-wrap:wrap;gap:.4rem;align-content:flex-start}
   #list::-webkit-scrollbar{width:8px}
   #list::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
-  .litem{display:inline-flex;align-items:center;gap:.35rem;padding:.38rem .7rem;border:1px solid var(--chip-line);
+  .litem{display:inline-flex;align-items:center;gap:.35rem;padding:.33rem .65rem;border:2px solid var(--chip-line);
     border-radius:.7rem;background:var(--chip);font-size:.94rem;cursor:pointer;white-space:nowrap;transition:border-color .12s,background .12s}
   .litem:hover{border-color:var(--accent);background:var(--chip-hover)}
   .litem .star{width:.4rem;height:.4rem;border-radius:50%;background:var(--accent);display:inline-block}
@@ -509,7 +509,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.18';
+  const VERSION = '0.0.19';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -635,17 +635,20 @@
     }
     return {h, s:s * 100};
   }
+  // 顏色只上在邊框：底色和字一律跟主題走（深色＝深底淺字，淺色＝淺底深字）
+  // 色相照東西本身；越常見邊框越淺、越稀有越深越飽和；傳說級會發光
   function paint(el, it){
+    el.style.background = el.style.color = '';
     const c = it && hexToHsl(it.color);
-    if (!c){ el.style.background = el.style.color = el.style.borderColor = el.style.boxShadow = ''; return; }
+    if (!c){ el.style.borderColor = el.style.boxShadow = ''; return; }
     const r = Math.min(5, Math.max(1, it.rarity || 1));
-    const L = 76 - (r - 1) * 12.5;                 // 常見 76% → 傳說 26%
-    const S = Math.min(85, c.s * (0.5 + r * 0.1));  // 越稀有越飽和
-    el.style.background = `hsl(${c.h} ${S}% ${L}%)`;
-    el.style.borderColor = `hsl(${c.h} ${S}% ${Math.max(12, L - 14)}%)`;
-    el.style.color = L > 52 ? '#1d1b18' : '#f4efe6';
-    el.style.boxShadow = r >= 5 ? `0 0 12px hsl(${c.h} ${Math.max(S, 50)}% 45% / .55)` : '';
+    const dark = document.documentElement.dataset.theme !== 'light';
+    const L = dark ? 80 - (r - 1) * 8 : 74 - (r - 1) * 11;   // 深色 80%→48%，淺色 74%→30%
+    const S = Math.min(90, Math.max(c.s * (0.55 + r * 0.1), c.s > 8 ? 35 : 0));
+    el.style.borderColor = `hsl(${c.h} ${S}% ${L}%)`;
+    el.style.boxShadow = r >= 5 ? `0 0 10px hsl(${c.h} ${Math.max(S, 50)}% 50% / .5)` : '';
   }
+
 
   // ---------- 點一下／長按 ----------
   // 點一下＝放進槽位；長按（或右鍵）＝看卡片；手指滑動＝捲動，不算點
@@ -1732,7 +1735,9 @@ ${lines}
     $('c-emoji').textContent = it.emoji;
     $('c-name').textContent = name;
     const band = $('c-band');
-    if (hexToHsl(it.color)) paint(band, it); else band.style.cssText = '';
+    const bc = hexToHsl(it.color);
+    band.style.cssText = '';
+    if (bc){ paint(band, it); band.style.borderBottomWidth = '3px'; band.style.boxShadow = ''; }
     const rr = $('c-rarity'); rr.textContent = '';
     if (it.rarity){
       const dots = document.createElement('span'); dots.className = 'dots';
@@ -2038,7 +2043,10 @@ ${lines}
     am.textContent = 'AI：' + ({gemini:'Gemini', openrouter:'OpenRouter', manual:'手動'}[prefs.ai] || 'Gemini');
     am.classList.toggle('manual', prefs.ai === 'manual');
   }
-  function setPref(k, v){ prefs[k] = v; store.set(PREF_KEY, JSON.stringify(prefs)); applyPrefs(); }
+  function setPref(k, v){
+    prefs[k] = v; store.set(PREF_KEY, JSON.stringify(prefs)); applyPrefs();
+    if (k === 'theme'){ renderList(); renderSlots(); renderResult(); }  // 邊框顏色深淺跟主題有關，重畫
+  }
   for (const [id, k] of SEGS)
     $(id).addEventListener('click', e => { const v = e.target.dataset && e.target.dataset.v; if (v) setPref(k, v); });
   $('scale').addEventListener('input', e => setPref('scale', parseFloat(e.target.value)));
