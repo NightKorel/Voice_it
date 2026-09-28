@@ -517,7 +517,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.25';
+  const VERSION = '0.0.26';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -868,13 +868,16 @@
     let names = Object.keys(save.items);
     $('count').innerHTML = `已發現 <b>${names.length}</b> 樣`;
     renderFolderTabs();
-    const unext = names.filter(n => !save.items[n].extracted).length;
+    // 有配方的東西一律算萃取過（萃取結果就是它的第一個配方）
+    const made = new Set(Object.values(save.recipes).map(v => v[0]));
+    const isUnext = n => !save.items[n].extracted && !made.has(n);
+    const unext = names.filter(isUnext).length;
     $('f-unext').textContent = `未萃取 ${unext}`;
     renderCatFilter();
     const cat = catFilter;
     if (q) names = names.filter(n => n.toLowerCase().includes(q) || (save.items[n].desc || '').toLowerCase().includes(q));
     if (folderFilter){ const f = save.folders.find(x => x.name === folderFilter); names = names.filter(n => f && f.items.includes(n)); }
-    if (filterUnext) names = names.filter(n => !save.items[n].extracted);
+    if (filterUnext) names = names.filter(isUnext);
     if (cat) names = names.filter(n => save.items[n].cat === cat);
     const I = save.items, mode = $('sort').value;
     const byTime = (a,b) => I[a].t - I[b].t;
