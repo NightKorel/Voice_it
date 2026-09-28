@@ -665,7 +665,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.45';
+  const VERSION = '0.0.46';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -860,7 +860,7 @@
     if (it.cat) meta.push(`分類：${it.cat}`);
     if (meta.length) lines.push(meta.join('　'));
     if (it.desc) lines.push(it.desc);
-    const ways = Object.entries(save.recipes).filter(([, v]) => v[0] === name).map(([k]) => k.split('+').join('＋'));
+    const ways = recipesOf(name).map(p => p.join('＋'));
     if (ways.length) lines.push(`煉法：${ways[0]}${ways.length > 1 ? `（還有 ${ways.length - 1} 種）` : ''}`);
     else if (it.ext) lines.push(`從 ${it.ext} 萃取出來`);
     else if (!it.from) lines.push('最初的元素');
@@ -1424,9 +1424,14 @@
 
   // ---------- 萃取 ----------
   // 這樣東西最早的配方（配方照記錄的先後排）；合成失敗的不算
+  // 一樣東西的所有配方（材料陣列），排序：用不同東西合出來的在前，全部同一樣（例如 水＋水＋水）的往後放；同一組內照記錄先後
+  function recipesOf(name){
+    const all = Object.entries(save.recipes).filter(([, v]) => v[0] === name).map(([k]) => k.split('+'));
+    const same = parts => new Set(parts).size === 1;
+    return [...all.filter(p => !same(p)), ...all.filter(same)];
+  }
   function firstRecipe(name){
-    for (const [k, v] of Object.entries(save.recipes))
-      if (v[0] === name){ const parts = k.split('+'); if (parts.every(n => save.items[n])) return parts; }
+    for (const parts of recipesOf(name)) if (parts.every(n => save.items[n])) return parts;
     return null;
   }
   // 合成時順便記下反向萃取：A＋B＝C，之後萃取 C 直接得到 A、B（已經有萃取紀錄就不動）
@@ -2272,7 +2277,7 @@ ${lines}
     $('c-fillrow').hidden = !!it.desc || asking;
     // 煉法
     const from = $('c-from'); from.textContent = '';
-    const ways = Object.entries(save.recipes).filter(([, v]) => v.includes(name)).map(([k]) => k.split('+'));
+    const ways = recipesOf(name);
     if (ways.length){
       from.append('煉法：');
       ways.slice(0, 12).forEach((w, i) => {
