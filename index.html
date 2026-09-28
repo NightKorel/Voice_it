@@ -98,7 +98,7 @@
   #reorg p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #reorg .muted{color:var(--muted);font-size:.8rem}
   #reorg .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
-  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
+  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
   .favnew{display:flex;gap:.5rem;margin:.6rem 0}
   .favnew input{flex:1;min-width:0;padding:.45rem .65rem;border-radius:.6rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:.88rem;font-family:inherit;outline:none}
   .favnew input:focus{border-color:var(--accent)}
@@ -118,6 +118,8 @@
   #reorg h3{font-size:.92rem;color:var(--accent);margin:.9rem 0 .3rem}
   .rg-opt{display:flex;gap:.5rem;align-items:flex-start;font-size:.9rem;line-height:1.6;margin:.5rem 0;cursor:pointer}
   .rg-opt input,.rg-row input{accent-color:var(--accent);margin-top:.3rem}
+  .pk-row{width:100%;text-align:left;background:var(--bg);color:var(--text);font-family:inherit;justify-content:space-between}
+  .pk-row:hover{border-color:var(--accent)}
   #rg-list,.rg-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
   .rg-row{display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;border:1px solid var(--line);border-radius:.7rem;font-size:.92rem;cursor:pointer;flex-wrap:wrap}
   .rg-row input{margin-top:0}
@@ -350,6 +352,7 @@
       <input id="search" type="search" placeholder="搜尋名稱或介紹……" autocomplete="off">
       <div class="row">
         <button class="chipbtn" id="f-unext" title="只看還沒萃取過的東西">未萃取</button>
+        <button class="chipbtn" id="btn-addall" title="把目前清單上看到的東西，一次加進某個收藏夾">★ 全部加入收藏夾</button>
         <div style="flex:1"></div>
         <button class="chipbtn" id="btn-catorder" title="自己排分類的順序">排序分類</button>
         <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、合併分類、檢查分類">整理</button>
@@ -415,6 +418,13 @@
         <button class="btn primary" id="rg-go">開始整理</button>
         <button class="btn" id="rg-cancel">取消</button>
       </div>
+    </div>
+    <div id="rg-pick" hidden>
+      <h2>加入收藏夾</h2>
+      <p id="pk-desc"></p>
+      <div id="pk-list" class="rg-list"></div>
+      <div class="favnew"><input id="pk-name" placeholder="或取名一個新收藏夾" autocomplete="off"><button class="btn" id="pk-add">新增並加入</button></div>
+      <div class="actions"><button class="btn" id="pk-cancel">取消</button></div>
     </div>
     <div id="rg-folders" hidden>
       <h2>管理收藏夾</h2>
@@ -561,7 +571,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.33';
+  const VERSION = '0.0.34';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -788,9 +798,14 @@
   }
 
   // ---------- 清單 ----------
+  // 整理視窗裡一次只顯示一個面板
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick'];
+  function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
+
   // ---------- 收藏夾 ----------
   let folderFilter = '';
   let filterUnext = false;  // 只看還沒萃取過的
+  let shownNames = [];      // 清單上現在看得到的東西（給「全部加入收藏夾」用）
   const foldersOf = n => save.folders.filter(f => f.items.includes(n)).map(f => f.name);
   function renderFolderTabs(){
     const box = $('favtabs'); box.textContent = '';
@@ -805,6 +820,36 @@
     add.textContent = save.folders.length ? '管理收藏夾' : '★ 建立收藏夾';
     add.onclick = openFolders;
     box.append(add);
+  }
+  // 一鍵把一批東西加進某個收藏夾（或新收藏夾）
+  function pickFolder(names, desc){
+    names = [...new Set(names)].filter(n => save.items[n]);
+    if (!names.length){ toast('沒有東西可以加', true); return; }
+    $('pk-desc').textContent = desc || `把這 ${names.length} 樣加進哪個收藏夾？`;
+    const box = $('pk-list'); box.textContent = '';
+    const addTo = f => {
+      const before = f.items.length;
+      for (const n of names) if (!f.items.includes(n)) f.items.push(n);
+      persist(); renderList(); $('reorg').classList.remove('open');
+      const added = f.items.length - before;
+      toast(added ? `加進「${f.name}」了（${added} 樣）` : `都已經在「${f.name}」裡了`);
+    };
+    for (const f of save.folders){
+      const inAll = names.every(n => f.items.includes(n));
+      const b = document.createElement('button'); b.className = 'rg-row pk-row';
+      b.textContent = `★ ${f.name}`;
+      const k = document.createElement('span'); k.className = 'rg-arrow'; k.textContent = inAll ? '全部已經在裡面' : `${f.items.length} 樣`;
+      b.append(k); b.onclick = () => addTo(f);
+      box.append(b);
+    }
+    if (!save.folders.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = '還沒有收藏夾，在下面取個名字建一個。'; box.append(e); }
+    $('pk-name').value = '';
+    $('pk-add').onclick = () => { const f = newFolder($('pk-name').value); if (f) addTo(f); };
+    $('pk-name').onkeydown = e => { if (e.key === 'Enter') $('pk-add').click(); };
+    $('pk-cancel').onclick = () => $('reorg').classList.remove('open');
+    showPanel('rg-pick');
+    $('reorg').classList.add('open');
+    if (canHover && !save.folders.length) setTimeout(() => $('pk-name').focus(), 50);
   }
   function newFolder(name){
     name = String(name || '').trim().slice(0, 12);
@@ -848,8 +893,7 @@
     $('fd-add').onclick = () => { if (newFolder($('fd-name').value)){ $('fd-name').value = ''; draw(); renderList(); } };
     $('fd-name').onkeydown = e => { if (e.key === 'Enter') $('fd-add').click(); };
     $('fd-done').onclick = () => $('reorg').classList.remove('open');
-    ['rg-setup', 'rg-review', 'rg-friend', 'rg-order'].forEach(id => $(id).hidden = true);
-    $('rg-folders').hidden = false;
+    showPanel('rg-folders');
     $('reorg').classList.add('open');
   }
 
@@ -899,8 +943,7 @@
     draw();
     $('co-reset').onclick = () => { delete save.catOrder; persist(); draw(); renderList(); toast('分類改回照數量排'); };
     $('co-done').onclick = () => $('reorg').classList.remove('open');
-    ['rg-setup', 'rg-review', 'rg-friend', 'rg-folders'].forEach(id => $(id).hidden = true);
-    $('rg-order').hidden = false;
+    showPanel('rg-order');
     $('reorg').classList.add('open');
   }
   $('btn-catorder').onclick = openCatOrder;
@@ -946,6 +989,7 @@
       cat: (a,b) => co(a) - co(b) || byTime(a,b)
     };
     names.sort(sorters[mode] || byTime);
+    shownNames = names;
     list.textContent = '';
     if (!names.length){
       const e = document.createElement('div'); e.className = 'empty';
@@ -971,6 +1015,10 @@
   $('search').addEventListener('input', renderList);
   $('sort').addEventListener('change', () => { setPref('sort', $('sort').value); renderList(); });
 
+  $('btn-addall').addEventListener('click', () => {
+    const filtered = shownNames.length !== Object.keys(save.items).length;
+    pickFolder(shownNames, `把清單上${filtered ? '目前篩選出來' : '全部'}的 ${shownNames.length} 樣，一次加進哪個收藏夾？`);
+  });
   $('f-unext').addEventListener('click', () => { filterUnext = !filterUnext; $('f-unext').classList.toggle('on', filterUnext); renderList(); list.scrollTop = 0; });
 
   // ---------- 槽位 ----------
@@ -1066,6 +1114,11 @@
     really.onclick = doReally;
     const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center';
     if (!last.fromRecipe) row.append(really);
+    if (last.outputs.length){
+      const fav = document.createElement('button'); fav.className = 'btn'; fav.textContent = '★ 加入收藏夾';
+      fav.onclick = () => pickFolder(last.outputs, last.outputs.length > 1 ? `把萃取出來的 ${last.outputs.length} 樣加進哪個收藏夾？` : `把「${last.outputs[0]}」加進哪個收藏夾？`);
+      row.append(fav);
+    }
     if (last.type === 'combine' && save.recipes[comboKey(last.inputs)]){
       const del = document.createElement('button'); del.className = 'btn danger'; del.textContent = '刪掉這個配方';
       del.onclick = () => askDeleteRecipe(comboKey(last.inputs));
@@ -1614,7 +1667,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     const upd = () => { $('rg-cost').textContent = `大約要問 AI ${cost()} 次。`; $('rg-go').disabled = !cost(); };
     ['rg-items', 'rg-cat', 'rg-move'].forEach(id => $(id).onchange = upd);
     upd();
-    $('rg-setup').hidden = false; $('rg-review').hidden = true; $('rg-friend').hidden = true; $('rg-order').hidden = true; $('rg-folders').hidden = true;
+    showPanel('rg-setup');
     $('reorg').classList.add('open');
   }
   $('rg-cancel').onclick = () => $('reorg').classList.remove('open');
@@ -1777,7 +1830,7 @@ ${lines}
       list.append(row);
       return {cb, sel, key:r.key};
     });
-    $('rg-setup').hidden = true; $('rg-review').hidden = false; $('rg-friend').hidden = true; $('rg-order').hidden = true; $('rg-folders').hidden = true;
+    showPanel('rg-review');
     $('reorg').classList.add('open');
     return new Promise(resolve => {
       const done = picks => { $('reorg').classList.remove('open'); resolve(picks); };
@@ -2157,7 +2210,7 @@ ${lines}
     const all = v => [...itemRows, ...recipeRows].forEach(r => r.cb.checked = v);
     $('fm-all').onclick = () => all(true);
     $('fm-none').onclick = () => all(false);
-    $('rg-setup').hidden = true; $('rg-review').hidden = true; $('rg-friend').hidden = false; $('rg-order').hidden = true; $('rg-folders').hidden = true;
+    showPanel('rg-friend');
     $('modal').classList.remove('open');
     $('reorg').classList.add('open');
     $('fm-cancel').onclick = () => $('reorg').classList.remove('open');
