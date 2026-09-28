@@ -393,7 +393,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.9';
+  const VERSION = '0.0.10';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -906,7 +906,11 @@ ${catRule()}
 
   // 讓 AI 知道已經有哪些東西：不同配方可以合出同一樣，用同一個名字，不要冒出同義詞
   function knownRule(){
-    const names = [...new Set([...Object.keys(save.items).sort((a, b) => save.items[b].t - save.items[a].t), ...Object.keys(STARTER.items)])].slice(0, 400);
+    // 最多給 400 樣：稀有度低（常見）的優先，同稀有度時已發現的、最近的優先；稀有的本來就亂，少給沒關係
+    const rar = n => (save.items[n] ? save.items[n].rarity : (STARTER.items[n] || [])[2]) || 3;
+    const rank = n => rar(n) * 1e14 + (save.items[n] ? -save.items[n].t / 1e3 : 1e12);
+    const names = [...new Set([...Object.keys(save.items), ...Object.keys(STARTER.items)])]
+      .sort((a, b) => rank(a) - rank(b)).slice(0, 400);
     return `- 已經有的東西：${names.join('、')}。
   不同配方可以合出同一樣東西。如果結果就是其中某一樣（包括同義詞或不同寫法，例如「蒸汽」和「蒸氣」），請用上面一字不差的名字，不要另外取名。不是的話就正常取新名字。`;
   }
