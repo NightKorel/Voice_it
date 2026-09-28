@@ -428,9 +428,11 @@
     <hr>
     <h3>存檔</h3>
     <p class="muted">你的發現存在這個瀏覽器裡。想換裝置或怕不見，可以匯出成檔案備份，之後再匯入。</p>
+    <p class="muted">跟朋友交換：把「匯出存檔」的檔案傳給對方，對方按「合併朋友的存檔」。只會加進你沒有的東西和配方，你已經有的一律以你的為主。「匯入存檔」則是整個換掉。</p>
     <div class="actions">
       <button class="btn" id="btn-export">匯出存檔</button>
       <button class="btn" id="btn-import">匯入存檔</button>
+      <button class="btn" id="btn-merge">合併朋友的存檔</button>
       <button class="btn danger" id="btn-reset">全部重來</button>
       <input type="file" id="file" accept=".json,application/json" style="display:none">
     </div>
@@ -442,7 +444,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.11';
+  const VERSION = '0.0.12';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1518,7 +1520,7 @@ ${lines}
       else ex.append(delBtn('刪掉這個萃取結果', () => askDeleteExtract(name)));
     }
     $('c-del').hidden = BASE.some(b => b.name === name);
-    $('c-time').textContent = it.t > 1e12 ? `發現於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
+    $('c-time').textContent = it.t > 1e12 ? `${it.friend ? '從朋友的存檔得到' : '發現'}於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
     $('c-fav').textContent = it.fav ? '★ 已收藏' : '☆ 收藏';
     $('c-fav').classList.toggle('on', !!it.fav);
     $('card').classList.add('open');
@@ -1662,16 +1664,50 @@ ${lines}
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
-  $('btn-import').onclick = () => $('file').click();
+  let fileMode = 'import';
+  $('btn-import').onclick = () => { fileMode = 'import'; $('file').click(); };
+  $('btn-merge').onclick = () => { fileMode = 'merge'; $('file').click(); };
   $('file').onchange = async e => {
     const f = e.target.files[0]; e.target.value = '';
     if (!f) return;
+    let s;
     try {
-      const s = JSON.parse(await f.text());
-      if (!s.items || !s.recipes) throw 0;
-      save = fillBase(s); persist(); renderList(); toast('存檔已匯入');
-    } catch(_){ toast('這個檔案看起來不是存檔', true); }
+      s = JSON.parse(await f.text());
+      if (!s || typeof s.items !== 'object' || typeof s.recipes !== 'object') throw 0;
+    } catch(_){ toast('這個檔案看起來不是存檔', true); return; }
+    if (fileMode === 'merge') return mergeFriend(s);
+    if (!confirm('匯入會把你現在的存檔整個換掉，確定嗎？\n\n（想保留自己的、只加朋友的新東西，請用「合併朋友的存檔」）')) return;
+    save = fillBase(s); persist(); last = null; slots.fill(null);
+    renderList(); renderSlots(); renderResult(); toast('存檔已匯入');
   };
+
+  // 合併朋友的存檔：只加進自己沒有的東西、配方、萃取紀錄；有的一律以自己的為主
+  function mergeFriend(raw){
+    const fr = fillBase(JSON.parse(JSON.stringify(raw)));
+    const newItems = Object.keys(fr.items).filter(n => !save.items[n] && fr.items[n] && typeof fr.items[n] === 'object');
+    // 配方用到的材料和結果都要存在（朋友的存檔可能有缺），缺了就不算
+    const has = n => !!(save.items[n] || fr.items[n]);
+    const newRecipes = Object.keys(fr.recipes).filter(k => !save.recipes[k] && Array.isArray(fr.recipes[k]) && fr.recipes[k].length
+      && k.split('+').every(has) && (fr.recipes[k][0] === FAIL || has(fr.recipes[k][0])));
+    const conflicts = Object.keys(fr.recipes).filter(k => save.recipes[k] && fr.recipes[k] && fr.recipes[k][0] !== save.recipes[k][0]).length;
+    if (!newItems.length && !newRecipes.length){ toast('朋友的存檔裡沒有你沒有的東西'); return; }
+    if (!confirm(`朋友的存檔裡有：\n・${newItems.length} 樣你沒有的東西\n・${newRecipes.length} 條你沒有的配方${conflicts ? `\n・${conflicts} 條配方跟你的不一樣（會保留你的）` : ''}\n\n要加進你的圖鑑嗎？你原本的東西都不會被改動。`)) return;
+    const now = Date.now();
+    newItems.forEach((n, i) => {
+      const it = {...fr.items[n]};
+      delete it.fav; delete it._asking;  // 收藏是朋友自己的
+      it.t = now + i;                    // 算成你剛拿到的
+      it.friend = true;
+      save.items[n] = it;
+    });
+    for (const k of newRecipes) save.recipes[k] = [fr.recipes[k][0]];
+    for (const [k, v] of Object.entries(fr.extracts || {})){
+      if (!save.extracts[k] && save.items[k] && Array.isArray(v) && v.every(n => save.items[n])) save.extracts[k] = [...v];
+    }
+    fillBase(save);
+    persist(); renderList(); renderSlots();
+    toast(`合併完成：多了 ${newItems.length} 樣東西、${newRecipes.length} 條配方`);
+  }
   $('btn-reset').onclick = () => {
     if (!confirm('確定要全部重來嗎？所有發現和配方都會清掉（鑰匙會保留）。')) return;
     save = fresh(); persist();
