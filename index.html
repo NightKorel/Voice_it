@@ -393,7 +393,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.7';
+  const VERSION = '0.0.8';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -893,6 +893,12 @@ ${catRule()}
 - proper：name 如果是網路上查得到的專有名詞（角色、作品、真實存在的特定東西）就是 true，一般名詞是 false。
 - emoji：一個最貼切的 emoji。`;
 
+  // 讓 AI 知道已經有哪些東西：不同配方可以合出同一樣，用同一個名字，不要冒出同義詞
+  function knownRule(){
+    const names = [...new Set([...Object.keys(save.items).sort((a, b) => save.items[b].t - save.items[a].t), ...Object.keys(STARTER.items)])].slice(0, 400);
+    return `- 已經有的東西：${names.join('、')}。
+  不同配方可以合出同一樣東西。如果結果就是其中某一樣（包括同義詞或不同寫法，例如「蒸汽」和「蒸氣」），請用上面一字不差的名字，不要另外取名。不是的話就正常取新名字。`;
+  }
   const COMBINE_SCHEMA = {ok:{type:'BOOLEAN'}, ...ITEM_SCHEMA};
   const OPTIONAL = new Set(['proper']);  // AI 忘了回也沒關係的欄位
   const isTrue = v => v === true || String(v).toLowerCase() === 'true';
@@ -914,6 +920,7 @@ ${catRule()}
 ${NAME_RULE}
 - 結果要合理、符合常識，大多數人一看就懂為什麼會變成這個。寧可普通，也不要天馬行空。
 - 避免直接回傳材料本身。
+${knownRule()}
 - ok：如果這些東西合在一起真的說不通、想不出合理的結果，ok＝false（合成失敗），其他欄位留空字串。說得通就 ok＝true。
 ${againRule(avoid)}${DETAIL_RULES()}`;
     let out = await ask(prompt, COMBINE_SCHEMA);
@@ -934,6 +941,7 @@ ${againRule(avoid)}${DETAIL_RULES()}`;
 規則：
 - 回傳 parts，2 到 3 樣東西，每一樣都要比「${name}」更原始、更基本，而且合在一起說得通能變成「${name}」。
 - 不能是「${name}」本身。
+${knownRule()}
 ${avoid && avoid.length ? `- 原本萃取出的是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請想出另一種拆法，不能跟這些完全一樣：${avoid.join('；')}。\n` : ''}- 每一樣的欄位規則：
 ${NAME_RULE}
 ${DETAIL_RULES()}`;
