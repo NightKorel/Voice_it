@@ -33,51 +33,74 @@
   #app{display:flex;height:100vh}
   @supports (height:100dvh){#app{height:100dvh}}
 
-  /* 桌面（合成區） */
-  #board{position:relative;flex:1;overflow:hidden;touch-action:none;
+  /* 工作台（合成區） */
+  #board{position:relative;flex:1;overflow-y:auto;display:flex;flex-direction:column;
     background:
       radial-gradient(ellipse at 50% 40%, var(--bg-glow), transparent 65%),
       radial-gradient(var(--dot) 1px, transparent 1.2px) 0 0 / 22px 22px;}
-  #topbar{position:absolute;top:0;left:0;right:0;display:flex;gap:.5rem;align-items:center;
-    padding:.8rem 1rem;z-index:5;pointer-events:none}
-  #logo{font-size:1.35rem;margin:0;font-weight:700;letter-spacing:.06em;pointer-events:none;
-    font-family:ui-rounded,"SF Pro Rounded",var(--font)}
+  #topbar{display:flex;gap:.5rem;align-items:center;padding:.8rem 1rem}
+  #logo{font-size:1.35rem;margin:0;font-weight:700;letter-spacing:.06em;font-family:ui-rounded,"SF Pro Rounded",var(--font)}
   #logo .q{color:var(--accent)}
   #topbar .sp{flex:1}
-  .btn{pointer-events:auto;border:1px solid var(--chip-line);background:var(--chip);color:var(--text);
+  .btn{border:1px solid var(--chip-line);background:var(--chip);color:var(--text);
     border-radius:.7rem;padding:.45rem .85rem;font-size:.88rem;cursor:pointer;font-family:inherit;
-    transition:background .15s,border-color .15s}
-  .btn:hover{border-color:var(--accent);background:var(--chip-hover)}
+    transition:background .15s,border-color .15s,opacity .15s}
+  .btn:hover:not(:disabled){border-color:var(--accent);background:var(--chip-hover)}
+  .btn:disabled{opacity:.4;cursor:default}
   .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+  .btn.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.08)}
   .btn.danger{color:var(--danger)}
-  #hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    color:var(--muted);font-size:.95rem;text-align:center;padding:1.5rem;pointer-events:none;line-height:1.9}
-  #hint .big{font-size:2.6rem;letter-spacing:.08em;color:var(--text);opacity:.18;font-weight:700;margin-bottom:.4rem;
-    font-family:ui-rounded,"SF Pro Rounded",var(--font)}
+  #aimode{font-size:.75rem;color:var(--muted);border:1px solid var(--line);border-radius:1rem;padding:.15rem .6rem;cursor:pointer;background:transparent;font-family:inherit}
+  #aimode.manual{color:var(--accent);border-color:var(--accent)}
 
-  .item{position:absolute;display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .8rem;
-    background:var(--chip);border:1px solid var(--chip-line);border-radius:.75rem;font-size:1rem;
-    white-space:nowrap;box-shadow:var(--shadow);cursor:grab;touch-action:none;z-index:2;
-    transition:border-color .12s,background .12s,box-shadow .12s}
-  .item .em{font-size:1.15em;line-height:1}
-  .item:hover{border-color:var(--accent)}
-  .item.dragging{cursor:grabbing;z-index:10;box-shadow:var(--lift);transform:scale(1.04)}
-  .item.target{border-color:var(--accent);outline:3px solid var(--accent);outline-offset:2px}
-  .item.busy{animation:pulse 1.1s ease-in-out infinite;cursor:wait;color:var(--muted)}
-  .item.pop{animation:pop .4s ease-out}
-  .item.fresh{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 22px var(--accent)!important}
-  @keyframes pulse{50%{opacity:.55}}
+  #bench{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem;padding:1rem 1rem 2rem}
+  #slots{display:flex;align-items:center;gap:.6rem;flex-wrap:nowrap}
+  #slots .plus{color:var(--muted);font-size:1.3rem}
+  .slot{width:6.2rem;height:6.2rem;border-radius:1rem;border:2px dashed var(--chip-line);background:transparent;color:var(--muted);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.3rem;cursor:pointer;font-family:inherit;
+    font-size:.85rem;padding:.3rem;transition:border-color .15s,background .15s;-webkit-touch-callout:none}
+  .slot:hover{border-color:var(--accent)}
+  .slot .em{font-size:2.1rem;line-height:1}
+  .slot .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slot.filled{border-style:solid;background:var(--chip);color:var(--text);box-shadow:var(--shadow)}
+  .slot.pop{animation:pop .3s ease-out}
+  .slot .ph{font-size:1.5rem;opacity:.5}
+  #actions{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center}
+  #actions .btn{padding:.6rem 1.3rem;font-size:1rem}
+
+  #result{display:flex;flex-direction:column;align-items:center;gap:.7rem;min-height:5rem;text-align:center}
+  #r-eq{font-size:.88rem;color:var(--muted);line-height:1.8}
+  #r-out{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center}
+  .rchip{display:inline-flex;align-items:center;gap:.5rem;padding:.6rem 1.1rem;border-radius:.9rem;border:1px solid var(--chip-line);
+    background:var(--chip);font-size:1.15rem;cursor:pointer;box-shadow:var(--shadow);-webkit-touch-callout:none;animation:pop .4s ease-out}
+  .rchip .em{font-size:1.4em;line-height:1}
+  .rchip.fresh{outline:2px solid var(--accent);outline-offset:3px}
+  .rchip .newtag{font-size:.65em;color:var(--accent);font-weight:700}
+  #r-busy{color:var(--muted);animation:pulse 1.1s ease-in-out infinite}
+  #btn-really{border-color:var(--accent);color:var(--accent)}
+  #hint{color:var(--muted);font-size:.9rem;text-align:center;line-height:1.9}
+  #hint .big{font-size:2.4rem;letter-spacing:.08em;color:var(--text);opacity:.18;font-weight:700;margin-bottom:.2rem;
+    font-family:ui-rounded,"SF Pro Rounded",var(--font)}
+  @keyframes pulse{50%{opacity:.5}}
   @keyframes pop{0%{transform:scale(.5);opacity:0}65%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
 
-  #lastbar{position:absolute;left:50%;bottom:.9rem;transform:translateX(-50%);display:flex;align-items:center;gap:.6rem;
-    background:var(--panel);border:1px solid var(--line);border-radius:.9rem;padding:.4rem .5rem .4rem .9rem;z-index:6;
-    box-shadow:var(--shadow);max-width:calc(100% - 1.5rem);font-size:.9rem;color:var(--muted)}
-  #lastbar[hidden]{display:none}
-  #last-eq{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #last-eq .eqi{color:var(--text);margin:0 .2rem}
-  #btn-really{flex:none;border-color:var(--accent);color:var(--accent)}
-  #btn-really:disabled{opacity:.6;cursor:wait}
-
+  /* 手動模式視窗 */
+  #manual{position:fixed;inset:0;background:var(--overlay);display:none;align-items:center;justify-content:center;z-index:48;padding:1rem;
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  #manual.open{display:flex}
+  #manual .box{background:var(--panel);border:1px solid var(--line);border-radius:1rem;padding:1.1rem;width:100%;max-width:32rem;
+    max-height:92vh;overflow-y:auto;box-shadow:var(--lift);-webkit-user-select:text;user-select:text}
+  #manual h2{margin:0 0 .3rem;font-size:1.1rem}
+  #manual p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
+  #manual .muted{color:var(--muted);font-size:.8rem}
+  #m-reason{color:var(--danger)}
+  #manual textarea{width:100%;border-radius:.7rem;border:1px solid var(--line);background:var(--bg);color:var(--text);
+    font-size:.82rem;font-family:ui-monospace,Menlo,Consolas,monospace;padding:.6rem;resize:vertical;outline:none}
+  #manual textarea:focus{border-color:var(--accent)}
+  #m-prompt{height:8rem}
+  #m-answer{height:6rem}
+  #manual .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0}
+  #manual label{font-size:.86rem;display:block;margin:.7rem 0 .3rem}
   /* 側欄（發現清單） */
   #side{width:20rem;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
   #side-head{padding:.8rem .8rem .7rem;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:.55rem}
@@ -137,9 +160,14 @@
     #logo{font-size:1.15rem}
     .btn{padding:.4rem .7rem;font-size:.82rem}
     #hint .big{font-size:2rem}
+    .slot{width:4.9rem;height:4.9rem}
+    .slot .em{font-size:1.7rem}
+    #slots{gap:.35rem}
+    #bench{gap:.9rem;padding:.4rem .8rem 1rem;justify-content:flex-start}
+    #hint{font-size:.82rem}
+    #actions .btn{padding:.5rem 1.1rem;font-size:.95rem}
   }
   .litem{-webkit-touch-callout:none;touch-action:pan-y}
-  .item{-webkit-touch-callout:none}
   .litem .fav{font-size:.75em;opacity:.85}
   .group{width:100%;font-size:.78rem;color:var(--muted);margin:.5rem 0 .1rem;letter-spacing:.05em}
   .group:first-child{margin-top:0}
@@ -189,12 +217,25 @@
   <div id="board">
     <div id="topbar">
       <h1 id="logo">1+1=<span class="q">?</span></h1>
+      <button id="aimode" title="切換 AI 來源"></button>
       <div class="sp"></div>
-      <button class="btn" id="btn-clear">清空桌面</button>
       <button class="btn" id="btn-settings">設定</button>
     </div>
-    <div id="lastbar" hidden><span id="last-eq"></span><button class="btn" id="btn-really" title="請 AI 想像這一組的另一種可能">真的嗎？</button></div>
-    <div id="hint"><div class="big">1+1=?</div>把清單裡的東西放到桌面上，<br>再把兩個疊在一起，看看會變出什麼。<br>長按任何東西可以看它的卡片。</div>
+    <div id="bench">
+      <div id="slots">
+        <button class="slot" data-i="0"></button><span class="plus">＋</span>
+        <button class="slot" data-i="1"></button><span class="plus">＋</span>
+        <button class="slot" data-i="2"></button>
+      </div>
+      <div id="actions">
+        <button class="btn primary" id="btn-craft">合成</button>
+        <button class="btn" id="btn-extract">萃取</button>
+        <button class="btn" id="btn-clearslots">清空</button>
+      </div>
+      <div id="result">
+        <div id="hint"><div class="big">1+1=?</div>點清單裡的東西放進槽位，放兩到三個就能合成。<br>只放一個可以萃取出更原始的東西。<br>長按任何東西可以看它的卡片。</div>
+      </div>
+    </div>
   </div>
   <div id="side">
     <div id="side-head">
@@ -239,15 +280,34 @@
       </div>
       <div class="rar" id="c-rarity"></div>
       <p id="c-desc"></p>
+      <div class="actions" id="c-fillrow" hidden><button class="btn" id="c-fill">補上介紹</button></div>
       <div class="meta" id="c-from"></div>
       <div class="meta" id="c-makes"></div>
+      <div class="meta" id="c-ext"></div>
       <div class="meta small" id="c-time"></div>
       <div class="actions">
         <button class="btn" id="c-fav">☆ 收藏</button>
-        <button class="btn" id="c-drop">放到桌面</button>
+        <button class="btn" id="c-drop">放進槽位</button>
         <div style="flex:1"></div>
         <button class="btn" id="c-close">關閉</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="manual">
+  <div class="box">
+    <h2>手動問 AI</h2>
+    <p id="m-reason" hidden></p>
+    <p>1. 按「複製問題」。<br>2. 貼給任何一個 AI（ChatGPT、Gemini、Claude 都可以）。<br>3. 把它的回答整段複製，貼到下面，按「完成」。</p>
+    <textarea id="m-prompt" readonly></textarea>
+    <div class="actions"><button class="btn" id="m-copy">複製問題</button></div>
+    <label for="m-answer">把 AI 的回答貼在這裡</label>
+    <textarea id="m-answer" placeholder="貼上回答（有多餘的文字也沒關係，會自動抓裡面的 JSON）"></textarea>
+    <p class="muted" id="m-err"></p>
+    <div class="actions">
+      <button class="btn primary" id="m-ok">完成</button>
+      <button class="btn" id="m-cancel">取消</button>
     </div>
   </div>
 </div>
@@ -268,8 +328,13 @@
     <p class="muted">圓體、明體要你的裝置有裝對應字型才會變，沒有就會維持黑體。</p>
 
     <hr>
+    <h3>AI 來源</h3>
+    <div class="setrow"><span class="lbl">來源</span>
+      <div class="seg" id="seg-ai"><button data-v="gemini">Gemini 自動</button><button data-v="manual">手動複製貼上</button></div></div>
+    <p class="muted">手動：每次需要 AI 時會跳出一段問題，你複製去問任何 AI，再把回答貼回來。Gemini 太忙或次數用完時可以用這個。用 Gemini 時如果它太忙，也會問你要不要改用手動。</p>
+
     <h3>Gemini 鑰匙</h3>
-    <p>這個遊戲用 Google 的 Gemini 免費方案來想「合出來是什麼」。你需要一把自己的鑰匙（API key），免費、不用綁信用卡。</p>
+    <p>用 Google 的 Gemini 免費方案來想「合出來是什麼」。你需要一把自己的鑰匙（API key），免費、不用綁信用卡。</p>
     <ol>
       <li>打開 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio 的鑰匙頁面</a>，用 Google 帳號登入。</li>
       <li>按「Create API key」（建立 API 金鑰），建好後按複製。</li>
@@ -280,8 +345,7 @@
     <input id="key" type="password" placeholder="貼上你的鑰匙" autocomplete="off">
     <label for="model">模型（通常選「自動」就好）</label>
     <select id="model" class="sel" style="width:100%;padding:.5rem .6rem;font-size:.9rem"><option value="">自動（推薦）</option></select>
-    <p class="muted" id="model-note">自動會去問 Google 你的鑰匙能用哪些模型，挑免費次數最多的 Flash-Lite。Google 換新模型時也會自己跟上。</p>
-    <p class="muted">同樣兩個東西合出來的結果永遠一樣，合過的組合不會再花次數。覺得結果怪怪的，可以按桌面下方的「真的嗎？」請 AI 重想。</p>
+    <p class="muted">自動會去問 Google 你的鑰匙能用哪些模型，挑免費次數最多的 Flash-Lite。Google 換新模型時也會自己跟上。</p>
     <div class="actions">
       <button class="btn primary" id="btn-save">儲存鑰匙</button>
       <button class="btn" id="btn-test">測試鑰匙</button>
@@ -307,6 +371,7 @@
   const KEY_KEY = 'wuxian_gemini_key';
   const MODEL_KEY = 'wuxian_gemini_model';
   const AUTO_KEY = 'wuxian_gemini_auto';
+  const PREF_KEY = 'wuxian_prefs';
   const API = 'https://generativelanguage.googleapis.com/v1beta';
   // 分類是活的：AI 會優先用已有的分類，都不適合才自己開新分類。一開始沒什麼分類時，拿這些當參考
   const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話奇幻','科技','文化娛樂','概念','天文'];
@@ -324,23 +389,23 @@
     del(k){ try { localStorage.removeItem(k); } catch(e){} }
   };
 
-  // items: name -> {emoji, t（發現時間）, from:[a,b], desc, rarity(1-5), cat, color, fav}
-  // recipes: "a+b" -> [name]（同一組永遠同一個結果；不同組可以煉出同一個東西）
-  // catLocked：玩家自己分的類，整理分類時不動
+  // items: name -> {emoji, t（發現時間）, from:[...], ext（從哪裡萃取出來）, desc, rarity(1-5), cat, color, fav, catLocked}
+  // recipes: "a+b(+c)" -> [name]（同一組永遠同一個結果；不同組可以煉出同一個東西）
+  // extracts: name -> [name, ...]（萃取結果，同樣固定）
   let save = load();
   function fresh(){
     const items = {};
     BASE.forEach((b,i) => items[b.name] = {emoji:b.emoji, t:i});
-    return fillBase({items, recipes:{}});
+    return fillBase({items, recipes:{}, extracts:{}});
   }
-  // 基本四元素的介紹是寫好的，舊存檔也補上
   function fillBase(s){
+    s.extracts = s.extracts || {};
     for (const k in s.recipes) if (!Array.isArray(s.recipes[k])) s.recipes[k] = [s.recipes[k]];
     for (const b of BASE){
       const it = s.items[b.name];
       if (it && !it.desc) Object.assign(it, {desc:b.desc, rarity:b.rarity, cat:b.cat, color:b.color});
     }
-    // 舊存檔裡剛好是內建圖鑑的東西，也直接補上寫好的介紹（不花次數）
+    // 內建圖鑑裡有的東西，直接補上寫好的介紹（不花次數）
     const SI = (window.STARTER || {}).items || {};
     for (const [n, it] of Object.entries(s.items)){
       const d = SI[n];
@@ -358,19 +423,27 @@
   function persist(){
     if (!store.set(SAVE_KEY, JSON.stringify(save))) toast('存檔失敗，瀏覽器可能不讓這個網頁存資料', true);
   }
-  const pairKey = (a,b) => [a,b].sort().join('+');
+  const comboKey = names => [...names].sort().join('+');
 
-  // ---------- 畫面元素 ----------
+  // 內建配方（starter.js）
+  const STARTER = window.STARTER || {items:{}, recipes:[]};
+  const STARTER_MAP = new Map(STARTER.recipes.map(([p, q, r]) => [comboKey([p, q]), r]));
+  function starterData(name){
+    const d = STARTER.items[name];
+    return d ? {emoji:d[0], desc:d[1], rarity:d[2], cat:d[3], color:d[4]} : null;
+  }
+
+  // ---------- 小工具 ----------
   const $ = id => document.getElementById(id);
-  const board = $('board'), list = $('list'), hint = $('hint');
-
+  const list = $('list');
   function toast(msg, err){
     const t = $('toast');
     t.textContent = msg;
     t.className = 'show' + (err ? ' err' : '');
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => t.className = err ? 'err' : '', err ? 4000 : 2200);
+    toast._t = setTimeout(() => t.className = err ? 'err' : '', err ? 4500 : 2400);
   }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ---------- 顏色：色相照東西本身，稀有度越高顏色越深 ----------
   function hexToHsl(hex){
@@ -400,9 +473,32 @@
     el.style.boxShadow = r >= 5 ? `0 0 12px hsl(${c.h} ${Math.max(S, 50)}% 45% / .55)` : '';
   }
 
+  // ---------- 點一下／長按 ----------
+  // 點一下＝放進槽位；長按（或右鍵）＝看卡片；手指滑動＝捲動，不算點
+  const HOLD_MS = 500, MOVE_TOL = 10;
+  let press = null;
+  function pressable(el, name){
+    el.addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
+      const p = press = {name, sx:e.clientX, sy:e.clientY, held:false};
+      p.timer = setTimeout(() => { if (press === p){ p.held = true; press = null; openCard(name); } }, HOLD_MS);
+    });
+    el.addEventListener('contextmenu', e => { e.preventDefault(); if (press){ clearTimeout(press.timer); press = null; } openCard(name); });
+  }
+  window.addEventListener('pointermove', e => {
+    if (press && Math.hypot(e.clientX - press.sx, e.clientY - press.sy) > MOVE_TOL){ clearTimeout(press.timer); press = null; }
+  });
+  window.addEventListener('pointerup', () => {
+    if (!press) return;
+    clearTimeout(press.timer);
+    const p = press; press = null;
+    addToSlot(p.name);
+  });
+  window.addEventListener('pointercancel', () => { if (press){ clearTimeout(press.timer); press = null; } });
+  list.addEventListener('scroll', () => { if (press){ clearTimeout(press.timer); press = null; } });
+
   // ---------- 清單 ----------
   let filterFav = false;
-  // 現有分類與數量，多的排前面
   function catCounts(){
     const m = new Map();
     for (const it of Object.values(save.items)) if (it.cat) m.set(it.cat, (m.get(it.cat) || 0) + 1);
@@ -415,6 +511,17 @@
     const all = document.createElement('option'); all.value = ''; all.textContent = '全部分類'; sel.append(all);
     for (const [c, n] of counts){ const o = document.createElement('option'); o.value = c; o.textContent = `${c}（${n}）`; sel.append(o); }
     sel.value = counts.some(([c]) => c === cur) ? cur : '';
+  }
+  function chip(cls, name){
+    const it = save.items[name] || {emoji:'❓'};
+    const el = document.createElement('div');
+    el.className = cls;
+    const em = document.createElement('span'); em.className = 'em'; em.textContent = it.emoji;
+    const tx = document.createElement('span'); tx.textContent = name;
+    el.append(em, tx);
+    paint(el, it);
+    pressable(el, name);
+    return el;
   }
   function renderList(){
     const q = $('search').value.trim().toLowerCase();
@@ -429,9 +536,9 @@
     if (cat) names = names.filter(n => save.items[n].cat === cat);
     const I = save.items, mode = $('sort').value;
     const byTime = (a,b) => I[a].t - I[b].t;
+    const rar = n => I[n].rarity || 0;
     const catOrder = new Map(catCounts().map(([c], i) => [c, i]));
     const co = n => catOrder.has(I[n].cat) ? catOrder.get(I[n].cat) : 9999;
-    const rar = n => I[n].rarity || 0;
     const sorters = {
       time: byTime,
       new: (a,b) => byTime(b,a),
@@ -456,16 +563,9 @@
         const h = document.createElement('div'); h.className = 'group'; h.textContent = it.cat || '未分類';
         list.append(h);
       }
-      const el = document.createElement('div');
-      el.className = 'litem';
-      const em = document.createElement('span'); em.textContent = it.emoji;
-      const tx = document.createElement('span'); tx.textContent = n;
-      el.append(em, tx);
+      const el = chip('litem', n);
       if (it.fav){ const f = document.createElement('span'); f.className = 'fav'; f.textContent = '★'; el.append(f); }
       if (it.t > recent){ const s = document.createElement('span'); s.className = 'star'; s.title = '最近發現'; el.append(s); }
-      paint(el, it);
-      el.addEventListener('pointerdown', e => startListPress(e, n, el));
-      el.addEventListener('contextmenu', e => { e.preventDefault(); openCard(n); });
       list.append(el);
     }
   }
@@ -474,158 +574,205 @@
   $('cat').addEventListener('change', renderList);
   $('f-fav').addEventListener('click', () => { filterFav = !filterFav; $('f-fav').classList.toggle('on', filterFav); renderList(); });
 
-  // ---------- 桌面上的東西 ----------
-  function makeItem(name, x, y){
-    const el = document.createElement('div');
-    el.className = 'item';
-    el.dataset.name = name;
-    setItemLabel(el, name);
-    board.append(el);
-    place(el, x, y);
-    el.addEventListener('pointerdown', e => startBoardDrag(e, el));
-    el.addEventListener('contextmenu', e => { e.preventDefault(); if (!el.classList.contains('busy')) openCard(el.dataset.name); });
-    el.addEventListener('dblclick', () => {
-      const r = el.getBoundingClientRect(), b = board.getBoundingClientRect();
-      makeItem(el.dataset.name, r.left - b.left + 20, r.top - b.top + 20);
-    });
-    updateHint();
-    return el;
-  }
-  function setItemLabel(el, name, busy){
-    const it = busy ? null : save.items[name];
-    el.textContent = '';
-    const em = document.createElement('span'); em.className = 'em'; em.textContent = busy ? '⏳' : (it ? it.emoji : '❓');
-    const tx = document.createElement('span'); tx.textContent = busy ? '煉製中……' : name;
-    el.append(em, tx);
-    paint(el, it);
-  }
-  function refreshItems(name){
-    board.querySelectorAll('.item').forEach(el => { if (el.dataset.name === name && !el.classList.contains('busy')) setItemLabel(el, name); });
-  }
-  function place(el, x, y){
-    const b = board.getBoundingClientRect();
-    const w = el.offsetWidth, h = el.offsetHeight;
-    x = Math.max(0, Math.min(b.width - w, x));
-    y = Math.max(44, Math.min(b.height - h, y));
-    el.style.left = x + 'px'; el.style.top = y + 'px';
-  }
-  function dropNearCenter(name){
-    const b = board.getBoundingClientRect();
-    const el = makeItem(name, b.width/2 - 40 + (Math.random()*120 - 60), b.height/2 - 20 + (Math.random()*100 - 50));
-    el.classList.add('pop');
-  }
-  function updateHint(){ hint.style.display = board.querySelector('.item') ? 'none' : 'flex'; }
-
-  // 找出被疊到的另一個東西
-  function findTarget(el){
-    const r = el.getBoundingClientRect();
-    const cx = r.left + r.width/2, cy = r.top + r.height/2;
-    let best = null, bestD = Infinity;
-    for (const o of board.querySelectorAll('.item')){
-      if (o === el || o.classList.contains('busy')) continue;
-      const q = o.getBoundingClientRect();
-      const overlap = r.left < q.right && r.right > q.left && r.top < q.bottom && r.bottom > q.top;
-      if (!overlap) continue;
-      const d = Math.hypot(cx - (q.left + q.width/2), cy - (q.top + q.height/2));
-      if (d < bestD){ bestD = d; best = o; }
-    }
-    return best;
-  }
-
-  // ---------- 拖拉與長按 ----------
-  const HOLD_MS = 500, MOVE_TOL = 8;
-  let drag = null;   // 正在拖的桌面東西
-  let press = null;  // 清單上按住、還沒決定是點、拖還是長按
-  function beginDrag(e, el, offX, offY){
-    drag = {el, offX, offY, target:null, sx:e.clientX, sy:e.clientY, moved:false,
-      ox:parseFloat(el.style.left), oy:parseFloat(el.style.top), timer:null};
-    el.classList.add('dragging');
-    try { el.setPointerCapture(e.pointerId); } catch(_){}
-  }
-  function startBoardDrag(e, el){
-    if (el.classList.contains('busy') || e.button > 0) return;
-    e.preventDefault();
-    const r = el.getBoundingClientRect();
-    beginDrag(e, el, e.clientX - r.left, e.clientY - r.top);
-    const d = drag;
-    d.timer = setTimeout(() => {
-      if (drag !== d || d.moved) return;
-      endDrag();
-      openCard(el.dataset.name);
-    }, HOLD_MS);
-  }
-  function endDrag(){
-    if (!drag) return;
-    clearTimeout(drag.timer);
-    drag.el.classList.remove('dragging');
-    if (drag.target) drag.target.classList.remove('target');
-    drag = null;
-  }
-  function startListPress(e, name, src){
-    if (e.button > 0) return;
-    if (e.pointerType === 'mouse') e.preventDefault();
-    press = {name, src, sx:e.clientX, sy:e.clientY, mouse:e.pointerType === 'mouse', id:e.pointerId};
-    const p = press;
-    p.timer = setTimeout(() => { if (press === p){ press = null; openCard(name); } }, HOLD_MS);
-  }
-  window.addEventListener('pointermove', e => {
-    if (press){
-      if (Math.hypot(e.clientX - press.sx, e.clientY - press.sy) > MOVE_TOL){
-        clearTimeout(press.timer);
-        const p = press; press = null;
-        // 滑鼠：拖出一個到桌面；手指：當作捲動清單
-        if (p.mouse){
-          const b = board.getBoundingClientRect();
-          const el = makeItem(p.name, e.clientX - b.left - 30, e.clientY - b.top - 18);
-          // 抓在東西的左邊中間（剛生出來時可能被夾在桌面邊緣，不能用它的位置算）
-          beginDrag(e, el, 30, el.offsetHeight / 2);
-          drag.moved = true;
-          el.style.left = (e.clientX - b.left - 30) + 'px';
-          el.style.top = (e.clientY - b.top - el.offsetHeight / 2) + 'px';
-        }
+  // ---------- 槽位 ----------
+  const slots = [null, null, null];
+  let busy = false;
+  const filled = () => slots.filter(Boolean);
+  function renderSlots(popIndex){
+    document.querySelectorAll('.slot').forEach((el, i) => {
+      const n = slots[i];
+      el.textContent = '';
+      el.classList.toggle('filled', !!n);
+      if (n){
+        const it = save.items[n] || {emoji:'❓'};
+        const em = document.createElement('span'); em.className = 'em'; em.textContent = it.emoji;
+        const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = n;
+        el.append(em, nm);
+        paint(el, it);
+        el.title = '點一下拿掉';
+      } else {
+        paint(el, null);
+        const ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = '＋';
+        el.append(ph);
+        el.title = '';
       }
-      return;
+      if (i === popIndex){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+    });
+    const f = filled().length;
+    $('btn-craft').disabled = busy || f < 2;
+    $('btn-extract').disabled = busy || f !== 1;
+    $('btn-clearslots').disabled = busy || f === 0;
+  }
+  function addToSlot(name){
+    if (busy) return;
+    const i = slots.indexOf(null);
+    if (i < 0){ toast('三個槽位都滿了，點一下槽位可以拿掉', true); return; }
+    slots[i] = name;
+    renderSlots(i);
+  }
+  document.querySelectorAll('.slot').forEach((el, i) => el.addEventListener('click', () => {
+    if (busy || !slots[i]) return;
+    slots[i] = null;
+    // 往前補，讓空格都在後面
+    const rest = slots.filter(Boolean); slots.fill(null); rest.forEach((n, j) => slots[j] = n);
+    renderSlots();
+  }));
+  $('btn-clearslots').onclick = () => { slots.fill(null); renderSlots(); };
+  function setBusy(b, msg){
+    busy = b;
+    renderSlots();
+    if (b){
+      const r = $('result'); r.textContent = '';
+      const d = document.createElement('div'); d.id = 'r-busy'; d.textContent = msg || '煉製中……';
+      r.append(d);
     }
-    if (!drag) return;
-    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) <= MOVE_TOL) return;
-    drag.moved = true;
-    const b = board.getBoundingClientRect();
-    drag.el.style.left = (e.clientX - b.left - drag.offX) + 'px';
-    drag.el.style.top = (e.clientY - b.top - drag.offY) + 'px';
-    const t = findTarget(drag.el);
-    if (t !== drag.target){
-      if (drag.target) drag.target.classList.remove('target');
-      if (t) t.classList.add('target');
-      drag.target = t;
-    }
-  });
-  window.addEventListener('pointerup', e => {
-    if (press){
-      // 短按清單＝放一個到桌面
-      clearTimeout(press.timer);
-      const p = press; press = null;
-      dropNearCenter(p.name);
-      return;
-    }
-    if (!drag) return;
-    const {el, target, moved} = drag;
-    endDrag();
-    if (!moved) return;
-    // 拖回清單上＝收掉
-    const s = $('side').getBoundingClientRect();
-    if (e.clientX >= s.left && e.clientX <= s.right && e.clientY >= s.top && e.clientY <= s.bottom){
-      el.remove(); updateHint(); return;
-    }
-    if (target) combine(el, target);
-    else place(el, parseFloat(el.style.left), parseFloat(el.style.top));
-  });
-  window.addEventListener('pointercancel', () => {
-    if (press){ clearTimeout(press.timer); press = null; }
-    endDrag();
-  });
-  list.addEventListener('scroll', () => { if (press){ clearTimeout(press.timer); press = null; } });
+  }
 
-  // ---------- 煉製 ----------
+  // ---------- 結果 ----------
+  let last = null;  // 最近一次的合成或萃取，給「真的嗎？」用
+  function addItem(name, data, extra){
+    const old = save.items[name];
+    if (old){
+      if (!old.desc){ const d = {...data}; if (old.catLocked) delete d.cat; delete d.emoji; Object.assign(old, d); }
+      return false;
+    }
+    save.items[name] = {t:Date.now(), ...extra, ...data};
+    return true;
+  }
+  function renderResult(){
+    const r = $('result'); r.textContent = '';
+    if (!last) return;
+    const eq = document.createElement('div'); eq.id = 'r-eq';
+    const nm = n => `${save.items[n] ? save.items[n].emoji + ' ' : ''}${n}`;
+    eq.textContent = last.type === 'combine'
+      ? `${last.inputs.map(nm).join(' ＋ ')} ＝`
+      : `萃取 ${nm(last.inputs[0])} 得到`;
+    const out = document.createElement('div'); out.id = 'r-out';
+    for (const n of last.outputs){
+      const c = chip('rchip', n);
+      if (last.fresh.includes(n)){ c.classList.add('fresh'); const t = document.createElement('span'); t.className = 'newtag'; t.textContent = '新'; c.append(t); }
+      out.append(c);
+    }
+    const tip = document.createElement('div'); tip.className = 'muted'; tip.style.cssText = 'font-size:.78rem;color:var(--muted)';
+    tip.textContent = '點結果可以放進槽位，長按看卡片';
+    const really = document.createElement('button'); really.className = 'btn'; really.id = 'btn-really';
+    really.textContent = '真的嗎？'; really.title = '請 AI 想像另一種可能';
+    really.onclick = doReally;
+    r.append(eq, out, tip, really);
+  }
+  function announce(fresh){
+    if (!fresh.length) return;
+    const best = fresh.map(n => save.items[n]).sort((a, b) => (b.rarity || 0) - (a.rarity || 0))[0];
+    const n = fresh.find(x => save.items[x] === best);
+    const r = best.rarity || 1;
+    toast(`${r >= 4 ? RARITY[r-1] + '發現！' : '新發現！'}${best.emoji} ${n}${fresh.length > 1 ? ` 等 ${fresh.length} 樣` : ''}`);
+  }
+  function finish(type, inputs, outputs, fresh){
+    last = {type, inputs, outputs, fresh, tried:[outputs.join('、')]};
+    persist();
+    slots.fill(null);
+    setBusy(false);
+    renderResult();
+    renderList();
+    announce(fresh);
+  }
+
+  // ---------- 合成 ----------
+  $('btn-craft').onclick = craft;
+  async function craft(){
+    const names = filled();
+    if (busy || names.length < 2) return;
+    const k = comboKey(names);
+    // 合過的組合：永遠是同一個結果（不花次數）
+    const known = (save.recipes[k] || []).find(n => save.items[n]);
+    if (known) return finish('combine', names, [known], []);
+    // 內建配方：直接給寫好的結果（不花次數）
+    const sr = names.length === 2 && STARTER_MAP.get(k);
+    if (sr){
+      const isNew = addItem(sr, starterData(sr) || {}, {from:names});
+      save.recipes[k] = [sr];
+      return finish('combine', names, [sr], isNew ? [sr] : []);
+    }
+    if (!aiReady()) return;
+    setBusy(true, '煉製中……');
+    try {
+      const res = await askCombine(names);
+      const isNew = addItem(res.name, starterData(res.name) || {emoji:res.emoji, ...cleanDetail(res)}, {from:names});
+      save.recipes[k] = [res.name];
+      finish('combine', names, [res.name], isNew ? [res.name] : []);
+    } catch(e){
+      setBusy(false); renderResult();
+      if (!e.cancelled) toast(e.message || '煉製失敗，再試一次', true);
+    }
+  }
+
+  // ---------- 萃取 ----------
+  $('btn-extract').onclick = extract;
+  async function extract(){
+    const names = filled();
+    if (busy || names.length !== 1) return;
+    const name = names[0];
+    const known = (save.extracts[name] || []).filter(n => save.items[n]);
+    if (known.length) return finish('extract', [name], known, []);
+    if (!aiReady()) return;
+    setBusy(true, '萃取中……');
+    try {
+      const parts = await askExtract(name);
+      const fresh = [];
+      for (const p of parts){
+        if (addItem(p.name, starterData(p.name) || {emoji:p.emoji, ...cleanDetail(p)}, {ext:name})) fresh.push(p.name);
+      }
+      save.extracts[name] = parts.map(p => p.name);
+      finish('extract', [name], save.extracts[name], fresh);
+    } catch(e){
+      setBusy(false); renderResult();
+      if (!e.cancelled) toast(e.message || '萃取失敗，再試一次', true);
+    }
+  }
+
+  // ---------- 真的嗎？（玩家自己按，才請 AI 想像別的可能） ----------
+  async function doReally(){
+    if (!last || busy) return;
+    if (!aiReady()) return;
+    const L = last;
+    const keepSlots = [...slots];
+    setBusy(true, '重新想想……');
+    try {
+      let outputs, fresh = [];
+      if (L.type === 'combine'){
+        const res = await askCombine(L.inputs, L.tried);
+        if (L.tried.includes(res.name)) throw new Error('AI 想了想，還是覺得一樣，再按一次試試');
+        if (addItem(res.name, starterData(res.name) || {emoji:res.emoji, ...cleanDetail(res)}, {from:L.inputs})) fresh.push(res.name);
+        save.recipes[comboKey(L.inputs)] = [res.name];  // 這組的答案換成新的；舊的東西還留在圖鑑裡
+        outputs = [res.name];
+      } else {
+        const parts = await askExtract(L.inputs[0], L.tried);
+        for (const p of parts)
+          if (addItem(p.name, starterData(p.name) || {emoji:p.emoji, ...cleanDetail(p)}, {ext:L.inputs[0]})) fresh.push(p.name);
+        outputs = parts.map(p => p.name);
+        save.extracts[L.inputs[0]] = outputs;
+      }
+      const tried = [...L.tried, outputs.join('、')];
+      finish(L.type, L.inputs, outputs, fresh);
+      last.tried = tried;
+      if (!fresh.length) toast(`重想了：${outputs.join('、')}`);
+      keepSlots.forEach((n, i) => slots[i] = n); renderSlots();
+    } catch(e){
+      setBusy(false); renderResult();
+      keepSlots.forEach((n, i) => slots[i] = n); renderSlots();
+      if (!e.cancelled) toast(e.message, true);
+    }
+  }
+
+  // ---------- AI ----------
+  function getKey(){ return (store.get(KEY_KEY) || '').trim(); }
+  function getOverride(){ return (store.get(MODEL_KEY) || '').trim(); }
+  function aiReady(){
+    if (prefs.ai === 'manual' || getKey()) return true;
+    openSettings('先貼上 Gemini 鑰匙，或把 AI 來源改成「手動複製貼上」');
+    return false;
+  }
+  const cleanName = n => String(n || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
   const cleanCat = c => String(c || '').replace(/[\s。，！？、「」"'.,!?（）()]/g, '').slice(0, 6) || '其他';
   const cleanDetail = o => ({
     desc: String(o.desc || '').trim().slice(0, 80),
@@ -633,134 +780,86 @@
     cat: cleanCat(o.category),
     color: /^#[0-9a-f]{6}$/i.test(String(o.color || '').trim()) ? String(o.color).trim() : ''
   });
-
-  // 內建配方（starter.js）
-  const STARTER = window.STARTER || {items:{}, recipes:[]};
-  const STARTER_MAP = new Map(STARTER.recipes.map(([p, q, r]) => [pairKey(p, q), r]));
-  function starterData(name){
-    const d = STARTER.items[name];
-    return d ? {emoji:d[0], desc:d[1], rarity:d[2], cat:d[3], color:d[4]} : null;
+  function catRule(){
+    const have = catCounts().map(([c]) => c);
+    const list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
+    return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。`;
   }
-
-  // 把結果記進存檔，回傳是不是新發現
-  function addResult(k, name, from, data){
-    let isNew = false;
-    const old = save.items[name];
-    if (old){ if (!old.desc){ const d = {...data}; if (old.catLocked) delete d.cat; delete d.emoji; Object.assign(old, d); } }
-    else { save.items[name] = {t:Date.now(), from, ...data}; isNew = true; }
-    save.recipes[k] = [...new Set([...(save.recipes[k] || []), name])];
-    persist();
-    return isNew;
-  }
-  function showResult(name, x, y, isNew){
-    const el = makeItem(name, x, y); el.classList.add('pop');
-    setTimeout(() => el.classList.remove('pop'), 500);
-    if (isNew){
-      el.classList.add('fresh'); setTimeout(() => el.classList.remove('fresh'), 4000);
-      const it = save.items[name], r = it.rarity;
-      toast(`${r >= 4 ? RARITY[r-1] + '發現！' : '新發現！'}${it.emoji} ${name}`);
-    }
-    renderList();
-    return el;
-  }
-
-  async function combine(a, b){
-    const na = a.dataset.name, nb = b.dataset.name;
-    const k = pairKey(na, nb);
-    const x = parseFloat(b.style.left), y = parseFloat(b.style.top);
-
-    // 合過的組合：永遠是同一個結果（不花次數）
-    const known = (save.recipes[k] || []).find(n => save.items[n]);
-    if (known){
-      a.remove(); b.remove();
-      const el = makeItem(known, x, y); el.classList.add('pop');
-      setLast(k, nb, na, known, el);
-      return;
-    }
-    // 內建配方：直接給寫好的結果（不花次數）
-    const sr = STARTER_MAP.get(k);
-    if (sr){
-      a.remove(); b.remove();
-      const d = starterData(sr) || {...save.items[sr]};
-      setLast(k, nb, na, sr, showResult(sr, x, y, addResult(k, sr, [na, nb], d)));
-      return;
-    }
-    if (!getKey()){ place(a, parseFloat(a.style.left), parseFloat(a.style.top)); openSettings('先貼上 Gemini 鑰匙才能煉出新東西'); return; }
-
-    a.remove();
-    b.classList.add('busy');
-    setItemLabel(b, nb, true);
-    try {
-      const res = await askGemini(na, nb);
-      const name = res.name;
-      // AI 剛好煉出內建圖鑑裡的東西：用寫好的資料，讓介紹一致
-      const data = starterData(name) || {emoji:res.emoji, ...cleanDetail(res)};
-      const isNew = addResult(k, name, [na, nb], data);
-      b.remove();
-      setLast(k, nb, na, name, showResult(name, x, y, isNew));
-    } catch(err){
-      // 失敗就把兩個東西放回去
-      b.classList.remove('busy');
-      setItemLabel(b, nb);
-      makeItem(na, x + 30, y + 30);
-      toast(err.message || '煉製失敗，再試一次', true);
-    }
-  }
-
-  // ---------- 真的嗎？（玩家自己按，才請 AI 想像別的可能） ----------
-  let last = null;
-  function setLast(k, nb, na, name, el){
-    last = {k, na, nb, name, el, tried:[name]};
-    renderLast();
-  }
-  function renderLast(){
-    const bar = $('lastbar');
-    if (!last){ bar.hidden = true; return; }
-    const eq = $('last-eq'); eq.textContent = '';
-    const chip = n => { const sp = document.createElement('span'); sp.className = 'eqi'; sp.textContent = `${save.items[n] ? save.items[n].emoji : ''} ${n}`; return sp; };
-    eq.append(chip(last.na), '＋', chip(last.nb), '＝', chip(last.name));
-    bar.hidden = false;
-  }
-  $('btn-really').onclick = async () => {
-    if (!last || $('btn-really').disabled) return;
-    if (!getKey()){ openSettings('先貼上 Gemini 鑰匙，AI 才能重想'); return; }
-    const L = last, btn = $('btn-really');
-    btn.disabled = true; btn.textContent = '想想看……';
-    try {
-      const res = await askGemini(L.na, L.nb, L.tried);
-      const name = res.name;
-      if (L.tried.includes(name)) throw new Error('AI 想了想，還是覺得一樣，再按一次試試');
-      const data = starterData(name) || {emoji:res.emoji, ...cleanDetail(res)};
-      save.recipes[L.k] = [];  // 這組的答案換成新的；舊的東西還留在圖鑑裡
-      const isNew = addResult(L.k, name, [L.na, L.nb], data);
-      // 桌面上剛剛那個結果還在的話，直接換掉
-      let x, y;
-      if (L.el && L.el.isConnected && L.el.dataset.name === L.name && !L.el.classList.contains('busy')){
-        x = parseFloat(L.el.style.left); y = parseFloat(L.el.style.top); L.el.remove();
-      } else {
-        const b = board.getBoundingClientRect(); x = b.width/2 - 40; y = b.height/2 - 20;
-      }
-      const el = showResult(name, x, y, isNew);
-      if (!isNew) toast(`重想了：${save.items[name].emoji} ${name}`);
-      L.tried.push(name); L.name = name; L.el = el;
-      if (last === L) renderLast();
-    } catch(e){
-      toast(e.message, true);
-    } finally {
-      btn.disabled = false; btn.textContent = '真的嗎？';
-    }
+  const DETAIL_RULES = () =>
+`- desc：一到兩句話的介紹，繁體中文，40 字以內，可以帶一點趣味。
+- rarity：1 到 5 的整數，代表這個東西在一般人心中有多偏門。1＝人人都知道的日常事物，2＝普通，3＝少見，4＝稀有偏門，5＝傳說級冷門或極度奇特抽象。
+${catRule()}
+- color：這個東西最常讓人聯想到的顏色，用 #RRGGBB 格式。`;
+  const DETAIL_SCHEMA = {
+    desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, color:{type:'STRING'}
   };
+  const ITEM_SCHEMA = {name:{type:'STRING'}, emoji:{type:'STRING'}, ...DETAIL_SCHEMA};
+  const NAME_RULE = '- name：一個名詞，可以是物品、自然現象、生物、地點、人物、概念、作品或流行文化。使用繁體中文（台灣用語），專有名詞若中文少見可保留原文。最多 8 個字，不要解釋、不要標點。\n- emoji：一個最貼切的 emoji。';
 
+  async function askCombine(names, avoid){
+    const list = names.map(n => `「${n}」`).join('、');
+    const prompt =
+`你是「1+1=?」合成遊戲的引擎。玩家把 ${list} 這 ${names.length} 樣東西合在一起，請決定會產生什麼。
+規則：
+${NAME_RULE}
+- 要讓人看得出跟每一樣材料的關聯；可以有趣、有梗、出乎意料。
+- 盡量產生新的東西，避免直接回傳材料本身。
+${avoid && avoid.length ? `- 這一組原本的答案是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請發揮想像力，想出另一種說得通又有趣的結果，不能是：${avoid.join('、')}。\n` : ''}${DETAIL_RULES()}`;
+    const out = await ask(prompt, ITEM_SCHEMA);
+    const name = cleanName(out.name);
+    if (!name) throw new Error('AI 沒想出東西，再試一次');
+    return {...out, name, emoji:String(out.emoji || '').trim().slice(0, 8) || '✨'};
+  }
+  async function askExtract(name, avoid){
+    const prompt =
+`你是「1+1=?」合成遊戲的引擎。玩家想把「${name}」萃取、拆解，反推出構成它的、更原始更基本的東西。
+規則：
+- 回傳 parts，2 到 3 樣東西，每一樣都要比「${name}」更原始、更基本，而且合在一起說得通能變成「${name}」。
+- 不能是「${name}」本身。
+${avoid && avoid.length ? `- 原本萃取出的是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請想出另一種拆法，不能跟這些完全一樣：${avoid.join('；')}。\n` : ''}- 每一樣的欄位規則：
+${NAME_RULE}
+${DETAIL_RULES()}`;
+    const out = await ask(prompt, {parts:{type:'ARRAY', items:{type:'OBJECT', properties:ITEM_SCHEMA, required:Object.keys(ITEM_SCHEMA)}}});
+    const seen = new Set();
+    const parts = (Array.isArray(out.parts) ? out.parts : [])
+      .map(p => ({...p, name:cleanName(p.name), emoji:String(p.emoji || '').trim().slice(0, 8) || '✨'}))
+      .filter(p => p.name && p.name !== name && !seen.has(p.name) && seen.add(p.name))
+      .slice(0, 3);
+    if (!parts.length) throw new Error('AI 沒拆出東西，再試一次');
+    return parts;
+  }
+  // 舊的發現沒有介紹：補一次
+  async function askDetail(name){
+    const prompt =
+`你是「1+1=?」合成遊戲的圖鑑編輯。請為遊戲裡的「${name}」寫圖鑑資料。
+${DETAIL_RULES()}`;
+    return cleanDetail(await ask(prompt, DETAIL_SCHEMA));
+  }
 
-
-  function getKey(){ return (store.get(KEY_KEY) || '').trim(); }
-  function getOverride(){ return (store.get(MODEL_KEY) || '').trim(); }
+  // 問 AI：手動模式跳視窗；Gemini 太忙時問要不要改手動
+  async function ask(prompt, props){
+    if (prefs.ai === 'manual') return manualAsk(prompt, props);
+    try { return await askGemini(prompt, props); }
+    catch(e){
+      if (e.busy) return manualAsk(prompt, props, e.message + '。可以改用手動：');
+      throw e;
+    }
+  }
+  async function askGemini(prompt, props){
+    try { return await generate(prompt, props, await getModel()); }
+    catch(e){
+      // 模型被 Google 下架了：自動重新挑一次
+      if (e.notFound && !getOverride()) return await generate(prompt, props, await getModel(true));
+      if (e.notFound) throw new Error('找不到你選的模型，到設定把模型改回「自動」');
+      throw e;
+    }
+  }
 
   // 問 Google：這把鑰匙能用哪些模型
   async function listModels(){
     let resp;
     try { resp = await fetch(`${API}/models?pageSize=1000`, {headers:{'x-goog-api-key':getKey()}}); }
-    catch(e){ throw new Error('連不上 Gemini，檢查一下網路'); }
+    catch(e){ const er = new Error('連不上 Gemini'); er.busy = true; throw er; }
     if (!resp.ok) throw await apiError(resp);
     const data = await resp.json();
     return (data.models || [])
@@ -795,100 +894,112 @@
   async function apiError(resp){
     let msg = '';
     try { msg = (await resp.json())?.error?.message || ''; } catch(e){}
-    if (resp.status === 429) return new Error('免費次數暫時用完了（太快或今天用滿），等一下再試');
-    if (/api key|API_KEY/i.test(msg) || resp.status === 401 || resp.status === 403) return new Error('鑰匙好像不對，到設定檢查一下');
-    if (resp.status === 404) { const e = new Error('找不到這個模型'); e.notFound = true; return e; }
-    return new Error(`Gemini 出錯了（${resp.status}）${msg ? '：' + msg.slice(0, 80) : ''}`);
+    let e;
+    if (resp.status === 429){ e = new Error('Gemini 的免費次數暫時用完了（太快或今天用滿）'); e.busy = true; }
+    else if (resp.status === 503 || resp.status === 500 || resp.status === 502 || resp.status === 504){ e = new Error(`Gemini 現在太忙（${resp.status}）`); e.busy = true; e.retry = true; }
+    else if (/api key|API_KEY/i.test(msg) || resp.status === 401 || resp.status === 403) e = new Error('鑰匙好像不對，到設定檢查一下');
+    else if (resp.status === 404){ e = new Error('找不到這個模型'); e.notFound = true; }
+    else e = new Error(`Gemini 出錯了（${resp.status}）${msg ? '：' + msg.slice(0, 80) : ''}`);
+    return e;
+  }
+  async function generate(prompt, props, model){
+    // 太忙（503 之類）先自己等一下重試兩次
+    for (let attempt = 0; ; attempt++){
+      let resp;
+      try {
+        resp = await fetch(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json', 'x-goog-api-key':getKey()},
+          body:JSON.stringify({
+            contents:[{role:'user', parts:[{text:prompt}]}],
+            generationConfig:{
+              temperature:0.9,
+              responseMimeType:'application/json',
+              responseSchema:{type:'OBJECT', properties:props, required:Object.keys(props)}
+            }
+          })
+        });
+      } catch(e){
+        const er = new Error('連不上 Gemini'); er.busy = true; throw er;
+      }
+      if (!resp.ok){
+        const e = await apiError(resp);
+        if (e.retry && attempt < 2){ await sleep(1500 * (attempt + 1)); continue; }
+        throw e;
+      }
+      const data = await resp.json();
+      const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+      try { return JSON.parse(text); } catch(e){ throw new Error('Gemini 回了看不懂的東西，再試一次'); }
+    }
   }
 
-  function catRule(){
-    const have = catCounts().map(([c]) => c);
-    const list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
-    return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。`;
+  // ---------- 手動問 AI ----------
+  function example(schema){
+    if (schema.type === 'ARRAY') return [example(schema.items), example(schema.items)];
+    if (schema.type === 'OBJECT') return Object.fromEntries(Object.entries(schema.properties).map(([k, v]) => [k, example(v)]));
+    if (schema.type === 'INTEGER') return 1;
+    return '……';
   }
-  const DETAIL_RULES = () =>
-`- desc：一到兩句話的介紹，繁體中文，40 字以內，可以帶一點趣味。
-- rarity：1 到 5 的整數，代表這個東西在一般人心中有多偏門。1＝人人都知道的日常事物，2＝普通，3＝少見，4＝稀有偏門，5＝傳說級冷門或極度奇特抽象。
-${catRule()}
-- color：這個東西最常讓人聯想到的顏色，用 #RRGGBB 格式。`;
-  const DETAIL_SCHEMA = {
-    desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, color:{type:'STRING'}
+  function extractJSON(text){
+    let t = String(text || '').replace(/```(?:json)?/gi, '');
+    const a = t.indexOf('{'), b = t.lastIndexOf('}');
+    if (a < 0 || b <= a) throw new Error('找不到 JSON，請把 AI 的回答整段貼上');
+    return JSON.parse(t.slice(a, b + 1));
+  }
+  let manualPending = null;
+  function manualAsk(prompt, props, reason){
+    const full = `${prompt}
+
+【回答格式】只回一段 JSON，不要加任何說明文字、不要用程式碼框。格式像這樣：
+${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
+    $('m-prompt').value = full;
+    $('m-answer').value = '';
+    $('m-err').textContent = '';
+    $('m-reason').hidden = !reason;
+    $('m-reason').textContent = reason || '';
+    $('manual').classList.add('open');
+    return new Promise((resolve, reject) => { manualPending = {resolve, reject, props}; });
+  }
+  $('m-copy').onclick = async () => {
+    const t = $('m-prompt');
+    try { await navigator.clipboard.writeText(t.value); toast('已複製，去貼給 AI 吧'); }
+    catch(e){ t.focus(); t.select(); try { document.execCommand('copy'); toast('已複製，去貼給 AI 吧'); } catch(_){ toast('複製失敗，請手動全選複製', true); } }
+  };
+  $('m-ok').onclick = () => {
+    if (!manualPending) return;
+    try {
+      const out = extractJSON($('m-answer').value);
+      const miss = Object.keys(manualPending.props).filter(k => !(k in out));
+      if (miss.length) throw new Error(`回答裡少了：${miss.join('、')}，請 AI 照格式重回一次`);
+      const p = manualPending; manualPending = null;
+      $('manual').classList.remove('open');
+      p.resolve(out);
+    } catch(e){
+      $('m-err').textContent = e instanceof SyntaxError ? '這段看起來不是正確的 JSON，請確認有整段貼上' : e.message;
+    }
+  };
+  $('m-cancel').onclick = () => {
+    const p = manualPending; manualPending = null;
+    $('manual').classList.remove('open');
+    if (p){ const e = new Error('取消了'); e.cancelled = true; p.reject(e); }
   };
 
-  async function askGemini(a, b, avoid){
-    const prompt =
-`你是「1+1=?」合成遊戲的引擎。玩家把「${a}」和「${b}」合在一起，請決定會產生什麼。
-規則：
-- name：結果是一個名詞，可以是物品、自然現象、生物、地點、人物、概念、作品或流行文化。使用繁體中文（台灣用語），專有名詞若中文少見可保留原文。最多 8 個字，不要解釋、不要標點。
-- 要讓人看得出跟「${a}」和「${b}」的關聯；可以有趣、有梗、出乎意料。
-- 盡量產生新的東西，避免直接回傳「${a}」或「${b}」本身。
-- emoji：一個最貼切的 emoji。
-${avoid && avoid.length ? `- 這一組原本的答案是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請發揮想像力，想出另一種說得通又有趣的合成結果，不能是：${avoid.join('、')}。\n` : ''}${DETAIL_RULES()}`;
-    const out = await ask(prompt, {name:{type:'STRING'}, emoji:{type:'STRING'}, ...DETAIL_SCHEMA});
-    const name = String(out.name || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
-    if (!name) throw new Error('Gemini 沒想出東西，再試一次');
-    return {...out, name, emoji:String(out.emoji || '').trim().slice(0, 8) || '✨'};
-  }
-  // 舊的發現沒有介紹：打開卡片時補一次
-  async function askDetail(name){
-    const prompt =
-`你是「1+1=?」合成遊戲的圖鑑編輯。請為遊戲裡的「${name}」寫圖鑑資料。
-${DETAIL_RULES()}`;
-    return cleanDetail(await ask(prompt, DETAIL_SCHEMA));
-  }
-  async function ask(prompt, props){
-    try { return await generate(prompt, props, await getModel()); }
-    catch(e){
-      // 模型被 Google 下架了：自動重新挑一次
-      if (e.notFound && !getOverride()) return await generate(prompt, props, await getModel(true));
-      if (e.notFound) throw new Error('找不到你選的模型，到設定把模型改回「自動」');
-      throw e;
-    }
-  }
-
-  async function generate(prompt, props, model){
-    let resp;
-    try {
-      resp = await fetch(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
-        method:'POST',
-        headers:{'Content-Type':'application/json', 'x-goog-api-key':getKey()},
-        body:JSON.stringify({
-          contents:[{role:'user', parts:[{text:prompt}]}],
-          generationConfig:{
-            temperature:1,
-            responseMimeType:'application/json',
-            responseSchema:{type:'OBJECT', properties:props, required:Object.keys(props)}
-          }
-        })
-      });
-    } catch(e){
-      throw new Error('連不上 Gemini，檢查一下網路');
-    }
-    if (!resp.ok) throw await apiError(resp);
-    const data = await resp.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-    try { return JSON.parse(text); } catch(e){ throw new Error('Gemini 回了看不懂的東西，再試一次'); }
-  }
-
   // ---------- 整理分類 ----------
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
   let reorging = false;
   async function reorganize(){
-    if (reorging) return;
-    if (!getKey()){ openSettings('先貼上 Gemini 鑰匙才能整理分類'); return; }
+    if (reorging || !aiReady()) return;
     const names = Object.keys(save.items);
     const free = names.filter(n => !save.items[n].catLocked);
     const BATCH = 80;
     const batches = [];
     for (let i = 0; i < free.length; i += BATCH) batches.push(free.slice(i, i + BATCH));
     const total = 1 + batches.length;
-    if (!confirm(`整理分類會請 AI 做兩件事：\n1. 合併重複、意思太像或太零碎的分類\n2. 檢查每樣東西分得對不對（你自己分的不會動）\n\n大約用掉 ${total} 次免費次數，要開始嗎？`)) return;
+    if (!confirm(`整理分類會請 AI 做兩件事：\n1. 合併重複、意思太像或太零碎的分類\n2. 檢查每樣東西分得對不對（你自己分的不會動）\n\n大約要問 AI ${total} 次，要開始嗎？`)) return;
     reorging = true;
     const btn = $('btn-reorg'); btn.disabled = true;
     let merged = 0, moved = 0, step = 0;
     const progress = () => { btn.textContent = `整理中 ${step}/${total}`; };
     try {
-      // 第一步：合併分類標籤
       step = 1; progress();
       const counts = catCounts();
       if (counts.length > 1){
@@ -912,9 +1023,8 @@ ${lines}
         merged = map.size;
         persist(); renderList();
       }
-      // 第二步：一批一批檢查每樣東西
       for (const group of batches){
-        await sleep(4000);  // 放慢一點，避免撞到免費版每分鐘的次數上限
+        if (prefs.ai !== 'manual') await sleep(4000);  // 放慢一點，避免撞到免費版每分鐘的次數上限
         step++; progress();
         const cats = catCounts().map(([c]) => c);
         const lines = group.map(n => `${n}：${save.items[n].cat || '（未分類）'}`).join('\n');
@@ -937,7 +1047,7 @@ ${lines}
       }
       toast(`整理完成：合併了 ${merged} 個分類、移動了 ${moved} 樣東西`);
     } catch(e){
-      toast(`整理到一半停下來了（已整理的有存起來）：${e.message}`, true);
+      if (!e.cancelled) toast(`整理到一半停下來了（已整理的有存起來）：${e.message}`, true);
     } finally {
       reorging = false; btn.disabled = false; btn.textContent = '整理分類';
     }
@@ -953,10 +1063,8 @@ ${lines}
     const box = $('card-box');
     $('c-emoji').textContent = it.emoji;
     $('c-name').textContent = name;
-    const c = hexToHsl(it.color);
     const band = $('c-band');
-    if (c) paint(band, it); else { band.style.cssText = ''; }
-    // 稀有度
+    if (hexToHsl(it.color)) paint(band, it); else band.style.cssText = '';
     const rr = $('c-rarity'); rr.textContent = '';
     if (it.rarity){
       const dots = document.createElement('span'); dots.className = 'dots';
@@ -965,28 +1073,34 @@ ${lines}
     }
     $('c-cat').textContent = (it.cat || '未分類') + (it.catLocked ? '（自己分的）' : '') + ' ✎';
     $('c-catedit').hidden = true;
-    $('c-desc').textContent = it.desc || (getKey() ? '介紹生成中……' : '還沒有介紹（貼上鑰匙後打開卡片會自動補上）');
+    const asking = !!it._asking;
+    $('c-desc').textContent = it.desc || (asking ? '介紹生成中……' : '還沒有介紹');
     $('c-desc').classList.toggle('muted', !it.desc);
-    // 配方
+    $('c-fillrow').hidden = !!it.desc || asking;
+    // 煉法
     const from = $('c-from'); from.textContent = '';
     const ways = Object.entries(save.recipes).filter(([, v]) => v.includes(name)).map(([k]) => k.split('+'));
     if (ways.length){
       from.append('煉法：');
-      ways.slice(0, 12).forEach(([p, q], i) => { if (i) from.append('、'); from.append(link(p)); from.append('＋'); from.append(link(q)); });
+      ways.slice(0, 12).forEach((w, i) => { if (i) from.append('、'); w.forEach((n, j) => { if (j) from.append('＋'); from.append(link(n)); }); });
       if (ways.length > 12) from.append(` 等 ${ways.length} 種`);
     }
-    else if (it.from){ from.append('由 '); from.append(link(it.from[0])); from.append(' ＋ '); from.append(link(it.from[1])); from.append(' 煉出'); }
+    else if (it.from){ from.append('煉法：'); it.from.forEach((n, j) => { if (j) from.append('＋'); from.append(link(n)); }); }
+    else if (it.ext){ from.append('從 '); from.append(link(it.ext)); from.append(' 萃取出來'); }
     else from.append('最初的元素');
-    const makes = Object.entries(save.recipes).filter(([k]) => k.split('+').includes(name)).flatMap(([,v]) => v);
-    const uniq = [...new Set(makes)];
+    const makes = [...new Set(Object.entries(save.recipes).filter(([k]) => k.split('+').includes(name)).flatMap(([,v]) => v))];
     const mk = $('c-makes'); mk.textContent = '';
-    if (uniq.length){ mk.append('能煉出：'); uniq.forEach((n, i) => { if (i) mk.append('、'); mk.append(link(n)); }); }
+    if (makes.length){ mk.append('能煉出：'); makes.forEach((n, i) => { if (i) mk.append('、'); mk.append(link(n)); }); }
+    const ex = $('c-ext'); ex.textContent = '';
+    const exs = (save.extracts[name] || []).filter(n => save.items[n]);
+    if (exs.length){ ex.append('能萃取出：'); exs.forEach((n, i) => { if (i) ex.append('、'); ex.append(link(n)); }); }
     $('c-time').textContent = it.t > 1e12 ? `發現於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
     $('c-fav').textContent = it.fav ? '★ 已收藏' : '☆ 收藏';
     $('c-fav').classList.toggle('on', !!it.fav);
     $('card').classList.add('open');
     box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
-    if (!it.desc && getKey() && !it._asking) fillDetail(name);
+    // 用 Gemini 時自動補介紹；手動模式由玩家按「補上介紹」
+    if (!it.desc && !asking && prefs.ai !== 'manual' && getKey()) fillDetail(name);
   }
   function link(n){
     const a = document.createElement('span'); a.className = 'clink';
@@ -997,17 +1111,20 @@ ${lines}
   async function fillDetail(name){
     const it = save.items[name];
     it._asking = true;
+    if (cardName === name) openCard(name);
     try {
       const d = await askDetail(name);
       if (it.catLocked) delete d.cat;
       Object.assign(it, d);
-      persist(); renderList(); refreshItems(name);
-      if (cardName === name && $('card').classList.contains('open')) openCard(name);
+      persist(); renderList(); renderSlots(); if (last) renderResult();
     } catch(e){
-      if (cardName === name) { $('c-desc').textContent = '介紹生成失敗：' + e.message; }
-    } finally { delete it._asking; }
+      if (!e.cancelled && cardName === name) toast('介紹生成失敗：' + e.message, true);
+    } finally {
+      delete it._asking;
+      if (cardName === name && $('card').classList.contains('open')) openCard(name);
+    }
   }
-  // 自己分類
+  $('c-fill').onclick = () => { if (cardName && aiReady()) fillDetail(cardName); };
   $('c-cat').onclick = () => {
     const it = save.items[cardName]; if (!it) return;
     const dl = $('catlist'); dl.textContent = '';
@@ -1039,7 +1156,7 @@ ${lines}
     const it = save.items[cardName]; if (!it) return;
     it.fav = !it.fav; persist(); renderList(); openCard(cardName);
   };
-  $('c-drop').onclick = () => { const n = cardName; closeCard(); dropNearCenter(n); };
+  $('c-drop').onclick = () => { const n = cardName; closeCard(); addToSlot(n); };
   window.addEventListener('keydown', e => { if (e.key === 'Escape'){ closeCard(); closeSettings(); } });
 
   // ---------- 設定 ----------
@@ -1084,12 +1201,11 @@ ${lines}
     saveModel();
     toast('測試中……');
     try {
-      const r = await askGemini('水', '火');
-      toast(`成功！用 ${getOverride() || store.get(AUTO_KEY)} 試煉：水＋火＝${r.emoji} ${r.name}`);
+      const r = await askGemini('請回傳 name＝「測試成功」、emoji＝「✅」。', {name:{type:'STRING'}, emoji:{type:'STRING'}});
+      toast(`成功！用 ${getOverride() || store.get(AUTO_KEY)} 回應：${r.emoji || ''} ${r.name || ''}`);
       fillModels();
     } catch(e){ toast(e.message, true); }
   };
-  $('btn-clear').onclick = () => { board.querySelectorAll('.item').forEach(el => { if (!el.classList.contains('busy')) el.remove(); }); updateHint(); };
 
   $('btn-export').onclick = () => {
     const blob = new Blob([JSON.stringify(save, null, 1)], {type:'application/json'});
@@ -1112,16 +1228,15 @@ ${lines}
   $('btn-reset').onclick = () => {
     if (!confirm('確定要全部重來嗎？所有發現和配方都會清掉（鑰匙會保留）。')) return;
     save = fresh(); persist();
-    board.querySelectorAll('.item').forEach(el => el.remove());
-    last = null; renderLast();
-    updateHint(); renderList(); closeSettings(); toast('世界重新開始了');
+    last = null; slots.fill(null);
+    location.reload();
   };
 
-  // ---------- 外觀 ----------
-  const PREF_KEY = 'wuxian_prefs';
-  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on'};
+  // ---------- 外觀與 AI 來源 ----------
+  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-ai','ai']];
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
+  delete prefs.reroll;
   function applyPrefs(){
     const r = document.documentElement;
     r.dataset.theme = prefs.theme;
@@ -1132,18 +1247,25 @@ ${lines}
     $('scale-val').textContent = Math.round(prefs.scale * 100) + '%';
     for (const [id, k] of SEGS)
       $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs[k]));
+    const am = $('aimode');
+    am.textContent = prefs.ai === 'manual' ? 'AI：手動' : 'AI：Gemini';
+    am.classList.toggle('manual', prefs.ai === 'manual');
   }
   function setPref(k, v){ prefs[k] = v; store.set(PREF_KEY, JSON.stringify(prefs)); applyPrefs(); }
   for (const [id, k] of SEGS)
     $(id).addEventListener('click', e => { const v = e.target.dataset && e.target.dataset.v; if (v) setPref(k, v); });
   $('scale').addEventListener('input', e => setPref('scale', parseFloat(e.target.value)));
+  $('aimode').onclick = () => {
+    setPref('ai', prefs.ai === 'manual' ? 'gemini' : 'manual');
+    toast(prefs.ai === 'manual' ? '改成手動：需要 AI 時會跳出問題讓你複製' : '改回 Gemini 自動');
+  };
   applyPrefs();
 
   // ---------- 開場 ----------
   persist();
   renderList();
-  updateHint();
-  if (!getKey()) setTimeout(() => openSettings(), 300);
+  renderSlots();
+  if (!getKey() && prefs.ai !== 'manual') setTimeout(() => openSettings(), 300);
 })();
 </script>
 </body>
