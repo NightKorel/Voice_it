@@ -393,7 +393,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.8';
+  const VERSION = '0.0.9';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -703,12 +703,14 @@
       out.append(c);
     }
     const tip = document.createElement('div'); tip.className = 'muted'; tip.style.cssText = 'font-size:.78rem;color:var(--muted)';
-    tip.textContent = last.fail ? '這幾樣合不起來。覺得可以的話，按「真的嗎？」請 AI 再想想' : '點結果可以放進槽位，長按看卡片';
+    tip.textContent = last.fail ? '這幾樣合不起來。覺得可以的話，按「真的嗎？」請 AI 再想想'
+      : last.fromRecipe ? '有配方的東西，萃取出來固定是它的第一個配方。點結果可以放進槽位'
+      : '點結果可以放進槽位，長按看卡片';
     const really = document.createElement('button'); really.className = 'btn'; really.id = 'btn-really';
     really.textContent = '真的嗎？'; really.title = '請 AI 想像另一種可能';
     really.onclick = doReally;
     const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center';
-    row.append(really);
+    if (!last.fromRecipe) row.append(really);
     if (last.type === 'combine' && save.recipes[comboKey(last.inputs)]){
       const del = document.createElement('button'); del.className = 'btn danger'; del.textContent = '刪掉這個配方';
       del.onclick = () => askDeleteRecipe(comboKey(last.inputs));
@@ -775,6 +777,12 @@
   }
 
   // ---------- 萃取 ----------
+  // 這樣東西最早的配方（配方照記錄的先後排）；合成失敗的不算
+  function firstRecipe(name){
+    for (const [k, v] of Object.entries(save.recipes))
+      if (v[0] === name){ const parts = k.split('+'); if (parts.every(n => save.items[n])) return parts; }
+    return null;
+  }
   // 合成時順便記下反向萃取：A＋B＝C，之後萃取 C 直接得到 A、B（已經有萃取紀錄就不動）
   function recordExtract(result, inputs){
     if (!save.extracts[result]) save.extracts[result] = [...inputs];
@@ -789,6 +797,9 @@
     const names = filled();
     if (busy || names.length !== 1) return;
     const name = names[0];
+    // 有配方的東西：萃取固定是它的第一個配方（不花次數）
+    const fr = firstRecipe(name);
+    if (fr){ save.extracts[name] = fr; finish('extract', [name], fr, []); last.fromRecipe = true; renderResult(); return; }
     const known = (save.extracts[name] || []).filter(n => save.items[n]);
     if (known.length) return finish('extract', [name], known, []);
     if (!aiReady()) return;
@@ -1316,10 +1327,12 @@ ${lines}
     const mk = $('c-makes'); mk.textContent = '';
     if (makes.length){ mk.append('能煉出：'); makes.forEach((n, i) => { if (i) mk.append('、'); mk.append(link(n)); }); }
     const ex = $('c-ext'); ex.textContent = '';
-    const exs = (save.extracts[name] || []).filter(n => save.items[n]);
+    const fr = firstRecipe(name);
+    const exs = fr || (save.extracts[name] || []).filter(n => save.items[n]);
     if (exs.length){
       ex.append('能萃取出：'); exs.forEach((n, i) => { if (i) ex.append('、'); ex.append(link(n)); });
-      ex.append(delBtn('刪掉這個萃取結果', () => askDeleteExtract(name)));
+      if (fr) ex.append('（第一個配方）');
+      else ex.append(delBtn('刪掉這個萃取結果', () => askDeleteExtract(name)));
     }
     $('c-del').hidden = BASE.some(b => b.name === name);
     $('c-time').textContent = it.t > 1e12 ? `發現於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
