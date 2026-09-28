@@ -256,6 +256,11 @@
   .clink:hover{color:var(--accent);border-color:var(--accent)}
   .cbox .actions{display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap}
   #c-fav.on{color:var(--accent);border-color:var(--accent)}
+  /* 細框：邊框 1px，內距補回 1px，東西大小不變 */
+  :root[data-border="thin"] .litem{border-width:1px;padding:.33rem .65rem;margin:1px}
+  :root[data-border="thin"] .rchip{border-width:1px;margin:1px}
+  :root[data-border="thin"] .slot{border-width:1px}
+  :root[data-border="thin"] #c-band{border-bottom-width:2px!important}
   :root[data-motion="off"] *{animation:none!important;transition:none!important}
 </style>
 </head>
@@ -449,6 +454,8 @@
       <div class="seg" id="seg-font"><button data-v="sans">黑體</button><button data-v="round">圓體</button><button data-v="serif">明體</button></div></div>
     <div class="setrow"><span class="lbl">動畫</span>
       <div class="seg" id="seg-motion"><button data-v="on">開</button><button data-v="off">關</button></div></div>
+    <div class="setrow"><span class="lbl">邊框</span>
+      <div class="seg" id="seg-border"><button data-v="thick">粗框</button><button data-v="thin">細框</button></div></div>
     <p class="muted">圓體、明體要你的裝置有裝對應字型才會變，沒有就會維持黑體。</p>
 
     <hr>
@@ -509,7 +516,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.19';
+  const VERSION = '0.0.20';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2022,8 +2029,8 @@ ${lines}
   };
 
   // ---------- 外觀與 AI 來源 ----------
-  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-ai','ai']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50};
+  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-border','border'], ['seg-ai','ai']];
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
   function applyPrefs(){
@@ -2031,6 +2038,7 @@ ${lines}
     r.dataset.theme = prefs.theme;
     r.dataset.font = prefs.font;
     r.dataset.motion = prefs.motion;
+    r.dataset.border = prefs.border;
     r.style.setProperty('--scale', prefs.scale);
     $('scale').value = prefs.scale;
     r.style.setProperty('--side-w', prefs.sidew + '%');
