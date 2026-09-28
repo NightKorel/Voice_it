@@ -98,10 +98,12 @@
   #reorg p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #reorg .muted{color:var(--muted);font-size:.8rem}
   #reorg .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
-  #rg-setup[hidden],#rg-review[hidden]{display:none}
+  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],.rg-list[hidden]{display:none}
+  .rg-sub{font-size:.8rem;color:var(--muted);flex-basis:100%;padding-left:1.6rem;line-height:1.5}
+  #reorg h3{font-size:.92rem;color:var(--accent);margin:.9rem 0 .3rem}
   .rg-opt{display:flex;gap:.5rem;align-items:flex-start;font-size:.9rem;line-height:1.6;margin:.5rem 0;cursor:pointer}
   .rg-opt input,.rg-row input{accent-color:var(--accent);margin-top:.3rem}
-  #rg-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
+  #rg-list,.rg-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
   .rg-row{display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;border:1px solid var(--line);border-radius:.7rem;font-size:.92rem;cursor:pointer;flex-wrap:wrap}
   .rg-row input{margin-top:0}
   .rg-arrow{color:var(--muted);font-size:.8rem}
@@ -343,6 +345,23 @@
         <button class="btn" id="rg-cancel">取消</button>
       </div>
     </div>
+    <div id="rg-friend" hidden>
+      <h2>要加入朋友的哪些東西？</h2>
+      <p id="fm-summary"></p>
+      <div class="actions">
+        <button class="btn" id="fm-all">全選</button>
+        <button class="btn" id="fm-none">全不選</button>
+      </div>
+      <h3 id="fm-h-items">你沒有的東西</h3>
+      <div id="fm-items" class="rg-list"></div>
+      <h3 id="fm-h-recipes">你已有東西的新配方</h3>
+      <div id="fm-recipes" class="rg-list"></div>
+      <p class="muted">沒勾的東西，用到它的配方也不會加進來。你原本的東西和配方都不會被改動。</p>
+      <div class="actions">
+        <button class="btn primary" id="fm-apply">加入勾選的</button>
+        <button class="btn" id="fm-cancel">取消</button>
+      </div>
+    </div>
     <div id="rg-review" hidden>
       <h2>要合併這些嗎？</h2>
       <p>AI 覺得下面這些是同一樣東西。勾選的會併進右邊那一個：配方、萃取紀錄、收藏都會搬過去，左邊那個會從圖鑑消失。右邊可以換要併進哪一個。</p>
@@ -449,7 +468,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.14';
+  const VERSION = '0.0.15';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -500,6 +519,10 @@
       if (parts.length >= 2 && (!s.recipes[k] || s.recipes[k][0] === '💥')) s.recipes[k] = [src];
     }
     for (const k in s.recipes) if (!Array.isArray(s.recipes[k])) s.recipes[k] = [s.recipes[k]];
+    // 配方的材料順序統一排好（別人給的檔案可能沒排），同一組只留先記錄的
+    const sorted = {};
+    for (const [k, v] of Object.entries(s.recipes)){ const nk = k.split('+').sort().join('+'); if (!(nk in sorted)) sorted[nk] = v; }
+    s.recipes = sorted;
     for (const b of BASE){
       const it = s.items[b.name];
       if (it && !it.desc) Object.assign(it, {desc:b.desc, rarity:b.rarity, cat:b.cat, color:b.color});
@@ -1310,7 +1333,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     const upd = () => { $('rg-cost').textContent = `大約要問 AI ${cost()} 次。`; $('rg-go').disabled = !cost(); };
     ['rg-items', 'rg-cat', 'rg-move'].forEach(id => $(id).onchange = upd);
     upd();
-    $('rg-setup').hidden = false; $('rg-review').hidden = true;
+    $('rg-setup').hidden = false; $('rg-review').hidden = true; $('rg-friend').hidden = true;
     $('reorg').classList.add('open');
   }
   $('rg-cancel').onclick = () => $('reorg').classList.remove('open');
@@ -1444,7 +1467,7 @@ ${lines}
         rows.push({cb, sel, from:x});
       }
     }
-    $('rg-setup').hidden = true; $('rg-review').hidden = false;
+    $('rg-setup').hidden = true; $('rg-review').hidden = false; $('rg-friend').hidden = true;
     $('reorg').classList.add('open');
     return new Promise(resolve => {
       const done = picks => { $('reorg').classList.remove('open'); resolve(picks); };
@@ -1754,23 +1777,65 @@ ${lines}
       && k.split('+').every(has) && (fr.recipes[k][0] === FAIL || has(fr.recipes[k][0])));
     const conflicts = Object.keys(fr.recipes).filter(k => save.recipes[k] && fr.recipes[k] && fr.recipes[k][0] !== save.recipes[k][0]).length;
     if (!newItems.length && !newRecipes.length){ toast('朋友的存檔裡沒有你沒有的東西'); return; }
-    if (!confirm(`朋友的存檔裡有：\n・${newItems.length} 樣你沒有的東西\n・${newRecipes.length} 條你沒有的配方${conflicts ? `\n・${conflicts} 條配方跟你的不一樣（會保留你的）` : ''}\n\n要加進你的圖鑑嗎？你原本的東西都不會被改動。`)) return;
-    const now = Date.now();
-    newItems.forEach((n, i) => {
-      const it = {...fr.items[n]};
-      delete it.fav; delete it._asking;  // 收藏是朋友自己的
-      it.t = now + i;                    // 算成你剛拿到的
-      it.friend = true;
-      save.items[n] = it;
-    });
-    for (const k of newRecipes) save.recipes[k] = [fr.recipes[k][0]];
-    for (const [k, v] of Object.entries(fr.extracts || {})){
-      if (!save.extracts[k] && save.items[k] && Array.isArray(v) && v.every(n => save.items[n])) save.extracts[k] = [...v];
+    const recipeText = k => `${k.split('+').join('＋')}＝${fr.recipes[k][0] === FAIL ? '💥 合成失敗' : fr.recipes[k][0]}`;
+    // 會跟著某樣新東西一起來的配方：配方裡有用到這樣新東西
+    const tied = k => [...k.split('+'), fr.recipes[k][0]].some(n => newItems.includes(n));
+    const itemRows = [], recipeRows = [];
+    const row = (box, label, sub) => {
+      const r = document.createElement('label'); r.className = 'rg-row';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true;
+      const t = document.createElement('span'); t.className = 'rg-from'; t.textContent = label;
+      r.append(cb, t);
+      if (sub){ const d = document.createElement('span'); d.className = 'rg-sub'; d.textContent = sub; r.append(d); }
+      box.append(r);
+      return cb;
+    };
+    $('fm-items').textContent = ''; $('fm-recipes').textContent = '';
+    for (const n of newItems){
+      const it = fr.items[n];
+      const ways = newRecipes.filter(k => fr.recipes[k][0] === n).map(k => k.split('+').join('＋'));
+      const sub = [it.rarity ? `${RARITY[it.rarity - 1]}` : '', it.desc || '', ways.length ? `煉法：${ways.join('、')}` : ''].filter(Boolean).join('　');
+      itemRows.push({name:n, cb:row($('fm-items'), `${it.emoji || '❓'} ${n}`, sub)});
     }
-    fillBase(save);
-    persist(); renderList(); renderSlots();
-    toast(`合併完成：多了 ${newItems.length} 樣東西、${newRecipes.length} 條配方`);
+    for (const k of newRecipes.filter(k => !tied(k))) recipeRows.push({k, cb:row($('fm-recipes'), recipeText(k))});
+    $('fm-h-items').hidden = $('fm-items').hidden = !itemRows.length;
+    $('fm-h-recipes').hidden = $('fm-recipes').hidden = !recipeRows.length;
+    $('fm-summary').textContent = `朋友的存檔裡有 ${newItems.length} 樣你沒有的東西、${newRecipes.length} 條你沒有的配方${conflicts ? `，另外有 ${conflicts} 條配方跟你的不一樣（一律保留你的）` : ''}。勾選想加入的：`;
+    const all = v => [...itemRows, ...recipeRows].forEach(r => r.cb.checked = v);
+    $('fm-all').onclick = () => all(true);
+    $('fm-none').onclick = () => all(false);
+    $('rg-setup').hidden = true; $('rg-review').hidden = true; $('rg-friend').hidden = false;
+    $('modal').classList.remove('open');
+    $('reorg').classList.add('open');
+    $('fm-cancel').onclick = () => $('reorg').classList.remove('open');
+    $('fm-apply').onclick = () => {
+      const pickItems = itemRows.filter(r => r.cb.checked).map(r => r.name);
+      const pickRecipes = new Set(recipeRows.filter(r => r.cb.checked).map(r => r.k));
+      $('reorg').classList.remove('open');
+      const now = Date.now();
+      pickItems.forEach((n, i) => {
+        const it = {...fr.items[n]};
+        delete it.fav; delete it._asking;  // 收藏是朋友自己的
+        it.t = now + i;                    // 算成你剛拿到的
+        it.friend = true;
+        save.items[n] = it;
+      });
+      // 配方：跟著新東西來的，只要用到的東西都在就加；你已有東西的新配方，要有勾才加
+      let added = 0;
+      for (const k of newRecipes){
+        if (!tied(k) && !pickRecipes.has(k)) continue;
+        const r = fr.recipes[k][0];
+        if (k.split('+').every(n => save.items[n]) && (r === FAIL || save.items[r])){ save.recipes[k] = [r]; added++; }
+      }
+      for (const [k, v] of Object.entries(fr.extracts || {})){
+        if (!save.extracts[k] && save.items[k] && Array.isArray(v) && v.every(n => save.items[n])) save.extracts[k] = [...v];
+      }
+      fillBase(save);
+      persist(); renderList(); renderSlots();
+      toast(pickItems.length || added ? `加入了 ${pickItems.length} 樣東西、${added} 條配方` : '什麼都沒有加');
+    };
   }
+
   $('btn-reset').onclick = () => {
     if (!confirm('確定要全部重來嗎？所有發現和配方都會清掉（鑰匙會保留）。')) return;
     save = fresh(); persist();
