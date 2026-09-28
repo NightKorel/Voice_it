@@ -393,7 +393,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.6';
+  const VERSION = '0.0.7';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -861,7 +861,9 @@
     openSettings(`先貼上 ${prefs.ai === 'openrouter' ? 'OpenRouter' : 'Gemini'} 鑰匙，或把 AI 來源改成「手動複製貼上」`);
     return false;
   }
-  const cleanName = n => String(n || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
+  // 名字：去掉標點和引號；英文專有名詞中間的空格保留一個
+  const cleanName = n => String(n || '').replace(/[。，！？、「」『』《》"'!?]/g, '').replace(/\s+/g, ' ').trim()
+    .replace(/(?<=[^\x00-\x7F]) | (?=[^\x00-\x7F])/g, '').slice(0, 24);
   const cleanCat = c => String(c || '').replace(/[\s。，！？、「」"'.,!?（）()]/g, '').slice(0, 6) || '其他';
   const cleanDetail = o => ({
     desc: String(o.desc || '').trim().slice(0, 80),
@@ -883,13 +885,19 @@ ${catRule()}
   const DETAIL_SCHEMA = {
     desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, color:{type:'STRING'}
   };
-  const ITEM_SCHEMA = {name:{type:'STRING'}, emoji:{type:'STRING'}, ...DETAIL_SCHEMA};
+  const ITEM_SCHEMA = {name:{type:'STRING'}, emoji:{type:'STRING'}, proper:{type:'BOOLEAN'}, ...DETAIL_SCHEMA};
   const NAME_LIMIT = 6;
-  const NAME_RULE = `- name：一個常見、具體、在字典或百科查得到的名詞（物品、自然現象、生物、地點、人物、作品等）。使用繁體中文（台灣用語）。2 到 4 個字最好，最多 ${NAME_LIMIT} 個字。
+  const NAME_RULE = `- name：一個常見、具體、在字典或百科查得到的名詞（物品、自然現象、生物、地點、人物、作品等）。使用繁體中文（台灣用語）。2 到 4 個字最好，一般最多 ${NAME_LIMIT} 個字。
+  只有「在網路上明確搜尋得到的專有名詞」可以超過 ${NAME_LIMIT} 個字，例如角色名、作品名、真實存在的東西或地方；而且不能跟政治有關。
   不要自己發明詞，不要用「形容詞＋名詞」拼湊（例如「憤怒的火」「魔法水晶球」），不要解釋、不要標點。
+- proper：name 如果是網路上查得到的專有名詞（角色、作品、真實存在的特定東西）就是 true，一般名詞是 false。
 - emoji：一個最貼切的 emoji。`;
 
   const COMBINE_SCHEMA = {ok:{type:'BOOLEAN'}, ...ITEM_SCHEMA};
+  const OPTIONAL = new Set(['proper']);  // AI 忘了回也沒關係的欄位
+  const isTrue = v => v === true || String(v).toLowerCase() === 'true';
+  // 算字數：中文一個字算一個，英文一個單字算一個
+  const nameLen = n => (n.match(/[^\x00-\x7F]/g) || []).length + (n.match(/[A-Za-z0-9]+/g) || []).length;
   const isFail = o => o.ok === false || String(o.ok).toLowerCase() === 'false' || !String(o.name || '').trim();
   function againRule(avoid){
     if (!avoid || !avoid.length) return '';
@@ -911,9 +919,9 @@ ${againRule(avoid)}${DETAIL_RULES()}`;
     let out = await ask(prompt, COMBINE_SCHEMA);
     if (isFail(out)) return {fail:true};
     let name = cleanName(out.name);
-    // 名字太長：請 AI 再短一點（只重問一次）
-    if (name.length > NAME_LIMIT){
-      out = await ask(`${prompt}\n\n注意：你上次回答「${name}」太長了，名字一定要在 ${NAME_LIMIT} 個字以內。`, COMBINE_SCHEMA);
+    // 名字太長又不是專有名詞：請 AI 再短一點（只重問一次）
+    if (nameLen(name) > NAME_LIMIT && !isTrue(out.proper)){
+      out = await ask(`${prompt}\n\n注意：你上次回答「${name}」超過 ${NAME_LIMIT} 個字又不是專有名詞。請改成 ${NAME_LIMIT} 個字以內，或換成網路上查得到、跟政治無關的專有名詞。`, COMBINE_SCHEMA);
       if (isFail(out)) return {fail:true};
       name = cleanName(out.name);
     }
@@ -1086,7 +1094,7 @@ ${DETAIL_RULES()}`;
       const text = data?.choices?.[0]?.message?.content || '';
       try {
         const out = extractJSON(text);
-        if (Object.keys(props).every(k => k in out)) return out;
+        if (Object.keys(props).every(k => k in out || OPTIONAL.has(k))) return out;
       } catch(e){}
       lastErr = new Error('OpenRouter 回了看不懂的東西');  // 格式不對：換下一個
     }
@@ -1133,7 +1141,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     if (!manualPending) return;
     try {
       const out = extractJSON($('m-answer').value);
-      const miss = Object.keys(manualPending.props).filter(k => !(k in out));
+      const miss = Object.keys(manualPending.props).filter(k => !(k in out) && !OPTIONAL.has(k));
       if (miss.length) throw new Error(`回答裡少了：${miss.join('、')}，請 AI 照格式重回一次`);
       const p = manualPending; manualPending = null;
       $('manual').classList.remove('open');
