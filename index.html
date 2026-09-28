@@ -118,6 +118,12 @@
   #reorg h3{font-size:.92rem;color:var(--accent);margin:.9rem 0 .3rem}
   .rg-opt{display:flex;gap:.5rem;align-items:flex-start;font-size:.9rem;line-height:1.6;margin:.5rem 0;cursor:pointer}
   .rg-opt input,.rg-row input{accent-color:var(--accent);margin-top:.3rem}
+  #selbar{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;padding:.4rem .5rem;border:1px dashed var(--accent);border-radius:.7rem;font-size:.8rem;color:var(--muted)}
+  #selbar[hidden]{display:none}
+  .chipbtn:disabled{opacity:.45;cursor:default}
+  .litem.pick{opacity:.55}
+  .litem.picked{opacity:1;outline:2px solid var(--accent);outline-offset:2px}
+  .litem.picked::before{content:'✓';color:var(--accent);font-weight:700;margin-right:.1rem}
   .pk-row{width:100%;text-align:left;background:var(--bg);color:var(--text);font-family:inherit;justify-content:space-between}
   .pk-row:hover{border-color:var(--accent)}
   #rg-list,.rg-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
@@ -352,10 +358,18 @@
       <input id="search" type="search" placeholder="搜尋名稱或介紹……" autocomplete="off">
       <div class="row">
         <button class="chipbtn" id="f-unext" title="只看還沒萃取過的東西">未萃取</button>
-        <button class="chipbtn" id="btn-addall" title="把目前清單上看到的東西，一次加進某個收藏夾">★ 全部加入收藏夾</button>
+        <button class="chipbtn" id="btn-select" title="勾選好幾樣，一次加進收藏夾">☑ 多選</button>
         <div style="flex:1"></div>
         <button class="chipbtn" id="btn-catorder" title="自己排分類的順序">排序分類</button>
         <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、合併分類、檢查分類">整理</button>
+      </div>
+      <div id="selbar" hidden>
+        <span id="sel-count"></span>
+        <div style="flex:1"></div>
+        <button class="chipbtn" id="sel-all">全選</button>
+        <button class="chipbtn" id="sel-none">全不選</button>
+        <button class="chipbtn on" id="sel-fav">★ 加入收藏夾</button>
+        <button class="chipbtn" id="sel-done">完成</button>
       </div>
       <div id="favtabs" class="tabrow"></div>
       <div id="cattabs" class="tabrow"></div>
@@ -571,7 +585,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.34';
+  const VERSION = '0.0.35';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -731,7 +745,7 @@
   function pressable(el, name){
     el.addEventListener('pointerdown', e => {
       if (e.button > 0) return;
-      const p = press = {name, sx:e.clientX, sy:e.clientY, held:false};
+      const p = press = {name, sx:e.clientX, sy:e.clientY, held:false, inList:el.classList.contains('litem')};
       p.timer = setTimeout(() => { if (press === p){ p.held = true; press = null; openCard(name); } }, HOLD_MS);
     });
     el.addEventListener('contextmenu', e => { e.preventDefault(); if (press){ clearTimeout(press.timer); press = null; } openCard(name); });
@@ -743,7 +757,8 @@
     if (!press) return;
     clearTimeout(press.timer);
     const p = press; press = null;
-    addToSlot(p.name);
+    if (selectMode && p.inList) toggleSelect(p.name);
+    else addToSlot(p.name);
   });
   window.addEventListener('pointercancel', () => { if (press){ clearTimeout(press.timer); press = null; } });
   list.addEventListener('scroll', () => { if (press){ clearTimeout(press.timer); press = null; } });
@@ -822,7 +837,7 @@
     box.append(add);
   }
   // 一鍵把一批東西加進某個收藏夾（或新收藏夾）
-  function pickFolder(names, desc){
+  function pickFolder(names, desc, after){
     names = [...new Set(names)].filter(n => save.items[n]);
     if (!names.length){ toast('沒有東西可以加', true); return; }
     $('pk-desc').textContent = desc || `把這 ${names.length} 樣加進哪個收藏夾？`;
@@ -833,6 +848,7 @@
       persist(); renderList(); $('reorg').classList.remove('open');
       const added = f.items.length - before;
       toast(added ? `加進「${f.name}」了（${added} 樣）` : `都已經在「${f.name}」裡了`);
+      if (after) after();
     };
     for (const f of save.folders){
       const inAll = names.every(n => f.items.includes(n));
@@ -1007,6 +1023,7 @@
         list.append(h);
       }
       const el = chip('litem', n);
+      if (selectMode){ el.classList.add('pick'); if (selected.has(n)) el.classList.add('picked'); }
       if (foldersOf(n).length){ const f = document.createElement('span'); f.className = 'fav'; f.textContent = '★'; el.append(f); }
       if (it.t > recent){ const s = document.createElement('span'); s.className = 'star'; s.title = '最近發現'; el.append(s); }
       list.append(el);
@@ -1015,10 +1032,30 @@
   $('search').addEventListener('input', renderList);
   $('sort').addEventListener('change', () => { setPref('sort', $('sort').value); renderList(); });
 
-  $('btn-addall').addEventListener('click', () => {
-    const filtered = shownNames.length !== Object.keys(save.items).length;
-    pickFolder(shownNames, `把清單上${filtered ? '目前篩選出來' : '全部'}的 ${shownNames.length} 樣，一次加進哪個收藏夾？`);
-  });
+  // ---------- 多選 ----------
+  // 多選模式：點清單裡的東西是勾選，勾好一次加進收藏夾；全選只選「目前清單看得到的」
+  let selectMode = false;
+  const selected = new Set();
+  function setSelectMode(on){
+    selectMode = on; if (!on) selected.clear();
+    $('btn-select').classList.toggle('on', on);
+    $('selbar').hidden = !on;
+    updateSelbar(); renderList();
+  }
+  function toggleSelect(n){
+    if (selected.has(n)) selected.delete(n); else selected.add(n);
+    updateSelbar(); renderList();
+  }
+  function updateSelbar(){
+    for (const n of [...selected]) if (!save.items[n]) selected.delete(n);
+    $('sel-count').textContent = `已選 ${selected.size} 樣（點東西勾選）`;
+    $('sel-fav').disabled = !selected.size;
+  }
+  $('btn-select').addEventListener('click', () => setSelectMode(!selectMode));
+  $('sel-done').addEventListener('click', () => setSelectMode(false));
+  $('sel-all').addEventListener('click', () => { shownNames.forEach(n => selected.add(n)); updateSelbar(); renderList(); });
+  $('sel-none').addEventListener('click', () => { selected.clear(); updateSelbar(); renderList(); });
+  $('sel-fav').addEventListener('click', () => { if (selected.size) pickFolder([...selected], `把勾選的 ${selected.size} 樣加進哪個收藏夾？`, () => setSelectMode(false)); });
   $('f-unext').addEventListener('click', () => { filterUnext = !filterUnext; $('f-unext').classList.toggle('on', filterUnext); renderList(); list.scrollTop = 0; });
 
   // ---------- 槽位 ----------
