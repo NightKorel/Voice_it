@@ -62,10 +62,10 @@
   .item .em{font-size:1.15em;line-height:1}
   .item:hover{border-color:var(--accent)}
   .item.dragging{cursor:grabbing;z-index:10;box-shadow:var(--lift);transform:scale(1.04)}
-  .item.target{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 3px var(--accent-soft)}
+  .item.target{border-color:var(--accent);outline:3px solid var(--accent);outline-offset:2px}
   .item.busy{animation:pulse 1.1s ease-in-out infinite;cursor:wait;color:var(--muted)}
   .item.pop{animation:pop .4s ease-out}
-  .item.fresh{border-color:var(--accent);box-shadow:0 0 18px var(--accent-soft)}
+  .item.fresh{outline:2px solid var(--accent);outline-offset:3px;box-shadow:0 0 22px var(--accent)!important}
   @keyframes pulse{50%{opacity:.55}}
   @keyframes pop{0%{transform:scale(.5);opacity:0}65%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
 
@@ -129,6 +129,40 @@
     .btn{padding:.4rem .7rem;font-size:.82rem}
     #hint .big{font-size:2rem}
   }
+  .litem{-webkit-touch-callout:none;touch-action:pan-y}
+  .item{-webkit-touch-callout:none}
+  .litem .fav{font-size:.75em;opacity:.85}
+  .group{width:100%;font-size:.78rem;color:var(--muted);margin:.5rem 0 .1rem;letter-spacing:.05em}
+  .group:first-child{margin-top:0}
+  .empty{color:var(--muted);font-size:.88rem;padding:1rem .3rem;line-height:1.7}
+  .chipbtn{border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:.5rem;padding:.25rem .6rem;
+    font-size:.82rem;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .chipbtn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+
+  /* 卡片 */
+  #card{position:fixed;inset:0;background:var(--overlay);display:none;align-items:center;justify-content:center;z-index:45;padding:1rem;
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  #card.open{display:flex}
+  .cbox{background:var(--panel);border:1px solid var(--line);border-radius:1.1rem;width:100%;max-width:22rem;overflow:hidden;
+    box-shadow:var(--lift);max-height:90vh;overflow-y:auto;-webkit-user-select:text;user-select:text}
+  .cbox.pop{animation:pop .3s ease-out}
+  .band{height:8rem;display:flex;align-items:center;justify-content:center;background:var(--chip);border-bottom:1px solid var(--line)}
+  #c-emoji{font-size:4rem;line-height:1;filter:drop-shadow(0 4px 8px rgba(0,0,0,.25))}
+  .cbody{padding:1rem 1.1rem 1.1rem}
+  .ctitle{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+  .ctitle h2{margin:0;font-size:1.35rem}
+  .tag{font-size:.75rem;border:1px solid var(--line);border-radius:1rem;padding:.1rem .55rem;color:var(--muted)}
+  .rar{font-size:.85rem;color:var(--accent);margin:.35rem 0 .2rem}
+  .rar .dots{letter-spacing:.12em}
+  #c-desc{font-size:.95rem;line-height:1.75;margin:.6rem 0 .8rem}
+  #c-desc.muted{color:var(--muted);font-size:.85rem}
+  .meta{font-size:.85rem;color:var(--muted);margin:.3rem 0;line-height:1.8}
+  .meta.small{font-size:.75rem}
+  .meta:empty{display:none}
+  .clink{color:var(--text);cursor:pointer;border-bottom:1px dashed var(--muted)}
+  .clink:hover{color:var(--accent);border-color:var(--accent)}
+  .cbox .actions{display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap}
+  #c-fav.on{color:var(--accent);border-color:var(--accent)}
   :root[data-motion="off"] *{animation:none!important;transition:none!important}
 </style>
 </head>
@@ -141,7 +175,7 @@
       <button class="btn" id="btn-clear">清空桌面</button>
       <button class="btn" id="btn-settings">設定</button>
     </div>
-    <div id="hint"><div class="big">1+1=?</div>把清單裡的東西放到桌面上，<br>再把兩個疊在一起，看看會變出什麼。</div>
+    <div id="hint"><div class="big">1+1=?</div>把清單裡的東西放到桌面上，<br>再把兩個疊在一起，看看會變出什麼。<br>長按任何東西可以看它的卡片。</div>
   </div>
   <div id="side">
     <div id="side-head">
@@ -152,15 +186,42 @@
           <option value="time">發現順序</option>
           <option value="new">最新在前</option>
           <option value="name">名稱</option>
+          <option value="rareHigh">稀有度：高到低</option>
+          <option value="rareLow">稀有度：低到高</option>
+          <option value="cat">依分類</option>
         </select>
       </div>
-      <input id="search" type="search" placeholder="搜尋你的發現……" autocomplete="off">
+      <input id="search" type="search" placeholder="搜尋名稱或介紹……" autocomplete="off">
+      <div class="row">
+        <button class="chipbtn" id="f-fav">★ 收藏</button>
+        <select id="cat" class="sel" style="flex:1"></select>
+      </div>
     </div>
     <div id="list"></div>
   </div>
 </div>
 
 <div id="toast"></div>
+
+<div id="card">
+  <div class="cbox" id="card-box">
+    <div class="band" id="c-band"><span id="c-emoji"></span></div>
+    <div class="cbody">
+      <div class="ctitle"><h2 id="c-name"></h2><span class="tag" id="c-cat"></span></div>
+      <div class="rar" id="c-rarity"></div>
+      <p id="c-desc"></p>
+      <div class="meta" id="c-from"></div>
+      <div class="meta" id="c-makes"></div>
+      <div class="meta small" id="c-time"></div>
+      <div class="actions">
+        <button class="btn" id="c-fav">☆ 收藏</button>
+        <button class="btn" id="c-drop">放到桌面</button>
+        <div style="flex:1"></div>
+        <button class="btn" id="c-close">關閉</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="modal">
   <div class="box">
@@ -216,8 +277,13 @@
   const MODEL_KEY = 'wuxian_gemini_model';
   const AUTO_KEY = 'wuxian_gemini_auto';
   const API = 'https://generativelanguage.googleapis.com/v1beta';
+  const CATS = ['自然','元素','生物','植物','食物','物品','工具','建築地點','人物角色','神話奇幻','科技','文化娛樂','概念情緒','天文宇宙','其他'];
+  const RARITY = ['常見','普通','少見','稀有','傳說'];
   const BASE = [
-    {name:'水', emoji:'💧'}, {name:'火', emoji:'🔥'}, {name:'風', emoji:'🌬️'}, {name:'土', emoji:'🌍'}
+    {name:'水', emoji:'💧', desc:'萬物生命的源頭，會流動、會蒸發，也能把火澆熄。', rarity:1, cat:'自然', color:'#3d8bd4'},
+    {name:'火', emoji:'🔥', desc:'會發光發熱的燃燒現象，人類的文明從學會用火開始。', rarity:1, cat:'自然', color:'#e2582a'},
+    {name:'風', emoji:'🌬️', desc:'流動的空氣，看不見，卻吹得動雲、船帆和樹葉。', rarity:1, cat:'自然', color:'#8fc3d6'},
+    {name:'土', emoji:'🌍', desc:'承載萬物的大地，種子在這裡發芽，房子在這裡蓋起。', rarity:1, cat:'自然', color:'#8b6a42'}
   ];
 
   const store = {
@@ -226,17 +292,26 @@
     del(k){ try { localStorage.removeItem(k); } catch(e){} }
   };
 
-  // items: name -> {emoji, t（發現時間）, from:[a,b]}；recipes: "a+b" -> name
+  // items: name -> {emoji, t（發現時間）, from:[a,b], desc, rarity(1-5), cat, color, fav}
+  // recipes: "a+b" -> name
   let save = load();
   function fresh(){
     const items = {};
     BASE.forEach((b,i) => items[b.name] = {emoji:b.emoji, t:i});
-    return {items, recipes:{}};
+    return fillBase({items, recipes:{}});
+  }
+  // 基本四元素的介紹是寫好的，舊存檔也補上
+  function fillBase(s){
+    for (const b of BASE){
+      const it = s.items[b.name];
+      if (it && !it.desc) Object.assign(it, {desc:b.desc, rarity:b.rarity, cat:b.cat, color:b.color});
+    }
+    return s;
   }
   function load(){
     try {
       const s = JSON.parse(store.get(SAVE_KEY));
-      if (s && s.items && s.recipes) return s;
+      if (s && s.items && s.recipes) return fillBase(s);
     } catch(e){}
     return fresh();
   }
@@ -257,43 +332,110 @@
     toast._t = setTimeout(() => t.className = err ? 'err' : '', err ? 4000 : 2200);
   }
 
+  // ---------- 顏色：色相照東西本身，稀有度越高顏色越深 ----------
+  function hexToHsl(hex){
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    let r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r,g,b), mn = Math.min(r,g,b), l = (mx + mn) / 2;
+    let h = 0, s = 0;
+    if (mx !== mn){
+      const d = mx - mn;
+      s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+      h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      h *= 60;
+    }
+    return {h, s:s * 100};
+  }
+  function paint(el, it){
+    const c = it && hexToHsl(it.color);
+    if (!c){ el.style.background = el.style.color = el.style.borderColor = el.style.boxShadow = ''; return; }
+    const r = Math.min(5, Math.max(1, it.rarity || 1));
+    const L = 76 - (r - 1) * 12.5;                 // 常見 76% → 傳說 26%
+    const S = Math.min(85, c.s * (0.5 + r * 0.1));  // 越稀有越飽和
+    el.style.background = `hsl(${c.h} ${S}% ${L}%)`;
+    el.style.borderColor = `hsl(${c.h} ${S}% ${Math.max(12, L - 14)}%)`;
+    el.style.color = L > 52 ? '#1d1b18' : '#f4efe6';
+    el.style.boxShadow = r >= 5 ? `0 0 12px hsl(${c.h} ${Math.max(S, 50)}% 45% / .55)` : '';
+  }
+
   // ---------- 清單 ----------
+  let filterFav = false;
+  function renderCatFilter(){
+    const sel = $('cat'), cur = sel.value;
+    const used = new Set(Object.values(save.items).map(it => it.cat).filter(Boolean));
+    sel.textContent = '';
+    const all = document.createElement('option'); all.value = ''; all.textContent = '全部分類'; sel.append(all);
+    for (const c of CATS) if (used.has(c)){ const o = document.createElement('option'); o.value = o.textContent = c; sel.append(o); }
+    sel.value = used.has(cur) ? cur : '';
+  }
   function renderList(){
     const q = $('search').value.trim().toLowerCase();
     let names = Object.keys(save.items);
+    const favCount = names.filter(n => save.items[n].fav).length;
     $('count').innerHTML = `已發現 <b>${names.length}</b> 樣`;
-    if (q) names = names.filter(n => n.toLowerCase().includes(q));
-    const mode = $('sort').value;
-    if (mode === 'name') names.sort((a,b) => a.localeCompare(b, 'zh-Hant'));
-    else names.sort((a,b) => save.items[a].t - save.items[b].t);
-    if (mode === 'new') names.reverse();
+    $('f-fav').textContent = `★ 收藏 ${favCount}`;
+    renderCatFilter();
+    const cat = $('cat').value;
+    if (q) names = names.filter(n => n.toLowerCase().includes(q) || (save.items[n].desc || '').toLowerCase().includes(q));
+    if (filterFav) names = names.filter(n => save.items[n].fav);
+    if (cat) names = names.filter(n => save.items[n].cat === cat);
+    const I = save.items, mode = $('sort').value;
+    const byTime = (a,b) => I[a].t - I[b].t;
+    const rar = n => I[n].rarity || 0;
+    const sorters = {
+      time: byTime,
+      new: (a,b) => byTime(b,a),
+      name: (a,b) => a.localeCompare(b, 'zh-Hant'),
+      rareHigh: (a,b) => rar(b) - rar(a) || byTime(a,b),
+      rareLow: (a,b) => (rar(a) || 9) - (rar(b) || 9) || byTime(a,b),
+      cat: (a,b) => ((CATS.indexOf(I[a].cat) + 1) || 99) - ((CATS.indexOf(I[b].cat) + 1) || 99) || byTime(a,b)
+    };
+    names.sort(sorters[mode] || byTime);
     list.textContent = '';
+    if (!names.length){
+      const e = document.createElement('div'); e.className = 'empty';
+      e.textContent = filterFav ? '還沒有收藏。長按東西打開卡片，就能收藏。' : '找不到符合的東西';
+      list.append(e); return;
+    }
     const recent = Date.now() - 10 * 60 * 1000;
+    let lastCat = null;
     for (const n of names){
-      const it = save.items[n];
+      const it = I[n];
+      if (mode === 'cat' && it.cat !== lastCat){
+        lastCat = it.cat;
+        const h = document.createElement('div'); h.className = 'group'; h.textContent = it.cat || '未分類';
+        list.append(h);
+      }
       const el = document.createElement('div');
       el.className = 'litem';
       const em = document.createElement('span'); em.textContent = it.emoji;
       const tx = document.createElement('span'); tx.textContent = n;
       el.append(em, tx);
+      if (it.fav){ const f = document.createElement('span'); f.className = 'fav'; f.textContent = '★'; el.append(f); }
       if (it.t > recent){ const s = document.createElement('span'); s.className = 'star'; s.title = '最近發現'; el.append(s); }
-      el.addEventListener('pointerdown', e => startListDrag(e, n));
+      paint(el, it);
+      el.addEventListener('pointerdown', e => startListPress(e, n, el));
+      el.addEventListener('contextmenu', e => { e.preventDefault(); openCard(n); });
       list.append(el);
     }
   }
   $('search').addEventListener('input', renderList);
   $('sort').addEventListener('change', renderList);
+  $('cat').addEventListener('change', renderList);
+  $('f-fav').addEventListener('click', () => { filterFav = !filterFav; $('f-fav').classList.toggle('on', filterFav); renderList(); });
 
   // ---------- 桌面上的東西 ----------
   function makeItem(name, x, y){
-    const it = save.items[name] || {emoji:'❓'};
     const el = document.createElement('div');
     el.className = 'item';
     el.dataset.name = name;
-    setItemLabel(el, it.emoji, name);
+    setItemLabel(el, name);
     board.append(el);
     place(el, x, y);
     el.addEventListener('pointerdown', e => startBoardDrag(e, el));
+    el.addEventListener('contextmenu', e => { e.preventDefault(); if (!el.classList.contains('busy')) openCard(el.dataset.name); });
     el.addEventListener('dblclick', () => {
       const r = el.getBoundingClientRect(), b = board.getBoundingClientRect();
       makeItem(el.dataset.name, r.left - b.left + 20, r.top - b.top + 20);
@@ -301,11 +443,16 @@
     updateHint();
     return el;
   }
-  function setItemLabel(el, emoji, name){
+  function setItemLabel(el, name, busy){
+    const it = busy ? null : save.items[name];
     el.textContent = '';
-    const em = document.createElement('span'); em.className = 'em'; em.textContent = emoji;
-    const tx = document.createElement('span'); tx.textContent = name;
+    const em = document.createElement('span'); em.className = 'em'; em.textContent = busy ? '⏳' : (it ? it.emoji : '❓');
+    const tx = document.createElement('span'); tx.textContent = busy ? '煉製中……' : name;
     el.append(em, tx);
+    paint(el, it);
+  }
+  function refreshItems(name){
+    board.querySelectorAll('.item').forEach(el => { if (el.dataset.name === name && !el.classList.contains('busy')) setItemLabel(el, name); });
   }
   function place(el, x, y){
     const b = board.getBoundingClientRect();
@@ -313,6 +460,11 @@
     x = Math.max(0, Math.min(b.width - w, x));
     y = Math.max(44, Math.min(b.height - h, y));
     el.style.left = x + 'px'; el.style.top = y + 'px';
+  }
+  function dropNearCenter(name){
+    const b = board.getBoundingClientRect();
+    const el = makeItem(name, b.width/2 - 40 + (Math.random()*120 - 60), b.height/2 - 20 + (Math.random()*100 - 50));
+    el.classList.add('pop');
   }
   function updateHint(){ hint.style.display = board.querySelector('.item') ? 'none' : 'flex'; }
 
@@ -332,10 +484,13 @@
     return best;
   }
 
-  // ---------- 拖拉 ----------
-  let drag = null;
+  // ---------- 拖拉與長按 ----------
+  const HOLD_MS = 500, MOVE_TOL = 8;
+  let drag = null;   // 正在拖的桌面東西
+  let press = null;  // 清單上按住、還沒決定是點、拖還是長按
   function beginDrag(e, el, offX, offY){
-    drag = {el, offX, offY, target:null};
+    drag = {el, offX, offY, target:null, sx:e.clientX, sy:e.clientY, moved:false,
+      ox:parseFloat(el.style.left), oy:parseFloat(el.style.top), timer:null};
     el.classList.add('dragging');
     try { el.setPointerCapture(e.pointerId); } catch(_){}
   }
@@ -344,36 +499,48 @@
     e.preventDefault();
     const r = el.getBoundingClientRect();
     beginDrag(e, el, e.clientX - r.left, e.clientY - r.top);
+    const d = drag;
+    d.timer = setTimeout(() => {
+      if (drag !== d || d.moved) return;
+      endDrag();
+      openCard(el.dataset.name);
+    }, HOLD_MS);
   }
-  function startListDrag(e, name){
+  function endDrag(){
+    if (!drag) return;
+    clearTimeout(drag.timer);
+    drag.el.classList.remove('dragging');
+    if (drag.target) drag.target.classList.remove('target');
+    drag = null;
+  }
+  function startListPress(e, name, src){
     if (e.button > 0) return;
-    const b = board.getBoundingClientRect();
-    if (e.pointerType !== 'mouse'){
-      // 手機：點一下就放到桌面中間附近（避免跟清單捲動打架）
-      const src = e.currentTarget;
-      const sx = e.clientX, sy = e.clientY;
-      const cancel = () => { src.removeEventListener('pointerup', up); src.removeEventListener('pointercancel', cancel); };
-      src.addEventListener('pointercancel', cancel);
-      const up = ev => {
-        cancel();
-        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 10) return;
-        const x = b.width/2 - 40 + (Math.random()*120 - 60);
-        const y = b.height/2 - 20 + (Math.random()*100 - 50);
-        const el = makeItem(name, x, y);
-        el.classList.add('pop');
-      };
-      src.addEventListener('pointerup', up);
-      return;
-    }
-    e.preventDefault();
-    const el = makeItem(name, e.clientX - b.left - 30, e.clientY - b.top - 18);
-    const r = el.getBoundingClientRect();
-    beginDrag(e, el, e.clientX - r.left, e.clientY - r.top);
-    el.style.left = (e.clientX - b.left - drag.offX) + 'px';
-    el.style.top = (e.clientY - b.top - drag.offY) + 'px';
+    if (e.pointerType === 'mouse') e.preventDefault();
+    press = {name, src, sx:e.clientX, sy:e.clientY, mouse:e.pointerType === 'mouse', id:e.pointerId};
+    const p = press;
+    p.timer = setTimeout(() => { if (press === p){ press = null; openCard(name); } }, HOLD_MS);
   }
   window.addEventListener('pointermove', e => {
+    if (press){
+      if (Math.hypot(e.clientX - press.sx, e.clientY - press.sy) > MOVE_TOL){
+        clearTimeout(press.timer);
+        const p = press; press = null;
+        // 滑鼠：拖出一個到桌面；手指：當作捲動清單
+        if (p.mouse){
+          const b = board.getBoundingClientRect();
+          const el = makeItem(p.name, e.clientX - b.left - 30, e.clientY - b.top - 18);
+          // 抓在東西的左邊中間（剛生出來時可能被夾在桌面邊緣，不能用它的位置算）
+          beginDrag(e, el, 30, el.offsetHeight / 2);
+          drag.moved = true;
+          el.style.left = (e.clientX - b.left - 30) + 'px';
+          el.style.top = (e.clientY - b.top - el.offsetHeight / 2) + 'px';
+        }
+      }
+      return;
+    }
     if (!drag) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) <= MOVE_TOL) return;
+    drag.moved = true;
     const b = board.getBoundingClientRect();
     drag.el.style.left = (e.clientX - b.left - drag.offX) + 'px';
     drag.el.style.top = (e.clientY - b.top - drag.offY) + 'px';
@@ -385,11 +552,17 @@
     }
   });
   window.addEventListener('pointerup', e => {
+    if (press){
+      // 短按清單＝放一個到桌面
+      clearTimeout(press.timer);
+      const p = press; press = null;
+      dropNearCenter(p.name);
+      return;
+    }
     if (!drag) return;
-    const {el, target} = drag;
-    drag = null;
-    el.classList.remove('dragging');
-    if (target) target.classList.remove('target');
+    const {el, target, moved} = drag;
+    endDrag();
+    if (!moved) return;
     // 拖回清單上＝收掉
     const s = $('side').getBoundingClientRect();
     if (e.clientX >= s.left && e.clientX <= s.right && e.clientY >= s.top && e.clientY <= s.bottom){
@@ -399,13 +572,19 @@
     else place(el, parseFloat(el.style.left), parseFloat(el.style.top));
   });
   window.addEventListener('pointercancel', () => {
-    if (!drag) return;
-    drag.el.classList.remove('dragging');
-    if (drag.target) drag.target.classList.remove('target');
-    drag = null;
+    if (press){ clearTimeout(press.timer); press = null; }
+    endDrag();
   });
+  list.addEventListener('scroll', () => { if (press){ clearTimeout(press.timer); press = null; } });
 
   // ---------- 煉製 ----------
+  const cleanDetail = o => ({
+    desc: String(o.desc || '').trim().slice(0, 80),
+    rarity: Math.min(5, Math.max(1, Math.round(Number(o.rarity) || 1))),
+    cat: CATS.includes(o.category) ? o.category : '其他',
+    color: /^#[0-9a-f]{6}$/i.test(String(o.color || '').trim()) ? String(o.color).trim() : ''
+  });
+
   async function combine(a, b){
     const na = a.dataset.name, nb = b.dataset.name;
     const k = pairKey(na, nb);
@@ -421,24 +600,28 @@
 
     a.remove();
     b.classList.add('busy');
-    setItemLabel(b, '⏳', '煉製中……');
+    setItemLabel(b, nb, true);
     try {
       const res = await askGemini(na, nb);
-      let name = res.name, emoji = res.emoji;
+      const name = res.name;
       let isNew = false;
-      if (save.items[name]) emoji = save.items[name].emoji;
-      else { save.items[name] = {emoji, t:Date.now(), from:[na, nb]}; isNew = true; }
+      const old = save.items[name];
+      if (old){ if (!old.desc) Object.assign(old, cleanDetail(res)); }
+      else { save.items[name] = {emoji:res.emoji, t:Date.now(), from:[na, nb], ...cleanDetail(res)}; isNew = true; }
       save.recipes[k] = name;
       persist();
       b.remove();
       const el = makeItem(name, x, y); el.classList.add('pop');
-      if (isNew){ el.classList.add('fresh'); setTimeout(() => el.classList.remove('fresh'), 4000); }
-      if (isNew) toast(`新發現！${emoji} ${name}`);
+      if (isNew){
+        el.classList.add('fresh'); setTimeout(() => el.classList.remove('fresh'), 4000);
+        const r = save.items[name].rarity;
+        toast(`${r >= 4 ? RARITY[r-1] + '發現！' : '新發現！'}${res.emoji} ${name}`);
+      }
       renderList();
     } catch(err){
       // 失敗就把兩個東西放回去
       b.classList.remove('busy');
-      setItemLabel(b, save.items[nb].emoji, nb);
+      setItemLabel(b, nb);
       makeItem(na, x + 30, y + 30);
       toast(err.message || '煉製失敗，再試一次', true);
     }
@@ -492,26 +675,47 @@
     return new Error(`Gemini 出錯了（${resp.status}）${msg ? '：' + msg.slice(0, 80) : ''}`);
   }
 
+  const DETAIL_RULES =
+`- desc：一到兩句話的介紹，繁體中文，40 字以內，可以帶一點趣味。
+- rarity：1 到 5 的整數，代表這個東西在一般人心中有多偏門。1＝人人都知道的日常事物，2＝普通，3＝少見，4＝稀有偏門，5＝傳說級冷門或極度奇特抽象。
+- category：從這些選一個：${CATS.join('、')}。
+- color：這個東西最常讓人聯想到的顏色，用 #RRGGBB 格式。`;
+  const DETAIL_SCHEMA = {
+    desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING', enum:CATS}, color:{type:'STRING'}
+  };
+
   async function askGemini(a, b){
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家把「${a}」和「${b}」合在一起，請決定會產生什麼。
 規則：
-- 結果是一個名詞：可以是物品、自然現象、生物、地點、人物、概念、作品或流行文化。
-- 使用繁體中文（台灣用語）。專有名詞若中文少見，可保留原文。
-- 名稱簡短，最多 8 個字，不要解釋、不要標點。
+- name：結果是一個名詞，可以是物品、自然現象、生物、地點、人物、概念、作品或流行文化。使用繁體中文（台灣用語），專有名詞若中文少見可保留原文。最多 8 個字，不要解釋、不要標點。
 - 要讓人看得出跟「${a}」和「${b}」的關聯；可以有趣、有梗、出乎意料。
 - 盡量產生新的東西，避免直接回傳「${a}」或「${b}」本身。
-- 附上一個最貼切的 emoji。`;
-    try { return await generate(prompt, await getModel()); }
+- emoji：一個最貼切的 emoji。
+${DETAIL_RULES}`;
+    const out = await ask(prompt, {name:{type:'STRING'}, emoji:{type:'STRING'}, ...DETAIL_SCHEMA});
+    const name = String(out.name || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
+    if (!name) throw new Error('Gemini 沒想出東西，再試一次');
+    return {...out, name, emoji:String(out.emoji || '').trim().slice(0, 8) || '✨'};
+  }
+  // 舊的發現沒有介紹：打開卡片時補一次
+  async function askDetail(name){
+    const prompt =
+`你是「1+1=?」合成遊戲的圖鑑編輯。請為遊戲裡的「${name}」寫圖鑑資料。
+${DETAIL_RULES}`;
+    return cleanDetail(await ask(prompt, DETAIL_SCHEMA));
+  }
+  async function ask(prompt, props){
+    try { return await generate(prompt, props, await getModel()); }
     catch(e){
       // 模型被 Google 下架了：自動重新挑一次
-      if (e.notFound && !getOverride()) return await generate(prompt, await getModel(true));
+      if (e.notFound && !getOverride()) return await generate(prompt, props, await getModel(true));
       if (e.notFound) throw new Error('找不到你選的模型，到設定把模型改回「自動」');
       throw e;
     }
   }
 
-  async function generate(prompt, model){
+  async function generate(prompt, props, model){
     let resp;
     try {
       resp = await fetch(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
@@ -522,7 +726,7 @@
           generationConfig:{
             temperature:0.8,
             responseMimeType:'application/json',
-            responseSchema:{type:'OBJECT', properties:{name:{type:'STRING'}, emoji:{type:'STRING'}}, required:['name','emoji']}
+            responseSchema:{type:'OBJECT', properties:props, required:Object.keys(props)}
           }
         })
       });
@@ -532,13 +736,74 @@
     if (!resp.ok) throw await apiError(resp);
     const data = await resp.json();
     const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-    let out;
-    try { out = JSON.parse(text); } catch(e){ throw new Error('Gemini 回了看不懂的東西，再試一次'); }
-    let name = String(out.name || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
-    let emoji = String(out.emoji || '').trim().slice(0, 8) || '✨';
-    if (!name) throw new Error('Gemini 沒想出東西，再試一次');
-    return {name, emoji};
+    try { return JSON.parse(text); } catch(e){ throw new Error('Gemini 回了看不懂的東西，再試一次'); }
   }
+
+  // ---------- 卡片 ----------
+  let cardName = null;
+  function openCard(name){
+    const it = save.items[name];
+    if (!it) return;
+    cardName = name;
+    const box = $('card-box');
+    $('c-emoji').textContent = it.emoji;
+    $('c-name').textContent = name;
+    const c = hexToHsl(it.color);
+    const band = $('c-band');
+    if (c) paint(band, it); else { band.style.cssText = ''; }
+    // 稀有度
+    const rr = $('c-rarity'); rr.textContent = '';
+    if (it.rarity){
+      const dots = document.createElement('span'); dots.className = 'dots';
+      dots.textContent = '●'.repeat(it.rarity) + '○'.repeat(5 - it.rarity);
+      rr.append(dots, document.createTextNode(' ' + RARITY[it.rarity - 1]));
+    }
+    $('c-cat').textContent = it.cat || '';
+    $('c-cat').style.display = it.cat ? '' : 'none';
+    $('c-desc').textContent = it.desc || (getKey() ? '介紹生成中……' : '還沒有介紹（貼上鑰匙後打開卡片會自動補上）');
+    $('c-desc').classList.toggle('muted', !it.desc);
+    // 配方
+    const from = $('c-from'); from.textContent = '';
+    if (it.from){ from.append('由 '); from.append(link(it.from[0])); from.append(' ＋ '); from.append(link(it.from[1])); from.append(' 煉出'); }
+    else from.append('最初的元素');
+    const makes = Object.entries(save.recipes).filter(([k]) => k.split('+').includes(name)).map(([,v]) => v);
+    const uniq = [...new Set(makes)];
+    const mk = $('c-makes'); mk.textContent = '';
+    if (uniq.length){ mk.append('能煉出：'); uniq.forEach((n, i) => { if (i) mk.append('、'); mk.append(link(n)); }); }
+    $('c-time').textContent = it.t > 1e12 ? `發現於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
+    $('c-fav').textContent = it.fav ? '★ 已收藏' : '☆ 收藏';
+    $('c-fav').classList.toggle('on', !!it.fav);
+    $('card').classList.add('open');
+    box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
+    if (!it.desc && getKey() && !it._asking) fillDetail(name);
+  }
+  function link(n){
+    const a = document.createElement('span'); a.className = 'clink';
+    a.textContent = (save.items[n] ? save.items[n].emoji + ' ' : '') + n;
+    a.onclick = () => openCard(n);
+    return a;
+  }
+  async function fillDetail(name){
+    const it = save.items[name];
+    it._asking = true;
+    try {
+      const d = await askDetail(name);
+      Object.assign(it, d);
+      persist(); renderList(); refreshItems(name);
+      if (cardName === name && $('card').classList.contains('open')) openCard(name);
+    } catch(e){
+      if (cardName === name) { $('c-desc').textContent = '介紹生成失敗：' + e.message; }
+    } finally { delete it._asking; }
+  }
+  function closeCard(){ $('card').classList.remove('open'); cardName = null; }
+  $('card').addEventListener('click', e => { if (e.target.id === 'card') closeCard(); });
+  $('c-close').onclick = closeCard;
+  $('c-fav').onclick = () => {
+    const it = save.items[cardName]; if (!it) return;
+    it.fav = !it.fav; persist(); renderList(); openCard(cardName);
+  };
+  $('c-drop').onclick = () => { const n = cardName; closeCard(); dropNearCenter(n); };
+  window.addEventListener('keydown', e => { if (e.key === 'Escape'){ closeCard(); closeSettings(); } });
 
   // ---------- 設定 ----------
   function openSettings(msg){
@@ -604,7 +869,7 @@
     try {
       const s = JSON.parse(await f.text());
       if (!s.items || !s.recipes) throw 0;
-      save = s; persist(); renderList(); toast('存檔已匯入');
+      save = fillBase(s); persist(); renderList(); toast('存檔已匯入');
     } catch(_){ toast('這個檔案看起來不是存檔', true); }
   };
   $('btn-reset').onclick = () => {
@@ -636,6 +901,7 @@
   applyPrefs();
 
   // ---------- 開場 ----------
+  persist();
   renderList();
   updateHint();
   if (!getKey()) setTimeout(() => openSettings(), 300);
