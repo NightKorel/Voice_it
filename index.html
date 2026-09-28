@@ -351,6 +351,7 @@
         <button class="btn primary" id="btn-craft">合成</button>
         <button class="btn" id="btn-extract">萃取</button>
         <button class="btn" id="btn-clearslots">清空</button>
+        <button class="btn" id="btn-random" title="從清單目前看得到的東西裡，隨機抽兩或三樣放上來（可能重複）">🎲 隨機</button>
       </div>
       <div id="result">
         <div id="hint"><div class="big">1+1=?</div>點清單裡的東西放進槽位，放兩到三個就能合成。<br>只放一個可以萃取出更原始的東西。<br>長按任何東西可以看它的卡片。</div>
@@ -617,7 +618,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.39';
+  const VERSION = '0.0.40';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1178,6 +1179,7 @@
     $('btn-craft').disabled = busy || f < 2;
     $('btn-extract').disabled = busy || f !== 1;
     $('btn-clearslots').disabled = busy || f === 0;
+    $('btn-random').disabled = busy;
   }
   function addToSlot(name){
     if (busy) return;
@@ -1194,6 +1196,16 @@
     renderSlots();
   }));
   $('btn-clearslots').onclick = () => { slots.fill(null); renderSlots(); };
+  // 隨機：從清單「目前看得到的」東西裡抽兩或三樣（每格各抽各的，所以可能重複），換掉槽位裡原本的
+  $('btn-random').onclick = () => {
+    if (busy) return;
+    const pool = shownNames.length ? shownNames : Object.keys(save.items);
+    const n = Math.random() < .5 ? 2 : 3;
+    slots.fill(null);
+    for (let i = 0; i < n; i++) slots[i] = pool[Math.floor(Math.random() * pool.length)];
+    renderSlots();
+    document.querySelectorAll('.slot').forEach((el, i) => { if (slots[i]){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); } });
+  };
   function setBusy(b, msg){
     busy = b;
     renderSlots();
