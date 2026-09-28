@@ -668,7 +668,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.50';
+  const VERSION = '0.0.51';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2454,9 +2454,17 @@ ${lines}
     } catch(e){ toast(e.message, true); }
   };
 
-  const saveName = () => `1+1 存檔-${new Date().toISOString().slice(0,10)}.json`;
+  // 存檔檔名帶精確的本地時間（冒號不能當檔名，用 - 代替），例如「1+1 save 2026-09-28 19-51-03.json」
+  // 檔名只用英數：有些瀏覽器遇到中文檔名會把它改成「download」
+  const pad = n => String(n).padStart(2, '0');
+  const stamp = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+  let exportTime = new Date();
+  const saveName = () => `1+1 save ${stamp(exportTime)}.json`;
+  // 檔案裡也記下存檔時間，匯入或合併時看得到
+  const exportText = pretty => { exportTime = new Date(); return JSON.stringify({...save, exportedAt:exportTime.getTime()}, null, pretty ? 1 : 0); };
+  const timeText = t => { const d = new Date(t); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
   $('btn-export').onclick = () => {
-    const blob = new Blob([JSON.stringify(save, null, 1)], {type:'application/json'});
+    const blob = new Blob([exportText(true)], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = saveName();
@@ -2466,7 +2474,7 @@ ${lines}
   };
   // 分享：叫出手機／電腦的分享選單（LINE、Discord、存到雲端……）。有些系統不收 JSON 檔，就改用純文字類型送出，檔名一樣是 .json
   function shareFile(){
-    const text = JSON.stringify(save);
+    const text = exportText(false);
     for (const type of ['application/json', 'text/plain']){
       const f = new File([text], saveName(), {type});
       try { if (navigator.canShare && navigator.canShare({files:[f]})) return f; } catch(e){}
@@ -2492,7 +2500,9 @@ ${lines}
       if (!s || typeof s.items !== 'object' || typeof s.recipes !== 'object') throw 0;
     } catch(_){ toast('這個檔案看起來不是存檔', true); return; }
     if (fileMode === 'merge') return mergeFriend(s);
-    if (!confirm('匯入會把你現在的存檔整個換掉，確定嗎？\n\n（想保留自己的、只加朋友的新東西，請用「合併朋友的存檔」）')) return;
+    const when = s.exportedAt ? `\n\n這份存檔的時間：${timeText(s.exportedAt)}（${Object.keys(s.items).length} 樣東西）` : '';
+    if (!confirm(`匯入會把你現在的存檔整個換掉，確定嗎？${when}\n\n（想保留自己的、只加朋友的新東西，請用「合併朋友的存檔」）`)) return;
+    delete s.exportedAt;
     snapshot('匯入存檔');
     save = fillBase(s); persist(); last = null; slots.fill(null);
     renderList(); renderSlots(); renderResult(); toast('存檔已匯入');
@@ -2531,7 +2541,7 @@ ${lines}
     for (const k of newRecipes.filter(k => !tied(k))) recipeRows.push({k, cb:row($('fm-recipes'), recipeText(k))});
     $('fm-h-items').hidden = $('fm-items').hidden = !itemRows.length;
     $('fm-h-recipes').hidden = $('fm-recipes').hidden = !recipeRows.length;
-    $('fm-summary').textContent = `朋友的存檔裡有 ${newItems.length} 樣你沒有的東西、${newRecipes.length} 條你沒有的配方${conflicts ? `，另外有 ${conflicts} 條配方跟你的不一樣（一律保留你的）` : ''}。勾選想加入的：`;
+    $('fm-summary').textContent = `${raw.exportedAt ? `這份存檔的時間：${timeText(raw.exportedAt)}。` : ''}朋友的存檔裡有 ${newItems.length} 樣你沒有的東西、${newRecipes.length} 條你沒有的配方${conflicts ? `，另外有 ${conflicts} 條配方跟你的不一樣（一律保留你的）` : ''}。勾選想加入的：`;
     const all = v => [...itemRows, ...recipeRows].forEach(r => r.cb.checked = v);
     $('fm-all').onclick = () => all(true);
     $('fm-none').onclick = () => all(false);
