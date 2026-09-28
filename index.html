@@ -433,7 +433,8 @@
     <textarea id="m-answer" placeholder="貼上回答（有多餘的文字也沒關係，會自動抓裡面的 JSON）"></textarea>
     <p class="muted" id="m-err"></p>
     <div class="actions">
-      <button class="btn primary" id="m-ok">完成</button>
+      <button class="btn primary" id="m-pasteok" title="讀取剪貼簿裡 AI 的回答，直接完成">從剪貼簿貼上並完成</button>
+      <button class="btn" id="m-ok">完成</button>
       <button class="btn" id="m-cancel">取消</button>
     </div>
   </div>
@@ -517,7 +518,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.29';
+  const VERSION = '0.0.30';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1484,6 +1485,8 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     $('manual').classList.add('open');
     // 跳出來就自動複製；瀏覽器不允許（例如等 AI 等太久、或 iPhone 限制）時，就留給「複製問題」按鈕
     copyPrompt(true);
+    // 電腦上把游標放進回答框，回來直接 Ctrl＋V 就好（手機不放，免得跳出鍵盤）
+    if (canHover) setTimeout(() => $('m-answer').focus(), 50);
     return new Promise((resolve, reject) => { manualPending = {resolve, reject, props}; });
   }
   async function copyPrompt(auto){
@@ -1500,6 +1503,22 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     else if (!auto) toast('複製失敗，請在框框裡長按全選複製', true);
   }
   $('m-copy').onclick = () => copyPrompt(false);
+  // 一鍵貼上：讀剪貼簿（瀏覽器第一次會問你允不允許）→ 填進回答框 → 直接完成
+  $('m-pasteok').onclick = async () => {
+    let txt = '';
+    try { txt = await navigator.clipboard.readText(); }
+    catch(e){ $('m-err').textContent = '瀏覽器不讓網頁讀剪貼簿。請在下面的框框按 Ctrl＋V（手機長按選貼上），再按「完成」。'; $('m-answer').focus(); return; }
+    if (!txt.trim()){ $('m-err').textContent = '剪貼簿是空的，先去複製 AI 的回答'; return; }
+    if (txt.trim() === $('m-prompt').value.trim()){ $('m-err').textContent = '剪貼簿裡還是問題本身，先去複製 AI 的回答'; return; }
+    $('m-answer').value = txt;
+    $('m-ok').click();
+  };
+  // 視窗開著時，在任何地方按 Ctrl＋V 都會貼進回答框
+  document.addEventListener('paste', e => {
+    if (!$('manual').classList.contains('open') || e.target === $('m-answer')) return;
+    const txt = e.clipboardData && e.clipboardData.getData('text');
+    if (txt){ e.preventDefault(); $('m-answer').value = txt; $('m-answer').focus(); }
+  });
   $('m-ok').onclick = () => {
     if (!manualPending) return;
     try {
