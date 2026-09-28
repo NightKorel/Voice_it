@@ -370,7 +370,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.2';
+  const VERSION = '0.0.3';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -409,6 +409,11 @@
   }
   function fillBase(s){
     s.extracts = s.extracts || {};
+    // 合成出來的東西，萃取時直接拆回它的材料：補上反向萃取（還沒萃取過的才補）
+    for (const [k, v] of Object.entries(s.recipes)){
+      const r = v[0];
+      if (r && s.items[r] && !s.extracts[r]) s.extracts[r] = k.split('+');
+    }
     // 萃取出來的東西要合得回去：補上反向配方（這組還沒有結果時才補）
     for (const [src, parts] of Object.entries(s.extracts)){
       const k = [...parts].sort().join('+');
@@ -699,12 +704,13 @@
     const k = comboKey(names);
     // 合過的組合：永遠是同一個結果（不花次數）
     const known = (save.recipes[k] || []).find(n => save.items[n]);
-    if (known) return finish('combine', names, [known], []);
+    if (known){ recordExtract(known, names); return finish('combine', names, [known], []); }
     // 內建配方：直接給寫好的結果（不花次數）
     const sr = names.length === 2 && STARTER_MAP.get(k);
     if (sr){
       const isNew = addItem(sr, starterData(sr) || {}, {from:names});
       save.recipes[k] = [sr];
+      recordExtract(sr, names);
       return finish('combine', names, [sr], isNew ? [sr] : []);
     }
     if (!aiReady()) return;
@@ -713,6 +719,7 @@
       const res = await askCombine(names);
       const isNew = addItem(res.name, starterData(res.name) || {emoji:res.emoji, ...cleanDetail(res)}, {from:names});
       save.recipes[k] = [res.name];
+      recordExtract(res.name, names);
       finish('combine', names, [res.name], isNew ? [res.name] : []);
     } catch(e){
       setBusy(false); renderResult();
@@ -721,6 +728,10 @@
   }
 
   // ---------- 萃取 ----------
+  // 合成時順便記下反向萃取：A＋B＝C，之後萃取 C 直接得到 A、B（已經有萃取紀錄就不動）
+  function recordExtract(result, inputs){
+    if (!save.extracts[result]) save.extracts[result] = [...inputs];
+  }
   // 萃取出來的東西合回去，會變回原本的東西（這組已經有結果就不動，維持同一組同一結果）
   function linkBack(src, parts){
     const k = comboKey(parts);
@@ -764,6 +775,7 @@
         if (L.tried.includes(res.name)) throw new Error('AI 想了想，還是覺得一樣，再按一次試試');
         if (addItem(res.name, starterData(res.name) || {emoji:res.emoji, ...cleanDetail(res)}, {from:L.inputs})) fresh.push(res.name);
         save.recipes[comboKey(L.inputs)] = [res.name];  // 這組的答案換成新的；舊的東西還留在圖鑑裡
+        recordExtract(res.name, L.inputs);
         outputs = [res.name];
       } else {
         const parts = await askExtract(L.inputs[0], L.tried);
