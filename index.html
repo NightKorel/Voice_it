@@ -136,7 +136,7 @@
   #manual .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0}
   #manual label{font-size:.86rem;display:block;margin:.7rem 0 .3rem}
   /* 側欄（發現清單） */
-  #side{width:20rem;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+  #side{width:var(--side-w,50%);min-width:20rem;max-width:calc(100% - 24rem);border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
   #side-head{padding:.8rem .8rem .7rem;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:.55rem}
   #side-head .row{display:flex;gap:.5rem;align-items:center}
   #count{font-size:.82rem;color:var(--muted)}
@@ -189,12 +189,12 @@
   .seg button+button{border-left:1px solid var(--line)}
   .seg button.on{background:var(--accent);color:var(--on-accent);font-weight:600}
   input[type=range]{flex:1;accent-color:var(--accent)}
-  #scale-val{width:3rem;text-align:right;color:var(--muted);font-size:.85rem}
+  #scale-val,.rv{width:3rem;text-align:right;color:var(--muted);font-size:.85rem}
 
   /* 手機：清單移到下方 */
   @media (max-width:700px){
     #app{flex-direction:column}
-    #side{width:auto;height:42%;border-left:none;border-top:1px solid var(--line)}
+    #side{width:auto;min-width:0;max-width:none;height:42%;border-left:none;border-top:1px solid var(--line)}
     #logo{font-size:1.15rem}
     .btn{padding:.4rem .7rem;font-size:.82rem}
     #hint .big{font-size:2rem}
@@ -424,6 +424,9 @@
       <div class="seg" id="seg-theme"><button data-v="dark">深色</button><button data-v="light">柔和淺色</button></div></div>
     <div class="setrow"><span class="lbl">字體大小</span>
       <input type="range" id="scale" min="0.8" max="1.6" step="0.05"><span id="scale-val"></span></div>
+    <div class="setrow"><span class="lbl">清單寬度</span>
+      <input type="range" id="sidew" min="30" max="70" step="5"><span id="sidew-val" class="rv"></span></div>
+    <p class="muted">清單寬度只影響電腦版（左邊工作台、右邊清單）；手機一律是上下排。</p>
     <div class="setrow"><span class="lbl">字型</span>
       <div class="seg" id="seg-font"><button data-v="sans">黑體</button><button data-v="round">圓體</button><button data-v="serif">明體</button></div></div>
     <div class="setrow"><span class="lbl">動畫</span>
@@ -488,7 +491,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.16';
+  const VERSION = '0.0.17';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1902,7 +1905,7 @@ ${lines}
 
   // ---------- 外觀與 AI 來源 ----------
   const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-ai','ai']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini'};
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
   function applyPrefs(){
@@ -1912,6 +1915,9 @@ ${lines}
     r.dataset.motion = prefs.motion;
     r.style.setProperty('--scale', prefs.scale);
     $('scale').value = prefs.scale;
+    r.style.setProperty('--side-w', prefs.sidew + '%');
+    $('sidew').value = prefs.sidew;
+    $('sidew-val').textContent = prefs.sidew + '%';
     $('scale-val').textContent = Math.round(prefs.scale * 100) + '%';
     for (const [id, k] of SEGS)
       $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs[k]));
@@ -1923,6 +1929,7 @@ ${lines}
   for (const [id, k] of SEGS)
     $(id).addEventListener('click', e => { const v = e.target.dataset && e.target.dataset.v; if (v) setPref(k, v); });
   $('scale').addEventListener('input', e => setPref('scale', parseFloat(e.target.value)));
+  $('sidew').addEventListener('input', e => setPref('sidew', parseInt(e.target.value, 10)));
   $('aimode').onclick = () => {
     const order = ['gemini', 'openrouter', 'manual'];
     setPref('ai', order[(order.indexOf(prefs.ai) + 1) % order.length]);
