@@ -152,7 +152,15 @@
   .cbody{padding:1rem 1.1rem 1.1rem}
   .ctitle{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
   .ctitle h2{margin:0;font-size:1.35rem}
-  .tag{font-size:.75rem;border:1px solid var(--line);border-radius:1rem;padding:.1rem .55rem;color:var(--muted)}
+  .tag{font-size:.75rem;border:1px solid var(--line);border-radius:1rem;padding:.1rem .55rem;color:var(--muted);background:transparent;
+    cursor:pointer;font-family:inherit}
+  .tag:hover{border-color:var(--accent);color:var(--accent)}
+  #c-catedit{margin:.6rem 0 .2rem}
+  #c-catedit[hidden]{display:none}
+  #c-catin{width:100%;padding:.5rem .7rem;border-radius:.7rem;border:1px solid var(--line);background:var(--bg);color:var(--text);
+    font-size:.92rem;font-family:inherit;outline:none}
+  #c-catin:focus{border-color:var(--accent)}
+  #c-catedit .actions{margin-top:.5rem}
   .rar{font-size:.85rem;color:var(--accent);margin:.35rem 0 .2rem}
   .rar .dots{letter-spacing:.12em}
   #c-desc{font-size:.95rem;line-height:1.75;margin:.6rem 0 .8rem}
@@ -209,7 +217,16 @@
   <div class="cbox" id="card-box">
     <div class="band" id="c-band"><span id="c-emoji"></span></div>
     <div class="cbody">
-      <div class="ctitle"><h2 id="c-name"></h2><span class="tag" id="c-cat"></span></div>
+      <div class="ctitle"><h2 id="c-name"></h2><button class="tag" id="c-cat" title="自己改分類"></button></div>
+      <div id="c-catedit" hidden>
+        <input id="c-catin" list="catlist" placeholder="選一個分類，或打新的名字" autocomplete="off">
+        <datalist id="catlist"></datalist>
+        <div class="actions">
+          <button class="btn primary" id="c-catok">確定</button>
+          <button class="btn" id="c-catcancel">取消</button>
+          <button class="btn" id="c-catauto" hidden>交回給 AI 分類</button>
+        </div>
+      </div>
       <div class="rar" id="c-rarity"></div>
       <p id="c-desc"></p>
       <div class="meta" id="c-from"></div>
@@ -253,7 +270,10 @@
     <input id="key" type="password" placeholder="貼上你的鑰匙" autocomplete="off">
     <label for="model">模型（通常選「自動」就好）</label>
     <select id="model" class="sel" style="width:100%;padding:.5rem .6rem;font-size:.9rem"><option value="">自動（推薦）</option></select>
-    <p class="muted" id="model-note">自動會去問 Google 你的鑰匙能用哪些模型，挑免費次數最多的 Flash-Lite。Google 換新模型時也會自己跟上。合過的組合會記住，重複合不會花次數。</p>
+    <p class="muted" id="model-note">自動會去問 Google 你的鑰匙能用哪些模型，挑免費次數最多的 Flash-Lite。Google 換新模型時也會自己跟上。</p>
+    <div class="setrow"><span class="lbl">同一組合</span>
+      <div class="seg" id="seg-reroll"><button data-v="on">每次問 AI</button><button data-v="off">固定結果</button></div></div>
+    <p class="muted">每次問 AI：同樣兩個東西每次合都可能煉出不同的東西（也可能重複），每合一次花一次免費次數；問不到 AI 時會用以前煉過的結果。固定結果：合過的組合直接用以前的結果，不花次數。</p>
     <div class="actions">
       <button class="btn primary" id="btn-save">儲存鑰匙</button>
       <button class="btn" id="btn-test">測試鑰匙</button>
@@ -296,7 +316,8 @@
   };
 
   // items: name -> {emoji, t（發現時間）, from:[a,b], desc, rarity(1-5), cat, color, fav}
-  // recipes: "a+b" -> name
+  // recipes: "a+b" -> [name, ...]（同一組可以煉出不同東西）
+  // catLocked：玩家自己分的類，整理分類時不動
   let save = load();
   function fresh(){
     const items = {};
@@ -305,6 +326,7 @@
   }
   // 基本四元素的介紹是寫好的，舊存檔也補上
   function fillBase(s){
+    for (const k in s.recipes) if (!Array.isArray(s.recipes[k])) s.recipes[k] = [s.recipes[k]];
     for (const b of BASE){
       const it = s.items[b.name];
       if (it && !it.desc) Object.assign(it, {desc:b.desc, rarity:b.rarity, cat:b.cat, color:b.color});
@@ -602,25 +624,27 @@
     const k = pairKey(na, nb);
     const x = parseFloat(b.style.left), y = parseFloat(b.style.top);
 
-    const known = save.recipes[k];
-    if (known && save.items[known]){
+    const known = (save.recipes[k] || []).filter(n => save.items[n]);
+    const useKnown = () => {
+      const n = known[Math.floor(Math.random() * known.length)];
       a.remove(); b.remove();
-      const el = makeItem(known, x, y); el.classList.add('pop');
-      return;
-    }
+      const el = makeItem(n, x, y); el.classList.add('pop');
+    };
+    // 設定成「固定結果」或沒鑰匙時，合過的組合直接用以前的結果（不花次數）
+    if (known.length && (prefs.reroll === 'off' || !getKey())){ useKnown(); return; }
     if (!getKey()){ place(a, parseFloat(a.style.left), parseFloat(a.style.top)); openSettings('先貼上 Gemini 鑰匙才能煉出新東西'); return; }
 
     a.remove();
     b.classList.add('busy');
     setItemLabel(b, nb, true);
     try {
-      const res = await askGemini(na, nb);
+      const res = await askGemini(na, nb, known);
       const name = res.name;
       let isNew = false;
       const old = save.items[name];
       if (old){ if (!old.desc) Object.assign(old, cleanDetail(res)); }
       else { save.items[name] = {emoji:res.emoji, t:Date.now(), from:[na, nb], ...cleanDetail(res)}; isNew = true; }
-      save.recipes[k] = name;
+      save.recipes[k] = [...new Set([...(save.recipes[k] || []), name])];
       persist();
       b.remove();
       const el = makeItem(name, x, y); el.classList.add('pop');
@@ -631,6 +655,12 @@
       }
       renderList();
     } catch(err){
+      // 問不到 AI，但這組以前合過：先用以前的結果
+      if (known.length){
+        b.classList.remove('busy'); useKnown();
+        toast('AI 暫時問不到，先用以前煉過的結果', true);
+        return;
+      }
       // 失敗就把兩個東西放回去
       b.classList.remove('busy');
       setItemLabel(b, nb);
@@ -701,7 +731,7 @@ ${catRule()}
     desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, color:{type:'STRING'}
   };
 
-  async function askGemini(a, b){
+  async function askGemini(a, b, prev){
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家把「${a}」和「${b}」合在一起，請決定會產生什麼。
 規則：
@@ -709,7 +739,7 @@ ${catRule()}
 - 要讓人看得出跟「${a}」和「${b}」的關聯；可以有趣、有梗、出乎意料。
 - 盡量產生新的東西，避免直接回傳「${a}」或「${b}」本身。
 - emoji：一個最貼切的 emoji。
-${DETAIL_RULES()}`;
+${prev && prev.length ? `- 這一組以前煉出過：${prev.join('、')}。這次不一定要一樣，可以煉出別的東西，也可以跟以前重複。\n` : ''}${DETAIL_RULES()}`;
     const out = await ask(prompt, {name:{type:'STRING'}, emoji:{type:'STRING'}, ...DETAIL_SCHEMA});
     const name = String(out.name || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
     if (!name) throw new Error('Gemini 沒想出東西，再試一次');
@@ -741,7 +771,7 @@ ${DETAIL_RULES()}`;
         body:JSON.stringify({
           contents:[{role:'user', parts:[{text:prompt}]}],
           generationConfig:{
-            temperature:0.8,
+            temperature:1,
             responseMimeType:'application/json',
             responseSchema:{type:'OBJECT', properties:props, required:Object.keys(props)}
           }
@@ -763,11 +793,12 @@ ${DETAIL_RULES()}`;
     if (reorging) return;
     if (!getKey()){ openSettings('先貼上 Gemini 鑰匙才能整理分類'); return; }
     const names = Object.keys(save.items);
+    const free = names.filter(n => !save.items[n].catLocked);
     const BATCH = 80;
     const batches = [];
-    for (let i = 0; i < names.length; i += BATCH) batches.push(names.slice(i, i + BATCH));
+    for (let i = 0; i < free.length; i += BATCH) batches.push(free.slice(i, i + BATCH));
     const total = 1 + batches.length;
-    if (!confirm(`整理分類會請 AI 做兩件事：\n1. 合併重複、意思太像或太零碎的分類\n2. 檢查每樣東西分得對不對\n\n大約用掉 ${total} 次免費次數，要開始嗎？`)) return;
+    if (!confirm(`整理分類會請 AI 做兩件事：\n1. 合併重複、意思太像或太零碎的分類\n2. 檢查每樣東西分得對不對（你自己分的不會動）\n\n大約用掉 ${total} 次免費次數，要開始嗎？`)) return;
     reorging = true;
     const btn = $('btn-reorg'); btn.disabled = true;
     let merged = 0, moved = 0, step = 0;
@@ -793,7 +824,7 @@ ${lines}
           const to = cleanCat(m.to);
           if (m.from && m.from !== to && counts.some(([c]) => c === m.from)) map.set(m.from, to);
         }
-        for (const it of Object.values(save.items)) if (map.has(it.cat)) it.cat = map.get(it.cat);
+        for (const it of Object.values(save.items)) if (!it.catLocked && map.has(it.cat)) it.cat = map.get(it.cat);
         merged = map.size;
         persist(); renderList();
       }
@@ -816,7 +847,7 @@ ${lines}
         for (const m of out.moves || []){
           const it = save.items[m.name];
           const c = cleanCat(m.category);
-          if (it && it.cat !== c){ it.cat = c; moved++; }
+          if (it && !it.catLocked && it.cat !== c){ it.cat = c; moved++; }
         }
         persist(); renderList();
       }
@@ -848,15 +879,21 @@ ${lines}
       dots.textContent = '●'.repeat(it.rarity) + '○'.repeat(5 - it.rarity);
       rr.append(dots, document.createTextNode(' ' + RARITY[it.rarity - 1]));
     }
-    $('c-cat').textContent = it.cat || '';
-    $('c-cat').style.display = it.cat ? '' : 'none';
+    $('c-cat').textContent = (it.cat || '未分類') + (it.catLocked ? '（自己分的）' : '') + ' ✎';
+    $('c-catedit').hidden = true;
     $('c-desc').textContent = it.desc || (getKey() ? '介紹生成中……' : '還沒有介紹（貼上鑰匙後打開卡片會自動補上）');
     $('c-desc').classList.toggle('muted', !it.desc);
     // 配方
     const from = $('c-from'); from.textContent = '';
-    if (it.from){ from.append('由 '); from.append(link(it.from[0])); from.append(' ＋ '); from.append(link(it.from[1])); from.append(' 煉出'); }
+    const ways = Object.entries(save.recipes).filter(([, v]) => v.includes(name)).map(([k]) => k.split('+'));
+    if (ways.length){
+      from.append('煉法：');
+      ways.slice(0, 12).forEach(([p, q], i) => { if (i) from.append('、'); from.append(link(p)); from.append('＋'); from.append(link(q)); });
+      if (ways.length > 12) from.append(` 等 ${ways.length} 種`);
+    }
+    else if (it.from){ from.append('由 '); from.append(link(it.from[0])); from.append(' ＋ '); from.append(link(it.from[1])); from.append(' 煉出'); }
     else from.append('最初的元素');
-    const makes = Object.entries(save.recipes).filter(([k]) => k.split('+').includes(name)).map(([,v]) => v);
+    const makes = Object.entries(save.recipes).filter(([k]) => k.split('+').includes(name)).flatMap(([,v]) => v);
     const uniq = [...new Set(makes)];
     const mk = $('c-makes'); mk.textContent = '';
     if (uniq.length){ mk.append('能煉出：'); uniq.forEach((n, i) => { if (i) mk.append('、'); mk.append(link(n)); }); }
@@ -878,6 +915,7 @@ ${lines}
     it._asking = true;
     try {
       const d = await askDetail(name);
+      if (it.catLocked) delete d.cat;
       Object.assign(it, d);
       persist(); renderList(); refreshItems(name);
       if (cardName === name && $('card').classList.contains('open')) openCard(name);
@@ -885,6 +923,31 @@ ${lines}
       if (cardName === name) { $('c-desc').textContent = '介紹生成失敗：' + e.message; }
     } finally { delete it._asking; }
   }
+  // 自己分類
+  $('c-cat').onclick = () => {
+    const it = save.items[cardName]; if (!it) return;
+    const dl = $('catlist'); dl.textContent = '';
+    for (const [c] of catCounts()){ const o = document.createElement('option'); o.value = c; dl.append(o); }
+    $('c-catin').value = it.cat || '';
+    $('c-catauto').hidden = !it.catLocked;
+    $('c-catedit').hidden = false;
+    $('c-catin').focus();
+  };
+  function saveCat(){
+    const it = save.items[cardName]; if (!it) return;
+    const v = $('c-catin').value.trim();
+    if (!v){ toast('分類名稱不能空白', true); return; }
+    it.cat = cleanCat(v); it.catLocked = true;
+    persist(); renderList(); openCard(cardName);
+  }
+  $('c-catok').onclick = saveCat;
+  $('c-catin').addEventListener('keydown', e => { if (e.key === 'Enter') saveCat(); });
+  $('c-catcancel').onclick = () => { $('c-catedit').hidden = true; };
+  $('c-catauto').onclick = () => {
+    const it = save.items[cardName]; if (!it) return;
+    delete it.catLocked; persist(); openCard(cardName);
+    toast('這樣東西的分類交回給 AI 管了');
+  };
   function closeCard(){ $('card').classList.remove('open'); cardName = null; }
   $('card').addEventListener('click', e => { if (e.target.id === 'card') closeCard(); });
   $('c-close').onclick = closeCard;
@@ -971,7 +1034,8 @@ ${lines}
 
   // ---------- 外觀 ----------
   const PREF_KEY = 'wuxian_prefs';
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on'};
+  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-reroll','reroll']];
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', reroll:'on'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   function applyPrefs(){
     const r = document.documentElement;
@@ -981,11 +1045,11 @@ ${lines}
     r.style.setProperty('--scale', prefs.scale);
     $('scale').value = prefs.scale;
     $('scale-val').textContent = Math.round(prefs.scale * 100) + '%';
-    for (const [id, k] of [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion']])
+    for (const [id, k] of SEGS)
       $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs[k]));
   }
   function setPref(k, v){ prefs[k] = v; store.set(PREF_KEY, JSON.stringify(prefs)); applyPrefs(); }
-  for (const [id, k] of [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion']])
+  for (const [id, k] of SEGS)
     $(id).addEventListener('click', e => { const v = e.target.dataset && e.target.dataset.v; if (v) setPref(k, v); });
   $('scale').addEventListener('input', e => setPref('scale', parseFloat(e.target.value)));
   applyPrefs();
