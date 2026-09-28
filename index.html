@@ -69,6 +69,15 @@
   @keyframes pulse{50%{opacity:.55}}
   @keyframes pop{0%{transform:scale(.5);opacity:0}65%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
 
+  #lastbar{position:absolute;left:50%;bottom:.9rem;transform:translateX(-50%);display:flex;align-items:center;gap:.6rem;
+    background:var(--panel);border:1px solid var(--line);border-radius:.9rem;padding:.4rem .5rem .4rem .9rem;z-index:6;
+    box-shadow:var(--shadow);max-width:calc(100% - 1.5rem);font-size:.9rem;color:var(--muted)}
+  #lastbar[hidden]{display:none}
+  #last-eq{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #last-eq .eqi{color:var(--text);margin:0 .2rem}
+  #btn-really{flex:none;border-color:var(--accent);color:var(--accent)}
+  #btn-really:disabled{opacity:.6;cursor:wait}
+
   /* 側欄（發現清單） */
   #side{width:20rem;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
   #side-head{padding:.8rem .8rem .7rem;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:.55rem}
@@ -184,6 +193,7 @@
       <button class="btn" id="btn-clear">清空桌面</button>
       <button class="btn" id="btn-settings">設定</button>
     </div>
+    <div id="lastbar" hidden><span id="last-eq"></span><button class="btn" id="btn-really" title="請 AI 想像這一組的另一種可能">真的嗎？</button></div>
     <div id="hint"><div class="big">1+1=?</div>把清單裡的東西放到桌面上，<br>再把兩個疊在一起，看看會變出什麼。<br>長按任何東西可以看它的卡片。</div>
   </div>
   <div id="side">
@@ -271,9 +281,7 @@
     <label for="model">模型（通常選「自動」就好）</label>
     <select id="model" class="sel" style="width:100%;padding:.5rem .6rem;font-size:.9rem"><option value="">自動（推薦）</option></select>
     <p class="muted" id="model-note">自動會去問 Google 你的鑰匙能用哪些模型，挑免費次數最多的 Flash-Lite。Google 換新模型時也會自己跟上。</p>
-    <div class="setrow"><span class="lbl">同一組合</span>
-      <div class="seg" id="seg-reroll"><button data-v="on">每次問 AI</button><button data-v="off">固定結果</button></div></div>
-    <p class="muted">每次問 AI：同樣兩個東西每次合都可能煉出不同的東西（也可能重複），每合一次花一次免費次數；問不到 AI 時會用以前煉過的結果。固定結果：合過的組合直接用以前的結果，不花次數。</p>
+    <p class="muted">同樣兩個東西合出來的結果永遠一樣，合過的組合不會再花次數。覺得結果怪怪的，可以按桌面下方的「真的嗎？」請 AI 重想。</p>
     <div class="actions">
       <button class="btn primary" id="btn-save">儲存鑰匙</button>
       <button class="btn" id="btn-test">測試鑰匙</button>
@@ -317,7 +325,7 @@
   };
 
   // items: name -> {emoji, t（發現時間）, from:[a,b], desc, rarity(1-5), cat, color, fav}
-  // recipes: "a+b" -> [name, ...]（同一組可以煉出不同東西）
+  // recipes: "a+b" -> [name]（同一組永遠同一個結果；不同組可以煉出同一個東西）
   // catLocked：玩家自己分的類，整理分類時不動
   let save = load();
   function fresh(){
@@ -646,12 +654,14 @@
   }
   function showResult(name, x, y, isNew){
     const el = makeItem(name, x, y); el.classList.add('pop');
+    setTimeout(() => el.classList.remove('pop'), 500);
     if (isNew){
       el.classList.add('fresh'); setTimeout(() => el.classList.remove('fresh'), 4000);
       const it = save.items[name], r = it.rarity;
       toast(`${r >= 4 ? RARITY[r-1] + '發現！' : '新發現！'}${it.emoji} ${name}`);
     }
     renderList();
+    return el;
   }
 
   async function combine(a, b){
@@ -659,42 +669,36 @@
     const k = pairKey(na, nb);
     const x = parseFloat(b.style.left), y = parseFloat(b.style.top);
 
-    const known = (save.recipes[k] || []).filter(n => save.items[n]);
-    const useKnown = () => {
-      const n = known[Math.floor(Math.random() * known.length)];
+    // 合過的組合：永遠是同一個結果（不花次數）
+    const known = (save.recipes[k] || []).find(n => save.items[n]);
+    if (known){
       a.remove(); b.remove();
-      const el = makeItem(n, x, y); el.classList.add('pop');
-    };
-    // 內建配方：第一次合直接給寫好的結果（不花次數）
-    const sr = STARTER_MAP.get(k);
-    if (sr && !known.includes(sr)){
-      a.remove(); b.remove();
-      const d = starterData(sr) || {...save.items[sr]};
-      showResult(sr, x, y, addResult(k, sr, [na, nb], d));
+      const el = makeItem(known, x, y); el.classList.add('pop');
+      setLast(k, nb, na, known, el);
       return;
     }
-    // 設定成「固定結果」或沒鑰匙時，合過的組合直接用以前的結果（不花次數）
-    if (known.length && (prefs.reroll === 'off' || !getKey())){ useKnown(); return; }
+    // 內建配方：直接給寫好的結果（不花次數）
+    const sr = STARTER_MAP.get(k);
+    if (sr){
+      a.remove(); b.remove();
+      const d = starterData(sr) || {...save.items[sr]};
+      setLast(k, nb, na, sr, showResult(sr, x, y, addResult(k, sr, [na, nb], d)));
+      return;
+    }
     if (!getKey()){ place(a, parseFloat(a.style.left), parseFloat(a.style.top)); openSettings('先貼上 Gemini 鑰匙才能煉出新東西'); return; }
 
     a.remove();
     b.classList.add('busy');
     setItemLabel(b, nb, true);
     try {
-      const res = await askGemini(na, nb, known);
+      const res = await askGemini(na, nb);
       const name = res.name;
       // AI 剛好煉出內建圖鑑裡的東西：用寫好的資料，讓介紹一致
       const data = starterData(name) || {emoji:res.emoji, ...cleanDetail(res)};
       const isNew = addResult(k, name, [na, nb], data);
       b.remove();
-      showResult(name, x, y, isNew);
+      setLast(k, nb, na, name, showResult(name, x, y, isNew));
     } catch(err){
-      // 問不到 AI，但這組以前合過：先用以前的結果
-      if (known.length){
-        b.classList.remove('busy'); useKnown();
-        toast('AI 暫時問不到，先用以前煉過的結果', true);
-        return;
-      }
       // 失敗就把兩個東西放回去
       b.classList.remove('busy');
       setItemLabel(b, nb);
@@ -702,6 +706,51 @@
       toast(err.message || '煉製失敗，再試一次', true);
     }
   }
+
+  // ---------- 真的嗎？（玩家自己按，才請 AI 想像別的可能） ----------
+  let last = null;
+  function setLast(k, nb, na, name, el){
+    last = {k, na, nb, name, el, tried:[name]};
+    renderLast();
+  }
+  function renderLast(){
+    const bar = $('lastbar');
+    if (!last){ bar.hidden = true; return; }
+    const eq = $('last-eq'); eq.textContent = '';
+    const chip = n => { const sp = document.createElement('span'); sp.className = 'eqi'; sp.textContent = `${save.items[n] ? save.items[n].emoji : ''} ${n}`; return sp; };
+    eq.append(chip(last.na), '＋', chip(last.nb), '＝', chip(last.name));
+    bar.hidden = false;
+  }
+  $('btn-really').onclick = async () => {
+    if (!last || $('btn-really').disabled) return;
+    if (!getKey()){ openSettings('先貼上 Gemini 鑰匙，AI 才能重想'); return; }
+    const L = last, btn = $('btn-really');
+    btn.disabled = true; btn.textContent = '想想看……';
+    try {
+      const res = await askGemini(L.na, L.nb, L.tried);
+      const name = res.name;
+      if (L.tried.includes(name)) throw new Error('AI 想了想，還是覺得一樣，再按一次試試');
+      const data = starterData(name) || {emoji:res.emoji, ...cleanDetail(res)};
+      save.recipes[L.k] = [];  // 這組的答案換成新的；舊的東西還留在圖鑑裡
+      const isNew = addResult(L.k, name, [L.na, L.nb], data);
+      // 桌面上剛剛那個結果還在的話，直接換掉
+      let x, y;
+      if (L.el && L.el.isConnected && L.el.dataset.name === L.name && !L.el.classList.contains('busy')){
+        x = parseFloat(L.el.style.left); y = parseFloat(L.el.style.top); L.el.remove();
+      } else {
+        const b = board.getBoundingClientRect(); x = b.width/2 - 40; y = b.height/2 - 20;
+      }
+      const el = showResult(name, x, y, isNew);
+      if (!isNew) toast(`重想了：${save.items[name].emoji} ${name}`);
+      L.tried.push(name); L.name = name; L.el = el;
+      if (last === L) renderLast();
+    } catch(e){
+      toast(e.message, true);
+    } finally {
+      btn.disabled = false; btn.textContent = '真的嗎？';
+    }
+  };
+
 
 
   function getKey(){ return (store.get(KEY_KEY) || '').trim(); }
@@ -766,7 +815,7 @@ ${catRule()}
     desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, color:{type:'STRING'}
   };
 
-  async function askGemini(a, b, prev){
+  async function askGemini(a, b, avoid){
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家把「${a}」和「${b}」合在一起，請決定會產生什麼。
 規則：
@@ -774,7 +823,7 @@ ${catRule()}
 - 要讓人看得出跟「${a}」和「${b}」的關聯；可以有趣、有梗、出乎意料。
 - 盡量產生新的東西，避免直接回傳「${a}」或「${b}」本身。
 - emoji：一個最貼切的 emoji。
-${prev && prev.length ? `- 這一組以前煉出過：${prev.join('、')}。這次不一定要一樣，可以煉出別的東西，也可以跟以前重複。\n` : ''}${DETAIL_RULES()}`;
+${avoid && avoid.length ? `- 這一組原本的答案是「${avoid[avoid.length - 1]}」，但玩家問：「真的嗎？」請發揮想像力，想出另一種說得通又有趣的合成結果，不能是：${avoid.join('、')}。\n` : ''}${DETAIL_RULES()}`;
     const out = await ask(prompt, {name:{type:'STRING'}, emoji:{type:'STRING'}, ...DETAIL_SCHEMA});
     const name = String(out.name || '').replace(/[\s。，！？、「」"'.,!?]/g, '').slice(0, 12);
     if (!name) throw new Error('Gemini 沒想出東西，再試一次');
@@ -1064,13 +1113,14 @@ ${lines}
     if (!confirm('確定要全部重來嗎？所有發現和配方都會清掉（鑰匙會保留）。')) return;
     save = fresh(); persist();
     board.querySelectorAll('.item').forEach(el => el.remove());
+    last = null; renderLast();
     updateHint(); renderList(); closeSettings(); toast('世界重新開始了');
   };
 
   // ---------- 外觀 ----------
   const PREF_KEY = 'wuxian_prefs';
-  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-reroll','reroll']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', reroll:'on'};
+  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion']];
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   function applyPrefs(){
     const r = document.documentElement;
