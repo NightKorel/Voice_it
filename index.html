@@ -83,6 +83,7 @@
   .fsug{display:flex;flex-direction:column;align-items:center;gap:.4rem;font-size:.82rem;color:var(--muted);
     padding:.55rem .8rem;border:1px dashed var(--line);border-radius:.8rem;animation:rise .22s ease-out}
   .fsug-btns{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:center}
+  #btn-stop{border-color:var(--danger);color:var(--danger)}
   #r-busy{color:var(--muted);animation:pulse 1.1s ease-in-out infinite}
   #btn-really{border-color:var(--accent);color:var(--accent)}
   #hint{color:var(--muted);font-size:.9rem;text-align:center;line-height:1.9}
@@ -618,7 +619,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.40';
+  const VERSION = '0.0.41';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1212,7 +1213,11 @@
     if (b){
       const r = $('result'); r.textContent = '';
       const d = document.createElement('div'); d.id = 'r-busy'; d.textContent = msg || '煉製中……';
-      r.append(d);
+      const stop = document.createElement('button'); stop.className = 'btn'; stop.id = 'btn-stop'; stop.textContent = '■ 停止';
+      stop.title = 'AI 卡住的時候按這個，東西會留在槽位';
+      stop.onclick = stopAI;
+      r.append(d, stop);
+      freshAI();
     }
   }
 
@@ -1338,7 +1343,7 @@
       finish('combine', names, [res.name], isNew ? [res.name] : []);
     } catch(e){
       setBusy(false); renderResult();
-      if (!e.cancelled) toast(e.message || '煉製失敗，再試一次', true);
+      toast(e.cancelled ? '已停止，東西還在槽位' : (e.message || '失敗了，再試一次'), true);
     }
   }
 
@@ -1381,7 +1386,7 @@
       finish('extract', [name], save.extracts[name], fresh);
     } catch(e){
       setBusy(false); renderResult();
-      if (!e.cancelled) toast(e.message || '萃取失敗，再試一次', true);
+      toast(e.cancelled ? '已停止，東西還在槽位' : (e.message || '失敗了，再試一次'), true);
     }
   }
 
@@ -1417,7 +1422,7 @@
     } catch(e){
       setBusy(false); renderResult();
       keepSlots.forEach((n, i) => slots[i] = n); renderSlots();
-      if (!e.cancelled) toast(e.message, true);
+      toast(e.cancelled ? '已停止' : e.message, true);
     }
   }
 
@@ -1570,7 +1575,31 @@ ${DETAIL_RULES()}`;
   }
 
   // 問 AI：手動模式跳視窗；Gemini 太忙時問要不要改手動
+  // ---------- 停下 AI ----------
+  // 每次問 AI 都用同一個「開關」，按停止就把正在等的請求切掉；超過 45 秒沒回應也會自動切掉
+  const AI_TIMEOUT = 45000;
+  let aiCtl = new AbortController();
+  function stopAI(){ aiCtl.abort(); }
+  const cancelledErr = () => { const e = new Error('已停止'); e.cancelled = true; return e; };
+  function checkStop(){ if (aiCtl.signal.aborted) throw cancelledErr(); }
+  async function aiFetch(url, opts = {}){
+    checkStop();
+    const ctl = aiCtl;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, AI_TIMEOUT);
+    try { return await fetch(url, {...opts, signal:ctl.signal}); }
+    catch(e){
+      if (timedOut){ aiCtl = new AbortController(); const er = new Error('AI 超過 45 秒沒回應'); er.busy = true; throw er; }
+      if (ctl.signal.aborted) throw cancelledErr();
+      throw e;
+    }
+    finally { clearTimeout(timer); }
+  }
+  // 開始一件新的 AI 工作前，換一個新的開關（上一次按過停止不會影響這次）
+  function freshAI(){ if (aiCtl.signal.aborted) aiCtl = new AbortController(); }
+
   async function ask(prompt, props){
+    checkStop();
     if (prefs.ai === 'manual') return manualAsk(prompt, props);
     try { return prefs.ai === 'openrouter' ? await askOpenRouter(prompt, props) : await askGemini(prompt, props); }
     catch(e){
@@ -1591,8 +1620,8 @@ ${DETAIL_RULES()}`;
   // 問 Google：這把鑰匙能用哪些模型
   async function listModels(){
     let resp;
-    try { resp = await fetch(`${API}/models?pageSize=1000`, {headers:{'x-goog-api-key':getKey()}}); }
-    catch(e){ const er = new Error('連不上 Gemini'); er.busy = true; throw er; }
+    try { resp = await aiFetch(`${API}/models?pageSize=1000`, {headers:{'x-goog-api-key':getKey()}}); }
+    catch(e){ if (e.cancelled || e.busy) throw e; const er = new Error('連不上 Gemini'); er.busy = true; throw er; }
     if (!resp.ok) throw await apiError(resp);
     const data = await resp.json();
     return (data.models || [])
@@ -1640,7 +1669,7 @@ ${DETAIL_RULES()}`;
     for (let attempt = 0; ; attempt++){
       let resp;
       try {
-        resp = await fetch(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
+        resp = await aiFetch(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
           method:'POST',
           headers:{'Content-Type':'application/json', 'x-goog-api-key':getKey()},
           body:JSON.stringify({
@@ -1653,11 +1682,12 @@ ${DETAIL_RULES()}`;
           })
         });
       } catch(e){
+        if (e.cancelled || e.busy) throw e;
         const er = new Error('連不上 Gemini'); er.busy = true; throw er;
       }
       if (!resp.ok){
         const e = await apiError(resp);
-        if (e.retry && attempt < 2){ await sleep(1500 * (attempt + 1)); continue; }
+        if (e.retry && attempt < 2){ await sleep(1500 * (attempt + 1)); checkStop(); continue; }
         throw e;
       }
       const data = await resp.json();
@@ -1672,8 +1702,8 @@ ${DETAIL_RULES()}`;
   async function orFreeModels(){
     if (orModels) return orModels;
     let data;
-    try { data = await (await fetch('https://openrouter.ai/api/v1/models')).json(); }
-    catch(e){ const er = new Error('連不上 OpenRouter'); er.busy = true; throw er; }
+    try { data = await (await aiFetch('https://openrouter.ai/api/v1/models')).json(); }
+    catch(e){ if (e.cancelled || e.busy) throw e; const er = new Error('連不上 OpenRouter'); er.busy = true; throw er; }
     const free = (data.data || []).map(m => m.id).filter(id => /:free$/.test(id) && !/(vision|vl|image|audio|embed|guard|tts)/i.test(id));
     const rank = id => {
       const order = ['deepseek-chat', 'deepseek-v', 'qwen3', 'qwen', 'deepseek', 'llama-3.3-70b', 'llama-4', 'gemma-3-27b', 'mistral-small', 'gemma', 'llama'];
@@ -1691,12 +1721,12 @@ ${DETAIL_RULES()}`;
     for (const model of models.slice(0, 4)){
       let resp;
       try {
-        resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        resp = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
           method:'POST',
           headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + getOrKey(), 'X-Title':'1+1=?'},
           body:JSON.stringify({model, temperature:0.5, messages:[{role:'user', content:full}]})
         });
-      } catch(e){ lastErr = new Error('連不上 OpenRouter'); lastErr.busy = true; continue; }
+      } catch(e){ if (e.cancelled) throw e; lastErr = e.busy ? e : new Error('連不上 OpenRouter'); lastErr.busy = true; continue; }
       if (resp.status === 401 || resp.status === 403){ throw new Error('OpenRouter 鑰匙好像不對，到設定檢查一下'); }
       if (!resp.ok){
         let msg = ''; try { msg = (await resp.json())?.error?.message || ''; } catch(e){}
@@ -1814,7 +1844,8 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
   let reorging = false;
 
   function reorganize(){
-    if (reorging || !aiReady()) return;
+    if (reorging){ stopAI(); return; }  // 整理中再按一次＝停止
+    if (!aiReady()) return;
     const n = Object.keys(save.items).length;
     const free = Object.values(save.items).filter(it => !it.catLocked).length;
     const cost = () => ($('rg-items').checked ? Math.ceil(n / ITEM_BATCH) : 0) + ($('rg-cat').checked ? 1 : 0) + ($('rg-move').checked ? Math.ceil(free / MOVE_BATCH) : 0);
@@ -1835,12 +1866,12 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
   async function runReorg(){
     const doItems = $('rg-items').checked, doCat = $('rg-cat').checked, doMove = $('rg-move').checked;
     $('reorg').classList.remove('open');
-    reorging = true;
-    const btn = $('btn-reorg'); btn.disabled = true;
-    const progress = t => { btn.textContent = t; };
+    reorging = true; freshAI();
+    const btn = $('btn-reorg'); btn.classList.add('on');
+    const progress = t => { btn.textContent = `■ ${t}（按一下停止）`; };
     const res = {items:0, cats:0, moved:0};
     let asked = 0;
-    const pace = async () => { if (asked++ && prefs.ai !== 'manual') await sleep(4000); };  // 放慢一點，避免撞到每分鐘上限
+    const pace = async () => { if (asked++ && prefs.ai !== 'manual') await sleep(4000); checkStop(); };  // 放慢一點，避免撞到每分鐘上限
     try {
       // 1. 相似的東西
       if (doItems){
@@ -1961,7 +1992,7 @@ ${lines}
       if (!e.cancelled) toast(`整理到一半停下來了（已整理的有存起來）：${e.message}`, true);
       else toast('整理停下來了（已整理的有存起來）', true);
     } finally {
-      reorging = false; btn.disabled = false; btn.textContent = '整理';
+      reorging = false; btn.classList.remove('on'); btn.textContent = '整理';
     }
   }
 
