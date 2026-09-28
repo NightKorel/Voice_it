@@ -516,7 +516,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.21';
+  const VERSION = '0.0.22';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -530,7 +530,8 @@
   const OR_KEY = 'wuxian_or_key';
   const API = 'https://generativelanguage.googleapis.com/v1beta';
   // 分類是活的：AI 會優先用已有的分類，都不適合才自己開新分類。一開始沒什麼分類時，拿這些當參考
-  const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話奇幻','科技','文化娛樂','概念','天文'];
+  const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話奇幻','科技','文化娛樂','概念','天文','專有名詞'];
+  const PROPER_CAT = '專有名詞';  // 特定角色、作品、品牌、真實存在的特定人事物，一律放這類
   const RARITY = ['常見','普通','少見','稀有','傳說'];
   const BASE = [
     {name:'水', emoji:'💧', desc:'萬物生命的源頭，會流動、會蒸發，也能把火澆熄。', rarity:1, cat:'自然', color:'#3d8bd4'},
@@ -1055,7 +1056,7 @@
     try {
       const res = await askCombine(names);
       if (res.fail){ save.recipes[k] = [FAIL]; return finishFail(names); }
-      const isNew = addItem(res.name, starterData(res.name) || {emoji:res.emoji, ...cleanDetail(res)}, {from:names});
+      const isNew = addItem(res.name, starterData(res.name) || aiData(res), {from:names});
       save.recipes[k] = [res.name];
       recordExtract(res.name, names);
       finish('combine', names, [res.name], isNew ? [res.name] : []);
@@ -1097,7 +1098,7 @@
       const parts = await askExtract(name);
       const fresh = [];
       for (const p of parts){
-        if (addItem(p.name, starterData(p.name) || {emoji:p.emoji, ...cleanDetail(p)}, {ext:name})) fresh.push(p.name);
+        if (addItem(p.name, starterData(p.name) || aiData(p), {ext:name})) fresh.push(p.name);
       }
       save.extracts[name] = parts.map(p => p.name);
       linkBack(name, save.extracts[name]);
@@ -1127,14 +1128,14 @@
           return;
         }
         if (L.tried.includes(res.name)) throw new Error('AI 想了想，還是覺得一樣，再按一次試試');
-        if (addItem(res.name, starterData(res.name) || {emoji:res.emoji, ...cleanDetail(res)}, {from:L.inputs})) fresh.push(res.name);
+        if (addItem(res.name, starterData(res.name) || aiData(res), {from:L.inputs})) fresh.push(res.name);
         save.recipes[comboKey(L.inputs)] = [res.name];  // 這組的答案換成新的；舊的東西還留在圖鑑裡
         recordExtract(res.name, L.inputs);
         outputs = [res.name];
       } else {
         const parts = await askExtract(L.inputs[0], L.tried);
         for (const p of parts)
-          if (addItem(p.name, starterData(p.name) || {emoji:p.emoji, ...cleanDetail(p)}, {ext:L.inputs[0]})) fresh.push(p.name);
+          if (addItem(p.name, starterData(p.name) || aiData(p), {ext:L.inputs[0]})) fresh.push(p.name);
         outputs = parts.map(p => p.name);
         save.extracts[L.inputs[0]] = outputs;
         linkBack(L.inputs[0], outputs);
@@ -1174,6 +1175,8 @@
   const cleanName = n => String(n || '').replace(/[。，！？、「」『』《》"'!?]/g, '').replace(/\s+/g, ' ').trim()
     .replace(/(?<=[^\x00-\x7F]) | (?=[^\x00-\x7F])/g, '').slice(0, 24);
   const cleanCat = c => String(c || '').replace(/[\s。，！？、「」"'.,!?（）()]/g, '').slice(0, 6) || '其他';
+  // AI 回的東西 → 存檔用的資料；AI 標成專有名詞的，分類一律是「專有名詞」
+  const aiData = o => { const d = {emoji:o.emoji, ...cleanDetail(o)}; if (isTrue(o.proper)) d.cat = PROPER_CAT; return d; };
   const cleanDetail = o => ({
     desc: String(o.desc || '').trim().slice(0, 80),
     rarity: Math.min(5, Math.max(1, Math.round(Number(o.rarity) || 1))),
@@ -1183,7 +1186,9 @@
   function catRule(){
     const have = catCounts().map(([c]) => c);
     const list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
-    return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。`;
+    if (!list.includes(PROPER_CAT)) list.push(PROPER_CAT);
+    return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。
+  專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方，例如「皮卡丘」「哈利波特」「艾菲爾鐵塔」）一律分到「${PROPER_CAT}」。`;
   }
   const DETAIL_RULES = () =>
 `- desc：像百科的一到兩句話，繁體中文，40 字以內，只介紹「這個東西本身」是什麼、有什麼特色。
@@ -1561,6 +1566,7 @@ ${lines}
 
 輸出 merges 陣列，每一筆是 {"from":"要被併掉的分類","to":"併進去的分類"}。
 - 請看每個分類「裡面實際放了什麼東西」來判斷，不要只看分類名稱。
+- 「${PROPER_CAT}」這個分類要保留，不要把它併掉，也不要把別的分類併進它。
 - from 必須一字不差地從上面的分類名稱抄（不要抄括號和冒號後面的東西）。
 - to 可以是上面已有的分類，也可以是新的 2 到 4 個字的大類名稱。
 - 不需要合併的分類不要寫。都不需要合併就回 {"merges":[]}。
@@ -1569,6 +1575,7 @@ ${lines}
           const map = new Map();
           for (const m of out.merges || []){
             const from = String(m.from || '').trim(), to = cleanCat(m.to);
+            if (from === PROPER_CAT || to === PROPER_CAT) continue;  // 專有名詞這類不併
             if (from && from !== to && counts.some(([c]) => c === from)) map.set(from, to);
           }
           for (const it of Object.values(save.items)) if (!it.catLocked && map.has(it.cat)) it.cat = map.get(it.cat);
@@ -1596,6 +1603,7 @@ ${lines}
 輸出 moves 陣列，只列出「需要換分類」的東西（包含未分類的），每一筆是 {"name":"東西名稱","category":"新的分類"}。
 - name 必須一字不差地從上面抄（冒號前面那段）。
 - 參考上面每個分類裡已經放了什麼，放進最像的那一類。
+- 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」。
 - category 優先用現有分類；真的都不適合才開新的 2 到 4 個字的大類。
 - 分得對的不要列。全部都對就回 {"moves":[]}。
 範例：{"moves":[{"name":"蘋果","category":"食物"}]}`, MOVE_SCHEMA);
