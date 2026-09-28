@@ -98,12 +98,18 @@
   #reorg p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #reorg .muted{color:var(--muted);font-size:.8rem}
   #reorg .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
-  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],.rg-list[hidden]{display:none}
+  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
+  .favnew{display:flex;gap:.5rem;margin:.6rem 0}
+  .favnew input{flex:1;min-width:0;padding:.45rem .65rem;border-radius:.6rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:.88rem;font-family:inherit;outline:none}
+  .favnew input:focus{border-color:var(--accent)}
+  #c-favlist{display:flex;flex-wrap:wrap;gap:.35rem}
+  .cattab.fav{color:var(--accent)}
+  .cattab.fav.on{color:var(--on-accent)}
   .co-row{cursor:default;flex-wrap:nowrap}
   .co-btn{padding:.2rem .6rem;font-size:.9rem}
-  #cattabs{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
-  #cattabs::-webkit-scrollbar{height:4px}
-  #cattabs::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+  .tabrow{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
+  .tabrow::-webkit-scrollbar{height:4px}
+  .tabrow::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
   .cattab{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:1rem;padding:.25rem .7rem;
     font-size:.8rem;cursor:pointer;font-family:inherit;white-space:nowrap}
   .cattab:hover{border-color:var(--accent);color:var(--text)}
@@ -295,12 +301,12 @@
       </div>
       <input id="search" type="search" placeholder="搜尋名稱或介紹……" autocomplete="off">
       <div class="row">
-        <button class="chipbtn" id="f-fav">★ 收藏</button>
         <div style="flex:1"></div>
         <button class="chipbtn" id="btn-catorder" title="自己排分類的順序">排序分類</button>
         <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、合併分類、檢查分類">整理</button>
       </div>
-      <div id="cattabs"></div>
+      <div id="favtabs" class="tabrow"></div>
+      <div id="cattabs" class="tabrow"></div>
     </div>
     <div id="list"></div>
   </div>
@@ -330,6 +336,11 @@
       <div class="meta" id="c-makes"></div>
       <div class="meta" id="c-ext"></div>
       <div class="meta small" id="c-time"></div>
+      <div id="c-favbox" hidden>
+        <div class="muted" style="font-size:.8rem;margin:.6rem 0 .3rem">放進哪些收藏夾（可以多選）：</div>
+        <div id="c-favlist"></div>
+        <div class="favnew"><input id="c-favname" placeholder="新收藏夾的名字" autocomplete="off"><button class="btn" id="c-favadd">新增並放進去</button></div>
+      </div>
       <div class="actions">
         <button class="btn" id="c-fav">☆ 收藏</button>
         <button class="btn" id="c-drop">放進槽位</button>
@@ -355,6 +366,13 @@
         <button class="btn primary" id="rg-go">開始整理</button>
         <button class="btn" id="rg-cancel">取消</button>
       </div>
+    </div>
+    <div id="rg-folders" hidden>
+      <h2>管理收藏夾</h2>
+      <p>收藏夾跟分類是分開的，一樣東西可以放進好幾個收藏夾。東西要放進收藏夾：長按打開卡片，按「收藏」。</p>
+      <div id="fd-list" class="rg-list"></div>
+      <div class="favnew"><input id="fd-name" placeholder="新收藏夾的名字" autocomplete="off"><button class="btn" id="fd-add">新增收藏夾</button></div>
+      <div class="actions"><button class="btn primary" id="fd-done">完成</button></div>
     </div>
     <div id="rg-order" hidden>
       <h2>排序分類</h2>
@@ -491,7 +509,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.17';
+  const VERSION = '0.0.18';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -520,7 +538,8 @@
     del(k){ try { localStorage.removeItem(k); } catch(e){} }
   };
 
-  // items: name -> {emoji, t（發現時間）, from:[...], ext（從哪裡萃取出來）, desc, rarity(1-5), cat, color, fav, catLocked}
+  // items: name -> {emoji, t（發現時間）, from:[...], ext（從哪裡萃取出來）, desc, rarity(1-5), cat, color, catLocked}
+  // folders: [{name, items:[...]}] 收藏夾，玩家自己建，一樣東西可以在好幾個收藏夾
   // recipes: "a+b(+c)" -> [name]（同一組永遠同一個結果；不同組可以煉出同一個東西）
   // extracts: name -> [name, ...]（萃取結果，同樣固定）
   let save = load();
@@ -531,6 +550,15 @@
   }
   function fillBase(s){
     s.extracts = s.extracts || {};
+    // 收藏夾：[{name, items:[名稱...]}]，跟分類無關；舊存檔的 ★ 收藏搬進「我的收藏」
+    if (!Array.isArray(s.folders)) s.folders = [];
+    const oldFav = Object.keys(s.items).filter(n => s.items[n] && s.items[n].fav);
+    if (oldFav.length){
+      let f = s.folders.find(x => x.name === '我的收藏');
+      if (!f) s.folders.unshift(f = {name:'我的收藏', items:[]});
+      for (const n of oldFav){ if (!f.items.includes(n)) f.items.push(n); delete s.items[n].fav; }
+    }
+    for (const f of s.folders) f.items = (f.items || []).filter(n => s.items[n]);
     // 合成出來的東西，萃取時直接拆回它的材料：補上反向萃取（還沒萃取過的才補）
     for (const [k, v] of Object.entries(s.recipes)){
       const r = v[0];
@@ -650,7 +678,8 @@
   function tipText(name, hint){
     const it = save.items[name];
     if (!it) return '';
-    const lines = [`${it.emoji} ${name}${it.fav ? '  ★' : ''}`];
+    const fs = foldersOf(name);
+    const lines = [`${it.emoji} ${name}${fs.length ? '  ★ ' + fs.join('、') : ''}`];
     const meta = [];
     if (it.rarity) meta.push(`稀有度：${RARITY[it.rarity - 1]}（${it.rarity}／5）`);
     if (it.cat) meta.push(`分類：${it.cat}`);
@@ -692,7 +721,70 @@
   }
 
   // ---------- 清單 ----------
-  let filterFav = false;
+  // ---------- 收藏夾 ----------
+  let folderFilter = '';
+  const foldersOf = n => save.folders.filter(f => f.items.includes(n)).map(f => f.name);
+  function renderFolderTabs(){
+    const box = $('favtabs'); box.textContent = '';
+    if (folderFilter && !save.folders.some(f => f.name === folderFilter)) folderFilter = '';
+    for (const f of save.folders){
+      const b = document.createElement('button'); b.className = 'cattab fav' + (folderFilter === f.name ? ' on' : '');
+      b.textContent = `★ ${f.name} ${f.items.length}`;
+      b.onclick = () => { folderFilter = folderFilter === f.name ? '' : f.name; renderList(); list.scrollTop = 0; };
+      box.append(b);
+    }
+    const add = document.createElement('button'); add.className = 'cattab';
+    add.textContent = save.folders.length ? '管理收藏夾' : '★ 建立收藏夾';
+    add.onclick = openFolders;
+    box.append(add);
+  }
+  function newFolder(name){
+    name = String(name || '').trim().slice(0, 12);
+    if (!name){ toast('收藏夾要有名字', true); return null; }
+    if (save.folders.some(f => f.name === name)){ toast('已經有同名的收藏夾', true); return null; }
+    const f = {name, items:[]};
+    save.folders.push(f); persist();
+    return f;
+  }
+  // 管理收藏夾：新增、改名、排序、刪除
+  function openFolders(){
+    const draw = () => {
+      const box = $('fd-list'); box.textContent = '';
+      save.folders.forEach((f, i) => {
+        const r = document.createElement('div'); r.className = 'rg-row co-row';
+        const t = document.createElement('span'); t.className = 'rg-from'; t.textContent = `★ ${f.name}`;
+        const k = document.createElement('span'); k.className = 'rg-arrow'; k.textContent = `${f.items.length} 樣`;
+        const sp = document.createElement('span'); sp.style.flex = '1';
+        const btn = (label, fn, dis) => { const b = document.createElement('button'); b.className = 'btn co-btn'; b.textContent = label; b.disabled = !!dis; b.onclick = fn; return b; };
+        const mv = d => () => { const a = save.folders; [a[i], a[i + d]] = [a[i + d], a[i]]; persist(); draw(); renderList(); };
+        r.append(t, k, sp,
+          btn('↑', mv(-1), i === 0), btn('↓', mv(1), i === save.folders.length - 1),
+          btn('改名', () => {
+            const v = prompt('收藏夾的新名字：', f.name); if (v == null) return;
+            const nv = v.trim().slice(0, 12);
+            if (!nv) return toast('收藏夾要有名字', true);
+            if (nv !== f.name && save.folders.some(x => x.name === nv)) return toast('已經有同名的收藏夾', true);
+            if (folderFilter === f.name) folderFilter = nv;
+            f.name = nv; persist(); draw(); renderList();
+          }),
+          btn('刪除', () => {
+            if (!confirm(`確定刪掉收藏夾「${f.name}」嗎？\n\n裡面的 ${f.items.length} 樣東西不會被刪，只是不在這個收藏夾了。`)) return;
+            save.folders.splice(i, 1); persist(); draw(); renderList();
+          }));
+        box.append(r);
+      });
+      if (!save.folders.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = '還沒有收藏夾，在下面取個名字建立一個。'; box.append(e); }
+    };
+    draw();
+    $('fd-name').value = '';
+    $('fd-add').onclick = () => { if (newFolder($('fd-name').value)){ $('fd-name').value = ''; draw(); renderList(); } };
+    $('fd-name').onkeydown = e => { if (e.key === 'Enter') $('fd-add').click(); };
+    $('fd-done').onclick = () => $('reorg').classList.remove('open');
+    ['rg-setup', 'rg-review', 'rg-friend', 'rg-order'].forEach(id => $(id).hidden = true);
+    $('rg-folders').hidden = false;
+    $('reorg').classList.add('open');
+  }
+
   // 現有分類與數量：自己排過的照自己的順序，沒排過的（新分類）照數量接在後面
   function catCounts(){
     const m = new Map();
@@ -739,7 +831,7 @@
     draw();
     $('co-reset').onclick = () => { delete save.catOrder; persist(); draw(); renderList(); toast('分類改回照數量排'); };
     $('co-done').onclick = () => $('reorg').classList.remove('open');
-    ['rg-setup', 'rg-review', 'rg-friend'].forEach(id => $(id).hidden = true);
+    ['rg-setup', 'rg-review', 'rg-friend', 'rg-folders'].forEach(id => $(id).hidden = true);
     $('rg-order').hidden = false;
     $('reorg').classList.add('open');
   }
@@ -759,13 +851,12 @@
   function renderList(){
     const q = $('search').value.trim().toLowerCase();
     let names = Object.keys(save.items);
-    const favCount = names.filter(n => save.items[n].fav).length;
     $('count').innerHTML = `已發現 <b>${names.length}</b> 樣`;
-    $('f-fav').textContent = `★ 收藏 ${favCount}`;
+    renderFolderTabs();
     renderCatFilter();
     const cat = catFilter;
     if (q) names = names.filter(n => n.toLowerCase().includes(q) || (save.items[n].desc || '').toLowerCase().includes(q));
-    if (filterFav) names = names.filter(n => save.items[n].fav);
+    if (folderFilter){ const f = save.folders.find(x => x.name === folderFilter); names = names.filter(n => f && f.items.includes(n)); }
     if (cat) names = names.filter(n => save.items[n].cat === cat);
     const I = save.items, mode = $('sort').value;
     const byTime = (a,b) => I[a].t - I[b].t;
@@ -784,7 +875,8 @@
     list.textContent = '';
     if (!names.length){
       const e = document.createElement('div'); e.className = 'empty';
-      e.textContent = filterFav ? '還沒有收藏。長按東西打開卡片，就能收藏。' : '找不到符合的東西';
+      const ff = folderFilter && save.folders.find(x => x.name === folderFilter);
+      e.textContent = ff && !ff.items.length ? `「${folderFilter}」裡還沒有東西。長按東西打開卡片，按「收藏」就能放進來。` : '找不到符合的東西';
       list.append(e); return;
     }
     const recent = Date.now() - 10 * 60 * 1000;
@@ -797,14 +889,13 @@
         list.append(h);
       }
       const el = chip('litem', n);
-      if (it.fav){ const f = document.createElement('span'); f.className = 'fav'; f.textContent = '★'; el.append(f); }
+      if (foldersOf(n).length){ const f = document.createElement('span'); f.className = 'fav'; f.textContent = '★'; el.append(f); }
       if (it.t > recent){ const s = document.createElement('span'); s.className = 'star'; s.title = '最近發現'; el.append(s); }
       list.append(el);
     }
   }
   $('search').addEventListener('input', renderList);
   $('sort').addEventListener('change', renderList);
-  $('f-fav').addEventListener('click', () => { filterFav = !filterFav; $('f-fav').classList.toggle('on', filterFav); renderList(); });
 
   // ---------- 槽位 ----------
   const slots = [null, null, null];
@@ -1393,7 +1484,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     const upd = () => { $('rg-cost').textContent = `大約要問 AI ${cost()} 次。`; $('rg-go').disabled = !cost(); };
     ['rg-items', 'rg-cat', 'rg-move'].forEach(id => $(id).onchange = upd);
     upd();
-    $('rg-setup').hidden = false; $('rg-review').hidden = true; $('rg-friend').hidden = true; $('rg-order').hidden = true;
+    $('rg-setup').hidden = false; $('rg-review').hidden = true; $('rg-friend').hidden = true; $('rg-order').hidden = true; $('rg-folders').hidden = true;
     $('reorg').classList.add('open');
   }
   $('rg-cancel').onclick = () => $('reorg').classList.remove('open');
@@ -1527,7 +1618,7 @@ ${lines}
         rows.push({cb, sel, from:x});
       }
     }
-    $('rg-setup').hidden = true; $('rg-review').hidden = false; $('rg-friend').hidden = true; $('rg-order').hidden = true;
+    $('rg-setup').hidden = true; $('rg-review').hidden = false; $('rg-friend').hidden = true; $('rg-order').hidden = true; $('rg-folders').hidden = true;
     $('reorg').classList.add('open');
     return new Promise(resolve => {
       const done = picks => { $('reorg').classList.remove('open'); resolve(picks); };
@@ -1548,7 +1639,6 @@ ${lines}
       const to = final(from);
       if (to === from || !save.items[from] || !save.items[to]) continue;
       const a = save.items[from], b = save.items[to];
-      if (a.fav) b.fav = true;
       if (!b.desc && a.desc){ b.desc = a.desc; b.rarity = a.rarity; b.color = a.color; if (!b.catLocked) b.cat = a.cat; }
       delete save.items[from];
       count++;
@@ -1571,6 +1661,7 @@ ${lines}
       if (it.ext) it.ext = ren(it.ext);
     }
     for (let i = 0; i < slots.length; i++) if (slots[i]) slots[i] = ren(slots[i]);
+    for (const f of save.folders) f.items = [...new Set(f.items.map(ren))].filter(n => save.items[n]);
     last = null;
     return count;
   }
@@ -1602,6 +1693,7 @@ ${lines}
     const n = recipeKeys.length + extractKeys.length;
     if (!confirm(`確定刪掉「${name}」嗎？\n\n它會從圖鑑消失${n ? `，跟它有關的 ${n} 條配方和萃取紀錄也會一起刪掉` : ''}。之後再合出來，會重新問 AI。\n\n刪掉就救不回來。`)) return;
     delete save.items[name];
+    for (const f of save.folders) f.items = f.items.filter(x => x !== name);
     recipeKeys.forEach(k => delete save.recipes[k]);
     extractKeys.forEach(k => delete save.extracts[k]);
     for (let i = 0; i < slots.length; i++) if (slots[i] === name) slots[i] = null;
@@ -1618,6 +1710,20 @@ ${lines}
 
   // ---------- 卡片 ----------
   let cardName = null;
+  let keepFavBox = false;
+  function drawFavBox(name){
+    const box = $('c-favlist'); box.textContent = '';
+    for (const f of save.folders){
+      const b = document.createElement('button'); const on = f.items.includes(name);
+      b.className = 'cattab' + (on ? ' on' : ''); b.textContent = `${on ? '★' : '☆'} ${f.name}`;
+      b.onclick = () => {
+        if (on) f.items = f.items.filter(x => x !== name); else f.items.push(name);
+        persist(); renderList(); keepFavBox = true; openCard(name); keepFavBox = false;
+      };
+      box.append(b);
+    }
+    if (!save.folders.length){ const e = document.createElement('span'); e.className = 'muted'; e.style.fontSize = '.8rem'; e.textContent = '還沒有收藏夾，在下面建一個。'; box.append(e); }
+  }
   function openCard(name){
     const it = save.items[name];
     if (!it) return;
@@ -1667,8 +1773,11 @@ ${lines}
     }
     $('c-del').hidden = BASE.some(b => b.name === name);
     $('c-time').textContent = it.t > 1e12 ? `${it.friend ? '從朋友的存檔得到' : '發現'}於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
-    $('c-fav').textContent = it.fav ? '★ 已收藏' : '☆ 收藏';
-    $('c-fav').classList.toggle('on', !!it.fav);
+    const fs = foldersOf(name);
+    $('c-fav').textContent = fs.length ? `★ 收藏（${fs.length}）` : '☆ 收藏';
+    $('c-fav').classList.toggle('on', fs.length > 0);
+    if (!keepFavBox) $('c-favbox').hidden = true;
+    drawFavBox(name);
     $('card').classList.add('open');
     box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
     // 用 Gemini 時自動補介紹；手動模式由玩家按「補上介紹」
@@ -1731,10 +1840,14 @@ ${lines}
   function closeCard(){ $('card').classList.remove('open'); cardName = null; }
   $('card').addEventListener('click', e => { if (e.target.id === 'card') closeCard(); });
   $('c-close').onclick = closeCard;
-  $('c-fav').onclick = () => {
-    const it = save.items[cardName]; if (!it) return;
-    it.fav = !it.fav; persist(); renderList(); openCard(cardName);
+  $('c-fav').onclick = () => { $('c-favbox').hidden = !$('c-favbox').hidden; };
+  $('c-favadd').onclick = () => {
+    const f = newFolder($('c-favname').value); if (!f || !cardName) return;
+    f.items.push(cardName); $('c-favname').value = '';
+    persist(); renderList(); keepFavBox = true; openCard(cardName); keepFavBox = false;
+    toast(`放進「${f.name}」了`);
   };
+  $('c-favname').addEventListener('keydown', e => { if (e.key === 'Enter') $('c-favadd').click(); });
   $('c-drop').onclick = () => { const n = cardName; closeCard(); addToSlot(n); };
   window.addEventListener('keydown', e => { if (e.key === 'Escape'){ closeCard(); closeSettings(); } });
 
@@ -1864,7 +1977,7 @@ ${lines}
     const all = v => [...itemRows, ...recipeRows].forEach(r => r.cb.checked = v);
     $('fm-all').onclick = () => all(true);
     $('fm-none').onclick = () => all(false);
-    $('rg-setup').hidden = true; $('rg-review').hidden = true; $('rg-friend').hidden = false; $('rg-order').hidden = true;
+    $('rg-setup').hidden = true; $('rg-review').hidden = true; $('rg-friend').hidden = false; $('rg-order').hidden = true; $('rg-folders').hidden = true;
     $('modal').classList.remove('open');
     $('reorg').classList.add('open');
     $('fm-cancel').onclick = () => $('reorg').classList.remove('open');
@@ -1875,7 +1988,7 @@ ${lines}
       const now = Date.now();
       pickItems.forEach((n, i) => {
         const it = {...fr.items[n]};
-        delete it.fav; delete it._asking;  // 收藏是朋友自己的
+        delete it.fav; delete it._asking;  // 收藏夾是朋友自己的，不帶過來
         it.t = now + i;                    // 算成你剛拿到的
         it.friend = true;
         save.items[n] = it;
