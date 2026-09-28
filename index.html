@@ -101,7 +101,7 @@
   #reorg p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #reorg .muted{color:var(--muted);font-size:.8rem}
   #reorg .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
-  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
+  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],#rg-mine[hidden],#c-edit[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
   .favnew{display:flex;gap:.5rem;margin:.6rem 0}
   .favnew input{flex:1;min-width:0;padding:.45rem .65rem;border-radius:.6rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:.88rem;font-family:inherit;outline:none}
   .favnew input:focus{border-color:var(--accent)}
@@ -127,6 +127,14 @@
   .litem.pick{opacity:.55}
   .litem.picked{opacity:1;outline:2px solid var(--accent);outline-offset:2px}
   .litem.picked::before{content:'✓';color:var(--accent);font-weight:700;margin-right:.1rem}
+  .litem.addmine{border-style:dashed;color:var(--accent);background:transparent;font-family:inherit}
+  .mn-row{display:flex;align-items:center;gap:.6rem;margin:.45rem 0}
+  .mn-row label{width:3.5rem;flex:none;font-size:.85rem;color:var(--muted)}
+  .mn-row input:not([type=color]),.mn-row textarea{flex:1;min-width:0;padding:.45rem .65rem;border-radius:.6rem;border:1px solid var(--line);
+    background:var(--bg);color:var(--text);font-size:.9rem;font-family:inherit;outline:none}
+  .mn-row textarea{height:4.2rem;resize:vertical}
+  .mn-row input:focus,.mn-row textarea:focus{border-color:var(--accent)}
+  .mn-row input[type=color]{width:3rem;height:2rem;border:1px solid var(--line);border-radius:.4rem;background:transparent;padding:0}
   .pk-row{width:100%;text-align:left;background:var(--bg);color:var(--text);font-family:inherit;justify-content:space-between}
   .pk-row:hover{border-color:var(--accent)}
   #rg-list,.rg-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
@@ -413,6 +421,7 @@
       <div class="actions">
         <button class="btn" id="c-fav">☆ 收藏</button>
         <button class="btn" id="c-drop">放進槽位</button>
+        <button class="btn" id="c-edit" hidden>編輯</button>
         <button class="btn" id="c-redesc" title="請 AI 只看這個詞本身，重寫介紹">重寫介紹</button>
         <button class="btn danger" id="c-del">刪除</button>
         <div style="flex:1"></div>
@@ -434,6 +443,21 @@
       <div class="actions">
         <button class="btn primary" id="rg-go">開始整理</button>
         <button class="btn" id="rg-cancel">取消</button>
+      </div>
+    </div>
+    <div id="rg-mine" hidden>
+      <h2 id="mn-title">自己設定一樣東西</h2>
+      <p class="muted">例如你的角色、朋友、寵物、喜歡的作品。介紹寫清楚一點，AI 合成時會照著你寫的內容去想。</p>
+      <div class="mn-row"><label>名稱</label><input id="mn-name" maxlength="24" placeholder="必填" autocomplete="off"></div>
+      <div class="mn-row"><label>emoji</label><input id="mn-emoji" maxlength="8" placeholder="✨" autocomplete="off"></div>
+      <div class="mn-row"><label>介紹</label><textarea id="mn-desc" maxlength="120" placeholder="一兩句話介紹它是什麼"></textarea></div>
+      <div class="mn-row"><label>分類</label><input id="mn-cat" list="catlist2" autocomplete="off"><datalist id="catlist2"></datalist></div>
+      <div class="mn-row"><label>稀有度</label><select id="mn-rar" class="sel"><option value="1">常見</option><option value="2">普通</option><option value="3">少見</option><option value="4">稀有</option><option value="5">傳說</option></select></div>
+      <div class="mn-row"><label>顏色</label><input id="mn-color" type="color"></div>
+      <p class="muted" id="mn-err"></p>
+      <div class="actions">
+        <button class="btn primary" id="mn-save">完成</button>
+        <button class="btn" id="mn-cancel">取消</button>
       </div>
     </div>
     <div id="rg-pick" hidden>
@@ -588,7 +612,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.36';
+  const VERSION = '0.0.37';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -817,7 +841,7 @@
 
   // ---------- 清單 ----------
   // 整理視窗裡一次只顯示一個面板
-  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick'];
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-mine'];
   function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
 
   // ---------- 收藏夾 ----------
@@ -839,6 +863,54 @@
     add.onclick = openFolders;
     box.append(add);
   }
+  // ---------- 我的（自己設定的東西） ----------
+  // 新增或編輯（editing＝原本的名字）
+  function openMine(editing){
+    const it = editing ? save.items[editing] : null;
+    $('mn-title').textContent = it ? `編輯「${editing}」` : '自己設定一樣東西';
+    $('mn-name').value = editing || '';
+    $('mn-emoji').value = it ? it.emoji : '';
+    $('mn-desc').value = it ? (it.desc || '') : '';
+    $('mn-cat').value = it ? (it.cat || '') : PROPER_CAT;
+    $('mn-rar').value = String(it ? (it.rarity || 3) : 3);
+    $('mn-color').value = it && /^#[0-9a-f]{6}$/i.test(it.color || '') ? it.color : '#c9a76a';
+    $('mn-err').textContent = '';
+    const dl = $('catlist2'); dl.textContent = '';
+    for (const [c] of catCounts()){ const o = document.createElement('option'); o.value = c; dl.append(o); }
+    $('mn-save').onclick = () => {
+      const name = cleanName($('mn-name').value);
+      if (isBadName(name)){ $('mn-err').textContent = '要取一個名字'; return; }
+      if (name !== editing && save.items[name]){ $('mn-err').textContent = `已經有「${name}」了，換個名字`; return; }
+      const data = {emoji:$('mn-emoji').value.trim().slice(0, 8) || '✨', desc:$('mn-desc').value.trim().slice(0, 120),
+        cat:cleanCat($('mn-cat').value || PROPER_CAT), catLocked:true, rarity:+$('mn-rar').value, color:$('mn-color').value, custom:true};
+      if (it && name !== editing) renameItem(editing, name);
+      save.items[name] = {...(save.items[name] || {t:Date.now()}), ...data};
+      persist(); renderList(); renderSlots(); if (last) renderResult();
+      $('reorg').classList.remove('open');
+      if (cardName) openCard(name);
+      toast(it ? `「${name}」已更新` : `「${name}」設定好了，可以拿去合成`);
+    };
+    $('mn-cancel').onclick = () => $('reorg').classList.remove('open');
+    showPanel('rg-mine');
+    $('reorg').classList.add('open');
+    if (canHover) setTimeout(() => $('mn-name').focus(), 50);
+  }
+  // 改名：配方、萃取、收藏夾裡的名字都跟著換
+  function renameItem(from, to){
+    save.items[to] = save.items[from]; delete save.items[from];
+    const ren = n => n === from ? to : n;
+    const recipes = {};
+    for (const [k, v] of Object.entries(save.recipes)){ const nk = comboKey(k.split('+').map(ren)); if (!(nk in recipes)) recipes[nk] = v.map(ren); }
+    save.recipes = recipes;
+    const ex = {};
+    for (const [k, v] of Object.entries(save.extracts)) ex[ren(k)] = v.map(ren);
+    save.extracts = ex;
+    for (const it of Object.values(save.items)){ if (it.from) it.from = it.from.map(ren); if (it.ext) it.ext = ren(it.ext); }
+    for (const f of save.folders) f.items = f.items.map(ren);
+    for (let i = 0; i < slots.length; i++) if (slots[i]) slots[i] = ren(slots[i]);
+    last = null;
+  }
+
   // 一鍵把一批東西加進某個收藏夾（或新收藏夾）
   function pickFolder(names, desc, after){
     names = [...new Set(names)].filter(n => save.items[n]);
@@ -924,11 +996,12 @@
     const pos = c => { const i = order.indexOf(c); return i < 0 ? 1e6 : i; };
     return [...m].sort((a, b) => pos(a[0]) - pos(b[0]) || b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
   }
-  // 分類標籤：點一下只看那一類
+  // 分類標籤：點一下只看那一類；「我的」是玩家自己設定的東西
   let catFilter = '';
+  const MINE = '__mine__';
   function renderCatFilter(){
     const box = $('cattabs'), counts = catCounts();
-    if (catFilter && !counts.some(([c]) => c === catFilter)) catFilter = '';
+    if (catFilter && catFilter !== MINE && !counts.some(([c]) => c === catFilter)) catFilter = '';
     box.textContent = '';
     const tab = (value, label) => {
       const b = document.createElement('button'); b.className = 'cattab' + (catFilter === value ? ' on' : '');
@@ -937,6 +1010,7 @@
       box.append(b);
     };
     tab('', `全部 ${Object.keys(save.items).length}`);
+    tab(MINE, `我的 ${Object.values(save.items).filter(it => it.custom).length}`);
     for (const [c, n] of counts) tab(c, `${c} ${n}`);
     const on = box.querySelector('.on');
     if (on) on.scrollIntoView({block:'nearest', inline:'nearest'});
@@ -993,7 +1067,8 @@
     if (q) names = names.filter(n => n.toLowerCase().includes(q) || (save.items[n].desc || '').toLowerCase().includes(q));
     if (folderFilter){ const f = save.folders.find(x => x.name === folderFilter); names = names.filter(n => f && f.items.includes(n)); }
     if (filterUnext) names = names.filter(isUnext);
-    if (cat) names = names.filter(n => save.items[n].cat === cat);
+    if (cat === MINE) names = names.filter(n => save.items[n].custom);
+    else if (cat) names = names.filter(n => save.items[n].cat === cat);
     const I = save.items, mode = $('sort').value;
     const byTime = (a,b) => I[a].t - I[b].t;
     const rar = n => I[n].rarity || 0;
@@ -1010,6 +1085,13 @@
     names.sort(sorters[mode] || byTime);
     shownNames = names;
     list.textContent = '';
+    // 「我的」最上面永遠有一個 ＋，可以自己設定一樣東西
+    if (cat === MINE){
+      const add = document.createElement('button'); add.className = 'litem addmine'; add.textContent = '＋ 自己設定一樣東西';
+      add.onclick = () => openMine();
+      list.append(add);
+      if (!names.length){ const e = document.createElement('div'); e.className = 'empty'; e.textContent = '這裡放你自己設定的東西，例如你的角色、朋友、寵物、喜歡的作品。設定好就能拿去合成，AI 會讀你寫的介紹。'; list.append(e); return; }
+    }
     if (!names.length){
       const e = document.createElement('div'); e.className = 'empty';
       const ff = folderFilter && save.folders.find(x => x.name === folderFilter);
@@ -1426,11 +1508,16 @@ ${catRule()}
 ${now === FAIL ? '- 原本判定合成失敗，請再想想有沒有合理的結果；真的沒有才回 ok＝false。\n' : ''}`;
   }
 
+  // 材料的介紹：讓 AI 知道這些東西在遊戲裡是什麼（特別是玩家自己設定的東西）
+  function describe(names){
+    const lines = [...new Set(names)].map(n => { const it = save.items[n]; return it && it.desc ? `- ${n}：${it.desc}` : ''; }).filter(Boolean);
+    return lines.length ? `材料的介紹：\n${lines.join('\n')}\n` : '';
+  }
   async function askCombine(names, avoid){
     const list = names.map(n => `「${n}」`).join('、');
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家把 ${list} 這 ${names.length} 樣東西合在一起，請決定會產生什麼。
-規則：
+${describe(names)}規則：
 ${NAME_RULE}
 - 結果要合理、符合常識，大多數人一看就懂為什麼會變成這個。寧可普通，也不要天馬行空。
 - 避免直接回傳材料本身。
@@ -1452,7 +1539,7 @@ ${againRule(avoid, names)}${DETAIL_RULES()}`;
   async function askExtract(name, avoid){
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家想把「${name}」萃取、拆解，反推出構成它的、更原始更基本的東西。
-規則：
+${describe([name])}規則：
 - 回傳 parts，2 到 3 樣東西，每一樣都要比「${name}」更原始、更基本，而且合在一起說得通能變成「${name}」。
 - 不能是「${name}」本身。
 ${knownRule()}
@@ -2070,6 +2157,8 @@ ${lines}
       else ex.append(delBtn('刪掉這個萃取結果', () => askDeleteExtract(name)));
     }
     $('c-del').hidden = BASE.some(b => b.name === name);
+    $('c-edit').hidden = !it.custom;
+    $('c-redesc').hidden = !!it.custom;
     $('c-time').textContent = it.t > 1e12 ? `${it.friend ? '從朋友的存檔得到' : '發現'}於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
     const fs = foldersOf(name);
     $('c-fav').textContent = fs.length ? `★ 收藏（${fs.length}）` : '☆ 收藏';
@@ -2079,7 +2168,7 @@ ${lines}
     $('card').classList.add('open');
     box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
     // 用 Gemini 時自動補介紹；手動模式由玩家按「補上介紹」
-    if (!it.desc && !asking && hasAutoKey()) fillDetail(name);
+    if (!it.desc && !asking && !it.custom && hasAutoKey()) fillDetail(name);  // 自己設定的東西不讓 AI 補
   }
   function delBtn(title, fn){
     const b = document.createElement('button'); b.className = 'xdel'; b.textContent = '✕'; b.title = title;
@@ -2108,6 +2197,7 @@ ${lines}
       if (cardName === name && $('card').classList.contains('open')) openCard(name);
     }
   }
+  $('c-edit').onclick = () => { if (cardName) openMine(cardName); };
   $('c-redesc').onclick = () => { if (cardName && aiReady()) fillDetail(cardName, true); };
   $('c-del').onclick = () => { if (cardName) askDeleteItem(cardName); };
   $('c-fill').onclick = () => { if (cardName && aiReady()) fillDetail(cardName); };
