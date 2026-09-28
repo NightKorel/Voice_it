@@ -364,8 +364,8 @@
       <h2>整理</h2>
       <p>要請 AI 做哪些事？</p>
       <label class="rg-opt"><input type="checkbox" id="rg-items" checked> 找出可以合併的相似東西（例如「蒸氣」和「蒸汽」，合併前會一一問你）</label>
-      <label class="rg-opt"><input type="checkbox" id="rg-cat" checked> 合併重複、太像或太零碎的分類</label>
-      <label class="rg-opt"><input type="checkbox" id="rg-move" checked> 檢查每樣東西的分類對不對（你自己分的不會動）</label>
+      <label class="rg-opt"><input type="checkbox" id="rg-cat" checked> 合併重複、太像或太零碎的分類（合併前會一一問你）</label>
+      <label class="rg-opt"><input type="checkbox" id="rg-move" checked> 檢查每樣東西的分類對不對（換之前會一一問你；你自己分的不會動）</label>
       <p class="muted" id="rg-cost"></p>
       <div class="actions">
         <button class="btn primary" id="rg-go">開始整理</button>
@@ -406,8 +406,8 @@
       </div>
     </div>
     <div id="rg-review" hidden>
-      <h2>要合併這些嗎？</h2>
-      <p>AI 覺得下面這些是同一樣東西。勾選的會併進右邊那一個：配方、萃取紀錄、收藏都會搬過去，左邊那個會從圖鑑消失。右邊可以換要併進哪一個。</p>
+      <h2 id="rv-title"></h2>
+      <p id="rv-desc"></p>
       <div class="actions">
         <button class="btn" id="rg-all">全選</button>
         <button class="btn" id="rg-none">全不選</button>
@@ -516,7 +516,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.22';
+  const VERSION = '0.0.23';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1572,21 +1572,32 @@ ${lines}
 - 不需要合併的分類不要寫。都不需要合併就回 {"merges":[]}。
 - 整理完分類總數最好不超過 20 個左右。
 範例：{"merges":[{"from":"動物","to":"生物"},{"from":"甜點","to":"食物"}]}`, CATMERGE_SCHEMA);
-          const map = new Map();
+          const sugg = new Map();
           for (const m of out.merges || []){
             const from = String(m.from || '').trim(), to = cleanCat(m.to);
             if (from === PROPER_CAT || to === PROPER_CAT) continue;  // 專有名詞這類不併
-            if (from && from !== to && counts.some(([c]) => c === from)) map.set(from, to);
+            if (from && from !== to && counts.some(([c]) => c === from)) sugg.set(from, to);
           }
-          for (const it of Object.values(save.items)) if (!it.catLocked && map.has(it.cat)) it.cat = map.get(it.cat);
-          res.cats = map.size;
-          persist(); renderList();
+          if (sugg.size){
+            progress('等你確認……');
+            const cnt = new Map(counts);
+            const newNames = [...sugg.values()];
+            const picks = await review({title:'要合併這些分類嗎？', apply:'合併勾選的', skip:'都不要合併',
+              desc:'AI 建議把左邊的分類併進右邊。勾選的會合併，沒勾的維持分開。右邊可以換成別的分類。你自己分的東西不會被搬動。',
+              rows:[...sugg].map(([from, to]) => ({key:from, label:`${from}（${cnt.get(from)} 樣）`, arrow:'併入', value:to,
+                options:catOptions(newNames).filter(o => o.value !== from)}))});
+            const map = new Map(picks.filter(p => p.value !== p.key).map(p => [p.key, p.value]));
+            for (const it of Object.values(save.items)) if (!it.catLocked && map.has(it.cat)) it.cat = map.get(it.cat);
+            res.cats = map.size;
+            persist(); renderList();
+          }
         }
       }
       // 3. 檢查每樣東西的分類
       if (doMove){
         const free = Object.keys(save.items).filter(n => !save.items[n].catLocked);
         const parts = chunk(free, MOVE_BATCH);
+        const moves = new Map();  // 名稱 → AI 建議的新分類，全部收集完再給你確認
         for (let i = 0; i < parts.length; i++){
           await pace(); progress(`檢查分類 ${i + 1}/${parts.length}`);
           const cats = catCounts().map(([c]) => c);
@@ -1608,10 +1619,18 @@ ${lines}
 - 分得對的不要列。全部都對就回 {"moves":[]}。
 範例：{"moves":[{"name":"蘋果","category":"食物"}]}`, MOVE_SCHEMA);
           for (const m of out.moves || []){
-            const it = save.items[String(m.name || '').trim()];
+            const name = String(m.name || '').trim(), it = save.items[name];
             const c = cleanCat(m.category);
-            if (it && !it.catLocked && it.cat !== c){ it.cat = c; res.moved++; }
+            if (it && !it.catLocked && it.cat !== c) moves.set(name, c);
           }
+        }
+        if (moves.size){
+          progress('等你確認……');
+          const picks = await review({title:'要換這些東西的分類嗎？', apply:'換勾選的', skip:'都不要換',
+            desc:'AI 建議把這些東西換到右邊的分類。勾選的才會換，右邊也可以自己改成別的分類。',
+            rows:[...moves].map(([n, c]) => ({key:n, label:`${save.items[n].emoji} ${n}（${save.items[n].cat || '未分類'}）`, arrow:'改放到', value:c,
+              options:catOptions([...moves.values()])}))});
+          for (const p of picks){ const it = save.items[p.key]; if (it && it.cat !== p.value){ it.cat = p.value; res.moved++; } }
           persist(); renderList();
         }
       }
@@ -1625,35 +1644,53 @@ ${lines}
   }
 
   // 一一問玩家要不要合併：每一列是「X 併入 Y」，可以勾、可以換要併進哪一個
-  function reviewMerges(groups){
+  // 通用的確認清單：每列「左邊 → 右邊（可換）」，玩家勾選、調整後按套用
+  // rows: [{key, label, arrow, options:[{value,label}], value}]，回傳勾選的 [{key, value}]
+  function review({title, desc, apply, skip, rows}){
+    $('rv-title').textContent = title; $('rv-desc').textContent = desc;
+    $('rg-apply').textContent = apply; $('rg-skip').textContent = skip;
     const list = $('rg-list'); list.textContent = '';
-    const rows = [];
-    for (const g of groups){
-      const members = [g.keep, ...g.merge];
-      for (const x of g.merge){
-        const row = document.createElement('label'); row.className = 'rg-row';
-        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true;
-        const a = document.createElement('span'); a.className = 'rg-from';
-        a.textContent = `${save.items[x].emoji} ${x}`;
-        const arrow = document.createElement('span'); arrow.className = 'rg-arrow'; arrow.textContent = '併入';
-        const sel = document.createElement('select'); sel.className = 'sel';
-        for (const m of members) if (m !== x){ const o = document.createElement('option'); o.value = m; o.textContent = `${save.items[m].emoji} ${m}`; sel.append(o); }
-        sel.value = g.keep;
-        row.append(cb, a, arrow, sel);
-        list.append(row);
-        rows.push({cb, sel, from:x});
-      }
-    }
+    const made = rows.map(r => {
+      const row = document.createElement('label'); row.className = 'rg-row';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true;
+      const a = document.createElement('span'); a.className = 'rg-from'; a.textContent = r.label;
+      const arrow = document.createElement('span'); arrow.className = 'rg-arrow'; arrow.textContent = r.arrow;
+      const sel = document.createElement('select'); sel.className = 'sel';
+      for (const o of r.options){ const op = document.createElement('option'); op.value = o.value; op.textContent = o.label; sel.append(op); }
+      sel.value = r.value;
+      row.append(cb, a, arrow, sel);
+      list.append(row);
+      return {cb, sel, key:r.key};
+    });
     $('rg-setup').hidden = true; $('rg-review').hidden = false; $('rg-friend').hidden = true; $('rg-order').hidden = true; $('rg-folders').hidden = true;
     $('reorg').classList.add('open');
     return new Promise(resolve => {
       const done = picks => { $('reorg').classList.remove('open'); resolve(picks); };
-      $('rg-all').onclick = () => rows.forEach(r => r.cb.checked = true);
-      $('rg-none').onclick = () => rows.forEach(r => r.cb.checked = false);
-      $('rg-apply').onclick = () => done(rows.filter(r => r.cb.checked).map(r => ({from:r.from, to:r.sel.value})));
+      $('rg-all').onclick = () => made.forEach(r => r.cb.checked = true);
+      $('rg-none').onclick = () => made.forEach(r => r.cb.checked = false);
+      $('rg-apply').onclick = () => done(made.filter(r => r.cb.checked).map(r => ({key:r.key, value:r.sel.value})));
       $('rg-skip').onclick = () => done([]);
     });
   }
+  // 一一問玩家要不要合併相似的東西：每一列是「X 併入 Y」，可以勾、可以換要併進哪一個
+  async function reviewMerges(groups){
+    const rows = [];
+    for (const g of groups){
+      const members = [g.keep, ...g.merge];
+      for (const x of g.merge) rows.push({key:x, label:`${save.items[x].emoji} ${x}`, arrow:'併入', value:g.keep,
+        options:members.filter(m => m !== x).map(m => ({value:m, label:`${save.items[m].emoji} ${m}`}))});
+    }
+    const picks = await review({title:'要合併這些東西嗎？', apply:'合併勾選的', skip:'都不要合併', rows,
+      desc:'AI 覺得下面這些是同一樣東西。勾選的會併進右邊那一個：配方、萃取紀錄、收藏夾都會搬過去，左邊那個會從圖鑑消失。沒勾的維持分開。右邊可以換要併進哪一個。'});
+    return picks.map(p => ({from:p.key, to:p.value}));
+  }
+  // 分類選單：現有分類，再加上 AI 建議的新分類
+  function catOptions(extra){
+    const cs = catCounts().map(([c]) => c);
+    for (const e of extra) if (e && !cs.includes(e)) cs.push(e);
+    return cs.map(c => ({value:c, label:c}));
+  }
+
 
   // 真的合併：X 的配方、萃取紀錄、收藏都搬到 Y，然後刪掉 X
   function applyMerges(picks){
