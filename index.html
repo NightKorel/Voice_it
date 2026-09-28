@@ -619,7 +619,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.41';
+  const VERSION = '0.0.42';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1576,8 +1576,9 @@ ${DETAIL_RULES()}`;
 
   // 問 AI：手動模式跳視窗；Gemini 太忙時問要不要改手動
   // ---------- 停下 AI ----------
-  // 每次問 AI 都用同一個「開關」，按停止就把正在等的請求切掉；超過 45 秒沒回應也會自動切掉
-  const AI_TIMEOUT = 45000;
+  // 每次問 AI 都用同一個「開關」，按停止就把正在等的請求切掉；超過 20 秒沒回應也會自動切掉
+  // （整理一次要處理很多東西，回答比較長，給 40 秒）
+  let aiTimeout = 20000;
   let aiCtl = new AbortController();
   function stopAI(){ aiCtl.abort(); }
   const cancelledErr = () => { const e = new Error('已停止'); e.cancelled = true; return e; };
@@ -1586,10 +1587,11 @@ ${DETAIL_RULES()}`;
     checkStop();
     const ctl = aiCtl;
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, AI_TIMEOUT);
+    const limit = aiTimeout;
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, limit);
     try { return await fetch(url, {...opts, signal:ctl.signal}); }
     catch(e){
-      if (timedOut){ aiCtl = new AbortController(); const er = new Error('AI 超過 45 秒沒回應'); er.busy = true; throw er; }
+      if (timedOut){ aiCtl = new AbortController(); const er = new Error(`AI 超過 ${limit / 1000} 秒沒回應`); er.busy = true; throw er; }
       if (ctl.signal.aborted) throw cancelledErr();
       throw e;
     }
@@ -1866,7 +1868,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
   async function runReorg(){
     const doItems = $('rg-items').checked, doCat = $('rg-cat').checked, doMove = $('rg-move').checked;
     $('reorg').classList.remove('open');
-    reorging = true; freshAI();
+    reorging = true; freshAI(); aiTimeout = 40000;
     const btn = $('btn-reorg'); btn.classList.add('on');
     const progress = t => { btn.textContent = `■ ${t}（按一下停止）`; };
     const res = {items:0, cats:0, moved:0};
@@ -1992,7 +1994,7 @@ ${lines}
       if (!e.cancelled) toast(`整理到一半停下來了（已整理的有存起來）：${e.message}`, true);
       else toast('整理停下來了（已整理的有存起來）', true);
     } finally {
-      reorging = false; btn.classList.remove('on'); btn.textContent = '整理';
+      reorging = false; aiTimeout = 20000; btn.classList.remove('on'); btn.textContent = '整理';
     }
   }
 
