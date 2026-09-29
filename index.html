@@ -152,6 +152,10 @@
   .co-btn{padding:.2rem .6rem;font-size:.9rem}
   .tabrow{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
   .tabrow::-webkit-scrollbar{height:4px}
+  .tabrow[hidden],#c-subrow[hidden]{display:none}
+  #subtabs{margin-top:.3rem}
+  #subtabs .cattab{font-size:.75rem;padding:.2rem .6rem}
+  #subtabs .cattab.ai{color:var(--accent)}
   .cattab{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:1rem;padding:.25rem .7rem;
     font-size:.8rem;cursor:pointer;font-family:inherit;white-space:nowrap}
   .cattab:hover{border-color:var(--accent);color:var(--text)}
@@ -176,6 +180,7 @@
   .mn-row input[type=color]{width:3rem;height:2rem;border:1px solid var(--line);border-radius:.4rem;background:transparent;padding:0}
   .pk-row{width:100%;text-align:left;background:var(--bg);color:var(--text);font-family:inherit;justify-content:space-between}
   .pk-row:hover{border-color:var(--accent)}
+  .pk-row.pk-sub{padding-left:1.6rem;font-size:.88rem}
   #rg-list,.rg-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
   .rg-row{display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;border:1px solid var(--line);border-radius:.7rem;font-size:.92rem;cursor:pointer;flex-wrap:wrap}
   .rg-row input{margin-top:0}
@@ -295,9 +300,10 @@
   .tag:hover{border-color:var(--accent);color:var(--accent)}
   #c-catedit{margin:.6rem 0 .2rem}
   #c-catedit[hidden]{display:none}
-  #c-catin{width:100%;padding:.5rem .7rem;border-radius:.7rem;border:1px solid var(--line);background:var(--bg);color:var(--text);
+  #c-subin{margin-top:.4rem}
+  #c-catin,#c-subin{width:100%;padding:.5rem .7rem;border-radius:.7rem;border:1px solid var(--line);background:var(--bg);color:var(--text);
     font-size:.92rem;font-family:inherit;outline:none}
-  #c-catin:focus{border-color:var(--accent)}
+  #c-catin:focus,#c-subin:focus{border-color:var(--accent)}
   #c-catedit .actions{margin-top:.5rem}
   .rar{font-size:.85rem;color:var(--accent);margin:.35rem 0 .2rem}
   .rar .dots{letter-spacing:.06em;font-size:1.3em;vertical-align:-.08em}
@@ -455,6 +461,7 @@
       </div>
       <div id="favtabs" class="tabrow"></div>
       <div id="cattabs" class="tabrow"></div>
+      <div id="subtabs" class="tabrow" hidden></div>
     </div>
     <div id="list"></div>
   </div>
@@ -471,6 +478,8 @@
       <div id="c-catedit" hidden>
         <input id="c-catin" list="catlist" maxlength="12" placeholder="選一個分類，或打新的名字（最多 12 個字）" autocomplete="off">
         <datalist id="catlist"></datalist>
+        <div id="c-subrow" hidden><input id="c-subin" list="sublist" maxlength="12" placeholder="專有名詞的子分類，例如角色、作品（可以空著）" autocomplete="off"></div>
+        <datalist id="sublist"></datalist>
         <div class="actions">
           <button class="btn primary" id="c-catok">確定</button>
           <button class="btn" id="c-catcancel">取消</button>
@@ -751,7 +760,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.69';
+  const VERSION = '0.0.70';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -767,6 +776,8 @@
   // 分類是活的：AI 會優先用已有的分類，都不適合才自己開新分類。一開始沒什麼分類時，拿這些當參考
   const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話奇幻','科技','文化娛樂','概念','天文','專有名詞'];
   const PROPER_CAT = '專有名詞';  // 特定角色、作品、品牌、真實存在的特定人事物，一律放這類
+  // 專有名詞底下的子分類（納可 2026-09-29 要求）：存在東西的 sub 欄位，只有分類是專有名詞時才算數
+  const PROPER_SUBS = ['角色','作品','真實人物','地點建築','品牌商品','其他'];
   const RARITY = ['常見','普通','少見','稀有','傳說'];
   const stars = r => { r = Math.min(5, Math.max(1, r || 1)); return '★'.repeat(r) + '☆'.repeat(5 - r); };  // 稀有度用星星：1 顆實心到 5 顆實心
   const BASE = [
@@ -1173,7 +1184,7 @@
     const tab = (value, label) => {
       const b = document.createElement('button'); b.className = 'cattab' + (catFilter === value ? ' on' : '');
       b.textContent = label;
-      b.onclick = () => { if (catDragEnd > Date.now() - 300) return; catFilter = catFilter === value ? '' : value; renderList(); list.scrollTop = 0; };  // 再按一次回到全部
+      b.onclick = () => { if (catDragEnd > Date.now() - 300) return; catFilter = catFilter === value ? '' : value; subFilter = ''; renderList(); list.scrollTop = 0; };  // 再按一次回到全部
       if (value && value !== MINE){ b.dataset.cat = value; b.title = '長按可以左右拖曳排順序'; b.addEventListener('pointerdown', e => catDragDown(e, b)); }
       box.append(b);
     };
@@ -1186,6 +1197,111 @@
     box.append(add);
     const on = box.querySelector('.on');
     if (on) on.scrollIntoView({block:'nearest', inline:'nearest'});
+    renderSubFilter();
+  }
+
+  // ---------- 專有名詞的子分類 ----------
+  // 子分類存在東西的 sub 欄位；只有在「專有名詞」標籤底下才會多出一排子分類標籤
+  let subFilter = '';          // '' ＝全部；NO_SUB ＝還沒分的
+  const NO_SUB = '__nosub__';
+  const properNames = () => Object.keys(save.items).filter(n => save.items[n].cat === PROPER_CAT);
+  const subOf = n => (save.items[n] && save.items[n].cat === PROPER_CAT && save.items[n].sub) || '';
+  // 現有子分類與數量：預設的照固定順序排前面，AI 或自己開的照數量接在後面
+  function subCounts(){
+    const m = new Map();
+    for (const n of properNames()){ const c = subOf(n); if (c) m.set(c, (m.get(c) || 0) + 1); }
+    const pos = c => { const i = PROPER_SUBS.indexOf(c); return i < 0 ? 1e6 : i; };
+    return [...m].sort((a, b) => pos(a[0]) - pos(b[0]) || b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
+  }
+  // 給 AI 和輸入框用的子分類清單：預設的＋已經有的
+  const subList = () => [...new Set([...PROPER_SUBS, ...subCounts().map(([c]) => c)])];
+  let subSorting = '';  // AI 正在分子分類時的進度字
+  function renderSubFilter(){
+    const box = $('subtabs');
+    box.hidden = catFilter !== PROPER_CAT;
+    if (box.hidden){ subFilter = ''; return; }
+    const counts = subCounts(), none = properNames().filter(n => !subOf(n)).length;
+    if (subFilter && subFilter !== NO_SUB && !counts.some(([c]) => c === subFilter)) subFilter = '';
+    if (subFilter === NO_SUB && !none) subFilter = '';
+    box.textContent = '';
+    const tab = (value, label) => {
+      const b = document.createElement('button'); b.className = 'cattab' + (subFilter === value ? ' on' : '');
+      b.textContent = label;
+      b.onclick = () => { subFilter = subFilter === value ? '' : value; renderList(); list.scrollTop = 0; };
+      box.append(b);
+    };
+    tab('', `全部 ${counts.reduce((a, [, k]) => a + k, 0) + none}`);
+    for (const [c, k] of counts) tab(c, `${c} ${k}`);
+    if (none) tab(NO_SUB, `還沒分 ${none}`);
+    if (none || subSorting){
+      const ai = document.createElement('button'); ai.className = 'cattab ai';
+      ai.textContent = subSorting ? `■ ${subSorting}（按一下停止）` : `✨ 請 AI 分還沒分的 ${none} 樣`;
+      ai.title = 'AI 會建議每樣放哪個子分類，你勾選確認後才會改';
+      ai.onclick = sortProper;
+      box.append(ai);
+    }
+  }
+  // 請 AI 把還沒分子分類的專有名詞分一分：全部問完再一次給你勾選確認
+  const SUB_SCHEMA = {subs:{type:'ARRAY', items:{type:'OBJECT', properties:{name:{type:'STRING'}, sub:{type:'STRING'}}, required:['name','sub']}}};
+  async function sortProper(){
+    if (subSorting){ stopAI(); return; }
+    if (reorging){ toast('正在整理，等整理完再分', true); return; }
+    if (!aiReady()) return;
+    const todo = properNames().filter(n => !subOf(n));
+    if (!todo.length) return;
+    const parts = chunk(todo, MOVE_BATCH);
+    if (parts.length > 1 && !confirm(`還沒分的有 ${todo.length} 樣，大約要問 AI ${parts.length} 次。要開始嗎？\n\n問完會先給你勾選確認，勾的才會改。`)) return;
+    reorging = true; freshAI(); aiTimeout = 40000;
+    const found = new Map();  // 名稱 → AI 建議的子分類
+    try {
+      for (let i = 0; i < parts.length; i++){
+        if (i && prefs.ai !== 'manual') await sleep(4000);  // 放慢一點，避免撞到每分鐘上限
+        checkStop();
+        subSorting = parts.length > 1 ? `分子分類 ${i + 1}/${parts.length}` : '分子分類中……'; renderSubFilter();
+        const have = subCounts();
+        const out = await ask(
+`你是遊戲圖鑑的分類整理員。下面這些東西都在「${PROPER_CAT}」這個分類裡，請再幫它們分到子分類。
+${have.length ? `現有的子分類和裡面目前放的東西：
+${have.map(([c]) => `${c}：${properNames().filter(n => subOf(n) === c).slice(0, 30).join('、')}`).join('\n')}
+` : ''}
+可以用的子分類：${subList().join('、')}。
+- 角色：虛構作品、遊戲、神話傳說裡的角色。
+- 作品：書、電影、動畫、遊戲、歌曲等作品本身。
+- 真實人物：真實存在或存在過的人。
+- 地點建築：真實存在的特定地方、國家城市、建築、景點。
+- 品牌商品：品牌、公司、特定商品或產品型號。
+- 其他：都不適合的。
+真的都不適合、而且同類的東西不少時，才自己開一個新的 2 到 4 個字的子分類。
+
+下面每行是一樣東西，格式是「東西名稱：介紹」：
+${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\n')}
+
+輸出 subs 陣列，每一筆是 {"name":"東西名稱","sub":"子分類"}，每樣都要列。
+- name 必須一字不差地從上面抄（冒號前面那段）。
+範例：{"subs":[{"name":"皮卡丘","sub":"角色"},{"name":"艾菲爾鐵塔","sub":"地點建築"}]}`, SUB_SCHEMA);
+        for (const m of out.subs || []){
+          const name = String(m.name || '').trim(), it = save.items[name];
+          if (it && it.cat === PROPER_CAT && !it.sub && String(m.sub || '').trim()) found.set(name, cleanCat(m.sub));
+        }
+      }
+      subSorting = ''; renderSubFilter();
+      if (!found.size){ toast('AI 沒給出建議，再試一次看看', true); return; }
+      const names = [...found.values()];
+      const picks = await review({title:'要這樣分子分類嗎？', apply:'分勾選的', skip:'都不要分',
+        desc:'AI 建議把這些專有名詞放進右邊的子分類。勾選的才會改，右邊也可以換成別的。',
+        rows:[...found].map(([n, c]) => ({key:n, label:`${save.items[n].emoji} ${n}`, arrow:'放到', value:c,
+          options:[...new Set([...subList(), ...names])].map(x => ({value:x, label:x}))}))});
+      if (!picks.length) return;
+      snapshot(`專有名詞分子分類 ${picks.length} 樣`);
+      for (const p of picks){ const it = save.items[p.key]; if (it && it.cat === PROPER_CAT) it.sub = p.value; }
+      persist(); renderList();
+      toast(`分好 ${picks.length} 樣了`);
+    } catch(e){
+      if (!e.cancelled) toast(`分子分類停下來了：${e.message}`, true);
+      else toast('分子分類停下來了', true);
+    } finally {
+      reorging = false; aiTimeout = 20000; subSorting = ''; renderSubFilter();
+    }
   }
 
   // 長按分類標籤拖曳排順序：按住約 0.4 秒後標籤浮起來，左右拖到想要的位置放開（順序存在 catOrder）
@@ -1349,18 +1465,21 @@
     if (filterUnext) names = names.filter(isUnext);
     if (cat === MINE) names = names.filter(n => save.items[n].custom);
     else if (cat) names = names.filter(n => save.items[n].cat === cat);
+    if (cat === PROPER_CAT && subFilter) names = names.filter(n => subOf(n) === (subFilter === NO_SUB ? '' : subFilter));
     const I = save.items, mode = $('sort').value;
     const byTime = (a,b) => I[a].t - I[b].t;
     const rar = n => I[n].rarity || 0;
     const catOrder = new Map(catCounts().map(([c], i) => [c, i]));
     const co = n => catOrder.has(I[n].cat) ? catOrder.get(I[n].cat) : 9999;
+    const subOrder = new Map(subCounts().map(([c], i) => [c, i]));
+    const subRank = n => subOrder.has(subOf(n)) ? subOrder.get(subOf(n)) : 9999;  // 專有名詞裡再照子分類排
     const sorters = {
       time: byTime,
       new: (a,b) => byTime(b,a),
       name: (a,b) => a.localeCompare(b, 'zh-Hant'),
       rareHigh: (a,b) => rar(b) - rar(a) || byTime(a,b),
       rareLow: (a,b) => (rar(a) || 9) - (rar(b) || 9) || byTime(a,b),
-      cat: (a,b) => co(a) - co(b) || byTime(a,b)
+      cat: (a,b) => co(a) - co(b) || subRank(a) - subRank(b) || byTime(a,b)
     };
     const sorter = sorters[mode] || byTime;
     names.sort(qr ? (a, b) => qr.get(a) - qr.get(b) || sorter(a, b) : sorter);  // 搜尋時先照對得多準排
@@ -1476,18 +1595,19 @@
     if (!names.length) return;
     $('sc-desc').textContent = `把勾選的 ${names.length} 樣改到哪個分類？改完算「自己分的」，整理時 AI 不會動。`;
     const box = $('sc-list'); box.textContent = '';
-    const apply = c => {
+    const apply = (c, sub) => {
       if (!String(c || '').trim()){ toast('分類名稱不能空白', true); return; }
       c = cleanCat(c, CAT_MAX_USER);
-      const moving = names.filter(n => save.items[n].cat !== c);
-      if (!moving.length){ toast(`都已經在「${c}」了`); return; }
+      const label = sub ? `${c}・${sub}` : c;  // sub：專有名詞的子分類
+      const moving = names.filter(n => save.items[n].cat !== c || (sub && subOf(n) !== sub));
+      if (!moving.length){ toast(`都已經在「${label}」了`); return; }
       if (moving.length > 1){
-        if (!confirm(`確定把 ${moving.length} 樣東西改到「${c}」嗎？\n\n它們原本的分類會被換掉，而且會變成「自己分的」，整理時 AI 不會再動。\n\n改錯了可以到設定按「復原」（只保留最近一次）。`)) return;
-        snapshot(`${moving.length} 樣改到 ${c}`);
+        if (!confirm(`確定把 ${moving.length} 樣東西改到「${label}」嗎？\n\n它們原本的分類會被換掉，而且會變成「自己分的」，整理時 AI 不會再動。\n\n改錯了可以到設定按「復原」（只保留最近一次）。`)) return;
+        snapshot(`${moving.length} 樣改到 ${label}`);
       }
-      for (const n of names){ save.items[n].cat = c; save.items[n].catLocked = true; }
+      for (const n of names){ const it = save.items[n]; it.cat = c; it.catLocked = true; if (sub){ it.sub = sub; it.subLocked = true; } }
       persist(); renderList(); $('reorg').classList.remove('open');
-      toast(`${names.length} 樣改到「${c}」了`);
+      toast(`${names.length} 樣改到「${label}」了`);
       if (after) after();
     };
     for (const [c, k] of catCounts()){
@@ -1497,6 +1617,15 @@
       const t = document.createElement('span'); t.className = 'rg-arrow'; t.textContent = allIn ? '全部已經在這類' : `${k} 樣`;
       b.append(t); b.onclick = () => apply(c);
       box.append(b);
+      // 專有名詞底下列出子分類，可以直接放進某個子分類
+      if (c === PROPER_CAT) for (const sc of subList()){
+        const sb = document.createElement('button'); sb.className = 'rg-row pk-row pk-sub';
+        sb.textContent = `└ ${sc}`;
+        const st = document.createElement('span'); st.className = 'rg-arrow';
+        st.textContent = names.every(n => save.items[n].cat === PROPER_CAT && subOf(n) === sc) ? '全部已經在這裡' : `${properNames().filter(n => subOf(n) === sc).length} 樣`;
+        sb.append(st); sb.onclick = () => apply(PROPER_CAT, sc);
+        box.append(sb);
+      }
     }
     $('sc-name').value = '';
     $('sc-add').onclick = () => apply($('sc-name').value);
@@ -1601,7 +1730,7 @@
   function addItem(name, data, extra){
     const old = save.items[name];
     if (old){
-      if (!old.desc){ const d = {...data}; if (old.catLocked) delete d.cat; delete d.emoji; Object.assign(old, d); }
+      if (!old.desc){ const d = {...data}; if (old.catLocked) delete d.cat; if (old.subLocked || old.sub) delete d.sub; delete d.emoji; Object.assign(old, d); }
       return false;
     }
     save.items[name] = {t:Date.now(), ...extra, ...data};
@@ -1900,11 +2029,14 @@
   const CAT_MAX_USER = 12;
   const cleanCat = (c, max = 6) => String(c || '').replace(/[\s。，！？、「」"'.,!?（）()]/g, '').slice(0, max) || '其他';
   // AI 回的東西 → 存檔用的資料；AI 標成專有名詞的，分類一律是「專有名詞」
-  const aiData = o => { const d = {emoji:o.emoji, ...cleanDetail(o)}; if (isTrue(o.proper)) d.cat = PROPER_CAT; return d; };
+  const aiData = o => { const d = {emoji:o.emoji, ...cleanDetail(o)}; if (isTrue(o.proper)) d.cat = PROPER_CAT; return keepSub(d); };
+  // 子分類只有在專有名詞裡才留著
+  const keepSub = d => { if (d.cat !== PROPER_CAT || !d.sub) delete d.sub; return d; };
   const cleanDetail = o => ({
     desc: String(o.desc || '').trim().slice(0, 80),
     rarity: Math.min(5, Math.max(1, Math.round(Number(o.rarity) || 1))),
     cat: cleanCat(o.category),
+    sub: String(o.sub || '').trim() ? cleanCat(o.sub) : '',
     color: /^#[0-9a-f]{6}$/i.test(String(o.color || '').trim()) ? String(o.color).trim() : ''
   });
   function catRule(){
@@ -1912,7 +2044,8 @@
     const list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
     if (!list.includes(PROPER_CAT)) list.push(PROPER_CAT);
     return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。
-  專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方，例如「皮卡丘」「哈利波特」「艾菲爾鐵塔」）一律分到「${PROPER_CAT}」。`;
+  專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方，例如「皮卡丘」「哈利波特」「艾菲爾鐵塔」）一律分到「${PROPER_CAT}」。
+- sub：只有分到「${PROPER_CAT}」時才填，是它底下的子分類，優先從這些選：${subList().join('、')}（角色＝虛構或神話角色，作品＝書、電影、動畫、遊戲、歌曲本身，真實人物＝真實的人，地點建築＝真實的特定地方或建築，品牌商品＝品牌、公司、特定商品）。不是專有名詞就填空字串 ""。`;
   }
   const DETAIL_RULES = () =>
 `- desc：像百科的一到兩句話，繁體中文，40 字以內，只介紹「這個東西本身」是什麼、有什麼特色。
@@ -1921,7 +2054,7 @@
 ${catRule()}
 - color：這個東西最常讓人聯想到的顏色，用 #RRGGBB 格式。`;
   const DETAIL_SCHEMA = {
-    desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, color:{type:'STRING'}
+    desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, sub:{type:'STRING'}, color:{type:'STRING'}
   };
   const ITEM_SCHEMA = {name:{type:'STRING'}, emoji:{type:'STRING'}, proper:{type:'BOOLEAN'}, ...DETAIL_SCHEMA};
   const NAME_LIMIT = 6;
@@ -1942,7 +2075,7 @@ ${catRule()}
   不同配方可以合出同一樣東西。如果結果就是其中某一樣（包括同義詞或不同寫法，例如「蒸汽」和「蒸氣」），請用上面一字不差的名字，不要另外取名。不是的話就正常取新名字。`;
   }
   const COMBINE_SCHEMA = ITEM_SCHEMA;  // 不再有「合成失敗」：一定要給結果
-  const OPTIONAL = new Set(['proper']);  // AI 忘了回也沒關係的欄位
+  const OPTIONAL = new Set(['proper', 'sub']);  // AI 忘了回也沒關係的欄位
   const isTrue = v => v === true || String(v).toLowerCase() === 'true';
   // 算字數：中文一個字算一個，英文一個單字算一個
   const nameLen = n => (n.match(/[^\x00-\x7F]/g) || []).length + (n.match(/[A-Za-z0-9]+/g) || []).length;
@@ -2017,7 +2150,7 @@ ${DETAIL_RULES()}`;
     const prompt =
 `你是「1+1=?」合成遊戲的圖鑑編輯。請為遊戲裡的「${name}」寫圖鑑資料。
 ${DETAIL_RULES()}`;
-    return cleanDetail(await ask(prompt, DETAIL_SCHEMA));
+    return keepSub(cleanDetail(await ask(prompt, DETAIL_SCHEMA)));
   }
 
   // 問 AI：手動模式跳視窗；Gemini 太忙時問要不要改手動
@@ -2684,7 +2817,7 @@ ${lines}
       dots.textContent = stars(it.rarity);
       rr.append(dots, document.createTextNode(' ' + RARITY[it.rarity - 1]));
     }
-    $('c-cat').textContent = (it.cat || (it.custom ? '只在「我的」' : '未分類')) + (it.catLocked && it.cat ? '（自己分的）' : '') + ' ✎';
+    $('c-cat').textContent = (it.cat || (it.custom ? '只在「我的」' : '未分類')) + (subOf(name) ? `・${subOf(name)}` : '') + (it.catLocked && it.cat ? '（自己分的）' : '') + ' ✎';
     $('c-catedit').hidden = true;
     const asking = !!it._asking;
     $('c-desc').textContent = it.desc || (asking ? '介紹生成中……' : it.descCut ? '介紹為了騰出存檔空間清掉了' : '還沒有介紹');
@@ -2810,6 +2943,7 @@ ${lines}
     try {
       const d = await askDetail(name);
       if (it.catLocked) delete d.cat;
+      if (it.subLocked || it.sub) delete d.sub;
       if (descOnly) it.desc = d.desc || it.desc; else Object.assign(it, d);
       persist(); renderList(); renderSlots(); if (last) renderResult();
     } catch(e){
@@ -2828,7 +2962,11 @@ ${lines}
     const dl = $('catlist'); dl.textContent = '';
     for (const [c] of catCounts()){ const o = document.createElement('option'); o.value = c; dl.append(o); }
     $('c-catin').value = it.cat || '';
-    $('c-catauto').hidden = !it.catLocked || !!it.custom;
+    const sl = $('sublist'); sl.textContent = '';
+    for (const c of subList()){ const o = document.createElement('option'); o.value = c; sl.append(o); }
+    $('c-subin').value = subOf(cardName);
+    $('c-subrow').hidden = it.cat !== PROPER_CAT;
+    $('c-catauto').hidden = !(it.catLocked || it.subLocked) || !!it.custom;
     $('c-catin').placeholder = it.custom ? '選一個分類，或清空＝只放在「我的」（最多 12 個字）' : '選一個分類，或打新的名字（最多 12 個字）';
     $('c-catedit').hidden = false;
     $('c-catin').focus();
@@ -2838,14 +2976,21 @@ ${lines}
     const v = $('c-catin').value.trim();
     if (!v && !it.custom){ toast('分類名稱不能空白', true); return; }
     it.cat = v ? cleanCat(v, CAT_MAX_USER) : ''; it.catLocked = true;  // 自己設定的東西可以清空＝只放在「我的」
+    if (it.cat === PROPER_CAT){
+      // 子分類：打了就算自己分的；空著＝還沒分，之後可以請 AI 分
+      const sv = $('c-subin').value.trim(), sub = sv ? cleanCat(sv, CAT_MAX_USER) : '';
+      if (sub !== (it.sub || '')){ if (sub){ it.sub = sub; it.subLocked = true; } else { delete it.sub; delete it.subLocked; } }
+    }
     persist(); renderList(); openCard(cardName);
   }
+  $('c-catin').addEventListener('input', () => { $('c-subrow').hidden = cleanCat($('c-catin').value, CAT_MAX_USER) !== PROPER_CAT; });
+  $('c-subin').addEventListener('keydown', e => { if (e.key === 'Enter') saveCat(); });
   $('c-catok').onclick = saveCat;
   $('c-catin').addEventListener('keydown', e => { if (e.key === 'Enter') saveCat(); });
   $('c-catcancel').onclick = () => { $('c-catedit').hidden = true; };
   $('c-catauto').onclick = () => {
     const it = save.items[cardName]; if (!it) return;
-    delete it.catLocked; persist(); openCard(cardName);
+    delete it.catLocked; delete it.subLocked; persist(); openCard(cardName);
     toast('這樣東西的分類交回給 AI 管了');
   };
   function closeCard(){ $('card').classList.remove('open'); cardName = null; }
