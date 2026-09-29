@@ -906,7 +906,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.10';
+  const VERSION = '0.1.11';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2373,7 +2373,8 @@ ${catRule(cats)}
     const names = [...new Set([...Object.keys(save.items), ...Object.keys(starterItems())])]
       .sort((a, b) => rank(a) - rank(b)).slice(0, 400);
     return `- 已經有的東西：${names.join('、')}。
-  不同配方可以合出同一樣東西。如果結果就是其中某一樣（包括同義詞或不同寫法，例如「蒸汽」和「蒸氣」），請用上面一字不差的名字，不要另外取名。不是的話就正常取新名字。`;
+  這份清單只用來對照寫法，不是讓你挑答案的選項。請先照規則想出結果，想好之後才來對照：結果剛好就是其中某一樣（包括同義詞或不同寫法，例如「蒸汽」和「蒸氣」），就用上面一字不差的名字；不是的話就正常取新名字。
+  不要偷懶從清單裡挑一個沾得上邊的，新的東西完全可以。`;
   }
   const COMBINE_SCHEMA = ITEM_SCHEMA;  // 不再有「合成失敗」：一定要給結果
   const OPTIONAL = new Set(['proper', 'cats']);  // AI 忘了回也沒關係的欄位（開專案時沒給標籤，就照一般的標籤）
