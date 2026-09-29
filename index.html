@@ -116,6 +116,16 @@
   #backupbar{margin:0 1rem;padding:.55rem .8rem;border:1px dashed var(--accent);border-radius:.8rem;font-size:.82rem;color:var(--muted);
     display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;animation:rise .22s ease-out}
   #backupbar[hidden],#btn-undo[hidden]{display:none}
+  #worldbar{margin:0 1rem .4rem;padding:.45rem .8rem;border:1px solid var(--accent);border-radius:.8rem;font-size:.84rem;color:var(--text);
+    display:flex;align-items:center;gap:.6rem;background:var(--accent-soft)}
+  #worldbar[hidden]{display:none}
+  #wb-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #btn-lab.on{border-color:var(--accent);color:var(--accent)}
+  .wl-row{cursor:default;flex-wrap:wrap}
+  .wl-row.here{border-color:var(--accent)}
+  .ex-labs{display:flex;align-items:center;gap:.4rem;font-size:.86rem;margin:.2rem 0 .4rem;cursor:pointer}
+  .ex-labs[hidden]{display:none}
+  #nl-bases{display:flex;flex-direction:column;gap:.35rem;margin:.5rem 0}
   .bk-btns{display:flex;gap:.35rem;flex-wrap:wrap;margin-left:auto}
   #btn-stop{border-color:var(--danger);color:var(--danger)}
   #r-busy{color:var(--muted);animation:pulse 1.1s ease-in-out infinite}
@@ -153,6 +163,8 @@
   /* 清單上方那排按鈕：小手機把字縮短、按鈕靠緊一點，還是擺不下就把右邊兩顆換到下一行 */
   #side-head .row.tools{flex-wrap:wrap;row-gap:.35rem}
   .row-r{display:flex;gap:inherit;margin-left:auto}
+  .sm-icon{display:none}
+  @media (max-width:380px){ .sm-icon{display:inline} .sm-text{display:none} #btn-lab,#btn-stats{padding-left:.45rem;padding-right:.45rem} #topbar{gap:.25rem;padding-left:.6rem;padding-right:.6rem} }
   @media (max-width:420px){ .gl-word,.sm-hide{display:none} #side-head .row.tools{gap:.3rem} #side-head .row.tools .chipbtn{padding-left:.5rem;padding-right:.5rem} }
   #gl-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
   .gl-row{cursor:default;flex-wrap:nowrap}
@@ -425,9 +437,11 @@
       <span id="ver" class="ver"></span>
       <button id="aimode" title="切換 AI 來源"></button>
       <div class="sp"></div>
-      <button class="btn" id="btn-stats">統計</button>
+      <button class="btn" id="btn-lab" title="實驗室：開新的小世界">🧪</button>
+      <button class="btn" id="btn-stats" title="統計"><span class="sm-icon">📊</span><span class="sm-text">統計</span></button>
       <button class="btn" id="btn-settings">設定</button>
     </div>
+    <div id="worldbar" hidden><span id="wb-text"></span><button class="chipbtn" id="wb-home">回我的世界</button></div>
     <div id="backupbar" hidden>
       <span id="bk-text"></span>
       <div class="bk-btns">
@@ -623,6 +637,30 @@
       <div class="favnew"><input id="nc-name" maxlength="12" placeholder="新分類的名字（最多 12 個字）" autocomplete="off"><button class="btn primary" id="nc-add">建立</button></div>
       <div class="actions"><button class="btn" id="nc-cancel">取消</button></div>
     </div>
+    <div id="rg-worlds" hidden>
+      <h2>🧪 實驗室</h2>
+      <p class="muted">每個專案是一個獨立的小世界：你定主題，AI 想出這個主題最基礎的幾樣東西當起點，取代水火風土。玩得開心，可以把東西併入我的世界。</p>
+      <div id="wl-list"></div>
+      <div class="actions">
+        <button class="btn primary" id="wl-new">＋ 開新專案</button>
+        <button class="btn" id="wl-close">關閉</button>
+      </div>
+    </div>
+    <div id="rg-newlab" hidden>
+      <h2>開新專案</h2>
+      <div class="mn-row"><label>名稱</label><input id="nl-name" maxlength="12" placeholder="例如：海賊冒險（最多 12 個字）" autocomplete="off"></div>
+      <div class="mn-row"><label>主題</label><input id="nl-theme" maxlength="24" placeholder="例如：海賊王、中世紀城堡、深海" autocomplete="off"></div>
+      <div class="mn-row"><label>補充</label><textarea id="nl-prompt" maxlength="300" placeholder="可以空著。想要的風格、方向或限制，這個專案每次合成 AI 都會看到"></textarea></div>
+      <div class="mn-row"><label>起點</label><select id="nl-k" class="sel"><option value="3">3 樣</option><option value="4" selected>4 樣</option><option value="5">5 樣</option><option value="6">6 樣</option></select>
+        <button class="btn" id="nl-gen">請 AI 想起點</button></div>
+      <div id="nl-bases"></div>
+      <div class="favnew"><input id="nl-add" maxlength="24" placeholder="也可以自己加一個起點" autocomplete="off"><button class="btn" id="nl-addbtn">加進去</button></div>
+      <p class="muted" id="nl-note">起點至少要 2 樣。不喜歡的按 ✕ 拿掉，或按「請 AI 想起點」換一批。</p>
+      <div class="actions">
+        <button class="btn primary" id="nl-start" disabled>開始這個世界</button>
+        <button class="btn" id="nl-cancel">取消</button>
+      </div>
+    </div>
     <div id="rg-goals" hidden>
       <h2>📓 目標本</h2>
       <p class="muted">記下想合出來的東西，合出來就會自動打勾。</p>
@@ -731,6 +769,7 @@
       <button class="btn" id="btn-partial" title="只匯出某些分類、收藏夾的東西">部分匯出</button>
       <button class="btn" id="btn-merge">合併朋友的存檔</button>
     </div>
+    <label class="ex-labs" id="ex-labs-row" hidden><input type="checkbox" id="ex-labs"> 下載、分享時連實驗室的專案一起匯出（<span id="ex-labs-n"></span> 個）</label>
     <p class="muted">跟朋友交換：把「分享存檔」或「下載存檔」的檔案傳給對方，對方按「合併朋友的存檔」。只會加進你沒有的東西和配方，你已經有的一律以你的為主。</p>
     <div class="actions"><button class="btn" id="btn-undo" hidden></button></div>
     <p class="muted">刪除、整理、合併朋友的存檔、匯入、全部重來之前，會自動留一份快照；按上面的「復原」可以回到那之前（只保留最近一次）。</p>
@@ -796,7 +835,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.76';
+  const VERSION = '0.0.77';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -819,12 +858,24 @@
     地點建築:'真實存在的特定地方、國家城市、建築、景點', 品牌商品:'品牌、公司、特定商品或產品型號', 其他:'都不適合的'};
   const RARITY = ['常見','普通','少見','稀有','傳說'];
   const stars = r => { r = Math.min(5, Math.max(1, r || 1)); return '★'.repeat(r) + '☆'.repeat(5 - r); };  // 稀有度用星星：1 顆實心到 5 顆實心
-  const BASE = [
+  // 我的世界的起點；在實驗室的專案裡，BASE 會換成那個專案的起點
+  const MAIN_BASE = [
     {name:'水', emoji:'💧', desc:'萬物生命的源頭，會流動、會蒸發，也能把火澆熄。', rarity:1, cat:'自然', color:'#3d8bd4'},
     {name:'火', emoji:'🔥', desc:'會發光發熱的燃燒現象，人類的文明從學會用火開始。', rarity:1, cat:'自然', color:'#e2582a'},
     {name:'風', emoji:'🌬️', desc:'流動的空氣，看不見，卻吹得動雲、船帆和樹葉。', rarity:1, cat:'自然', color:'#8fc3d6'},
     {name:'土', emoji:'🌍', desc:'承載萬物的大地，種子在這裡發芽，房子在這裡蓋起。', rarity:1, cat:'自然', color:'#8b6a42'}
   ];
+  let BASE = MAIN_BASE;
+  // ---------- 實驗室（納可 2026-09-29 要求）----------
+  // 原本的世界叫「我的世界」，存在 localStorage（SAVE_KEY）。實驗室的每個專案是一份獨立存檔，放在瀏覽器資料庫（IndexedDB，key＝lab:專案id），
+  // 專案存檔多一個 lab 欄位：{id, name, theme, prompt, bases:[起點], t}。切換世界＝把 save 換成那份存檔、BASE 換成它的起點
+  const LABS_KEY = 'wuxian_labs';    // 專案清單（名字、主題、幾樣東西），放 localStorage，很小
+  const WORLD_KEY = 'wuxian_world';  // 上次待在哪個世界
+  let world = null;                  // null＝我的世界；不然是專案 id
+  const labCache = new Map();        // 專案 id → 存檔（打開遊戲時從資料庫全部讀進來，匯出時不用等）
+  let labIndex = [];
+  try { labIndex = JSON.parse(localStorage.getItem(LABS_KEY)) || []; } catch(e){}
+  const baseNames = () => BASE.map(b => b.name).join('、');
 
   const store = {
     get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
@@ -889,7 +940,7 @@
       if (it && !it.desc) Object.assign(it, {desc:b.desc, rarity:b.rarity, cat:b.cat, color:b.color});
     }
     // 內建圖鑑裡有的東西，直接補上寫好的介紹（不花次數）
-    const SI = (window.STARTER || {}).items || {};
+    const SI = s.lab ? {} : (window.STARTER || {}).items || {};  // 實驗室的專案不用內建圖鑑
     for (const [n, it] of Object.entries(s.items)){
       const d = SI[n];
       if (d && !it.desc) Object.assign(it, {desc:d[1], rarity:d[2], cat:it.catLocked ? it.cat : d[3], color:d[4]});
@@ -906,6 +957,7 @@
   // 存檔：瀏覽器空間滿了，先問玩家，同意後清掉最早發現、沒收藏的 prefs.trimN 樣（設定可調）東西的介紹，再存一次（還不夠就再問）
   let trimAsking = false;
   function persist(){
+    if (world){ persistLab(); return; }
     if (store.set(SAVE_KEY, JSON.stringify(save))) return;
     if (!store.full){ toast('存檔失敗，瀏覽器可能不讓這個網頁存資料', true); return; }
     if (trimAsking) return;
@@ -932,8 +984,9 @@
   // 內建配方（starter.js）
   const STARTER = window.STARTER || {items:{}, recipes:[]};
   const STARTER_MAP = new Map(STARTER.recipes.map(([p, q, r]) => [comboKey([p, q]), r]));
+  const starterItems = () => world ? {} : STARTER.items;  // 內建圖鑑、內建配方只用在我的世界
   function starterData(name){
-    const d = STARTER.items[name];
+    const d = starterItems()[name];
     return d ? {emoji:d[0], desc:d[1], rarity:d[2], cat:d[3], color:d[4]} : null;
   }
 
@@ -1056,7 +1109,7 @@
 
   // ---------- 清單 ----------
   // 整理視窗裡一次只顯示一個面板
-  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-partial', 'rg-mine', 'rg-stats', 'rg-goals'];
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-partial', 'rg-mine', 'rg-stats', 'rg-goals', 'rg-worlds', 'rg-newlab'];
   function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
 
   // ---------- 收藏夾 ----------
@@ -1968,11 +2021,12 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   // 每多發現 30 樣就提醒一次（存在 save.meta）。按下載或分享就算備份過；「之後再說」會晚 15 樣再提醒
   const BACKUP_EVERY = 30;
   function backupDue(){
+    if (world) return false;  // 備份提醒只看我的世界（專案要備份，匯出時勾「連專案一起匯出」）
     const m = save.meta || (save.meta = {});
     if (m.backupAt == null) m.backupAt = Object.keys(save.items).length;  // 第一次：從現在開始算
     return Object.keys(save.items).length - m.backupAt >= BACKUP_EVERY;
   }
-  function markBackup(){ (save.meta || (save.meta = {})).backupAt = Object.keys(save.items).length; save.meta.backupTime = Date.now(); persist(); renderBackup(); }
+  function markBackup(){ if (world) return; (save.meta || (save.meta = {})).backupAt = Object.keys(save.items).length; save.meta.backupTime = Date.now(); persist(); renderBackup(); }
   function renderBackup(){
     const bar = $('backupbar');
     if (!backupDue()){ bar.hidden = true; return; }
@@ -2052,7 +2106,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     const known = (save.recipes[k] || []).find(n => save.items[n]);
     if (known){ recordExtract(known, names); return finish('combine', names, [known], []); }
     // 內建配方：直接給寫好的結果（不花次數）
-    const sr = names.length === 2 && STARTER_MAP.get(k);
+    const sr = names.length === 2 && !world && STARTER_MAP.get(k);
     if (sr){
       const isNew = addItem(sr, starterData(sr) || {}, {from:names});
       save.recipes[k] = [sr];
@@ -2170,10 +2224,10 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   // AI 給的名字如果其實是原有的詞（只差大小寫、全形半形、空格），沿用原本的名字
   const normKey = n => String(n || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
   function canonical(name){
-    if (!name || save.items[name] || STARTER.items[name]) return name;
+    if (!name || save.items[name] || starterItems()[name]) return name;
     const k = normKey(name);
     for (const n of Object.keys(save.items)) if (normKey(n) === k) return n;
-    for (const n of Object.keys(STARTER.items)) if (normKey(n) === k) return n;
+    for (const n of Object.keys(starterItems())) if (normKey(n) === k) return n;
     return name;
   }
   // 沒有意義的名字：空的、只有刪節號或標點、抄了格式範例的提示字
@@ -2233,9 +2287,9 @@ ${catRule()}
   // 讓 AI 知道已經有哪些東西：不同配方可以合出同一樣，用同一個名字，不要冒出同義詞
   function knownRule(){
     // 最多給 400 樣：稀有度低（常見）的優先，同稀有度時已發現的、最近的優先；稀有的本來就亂，少給沒關係
-    const rar = n => (save.items[n] ? save.items[n].rarity : (STARTER.items[n] || [])[2]) || 3;
+    const rar = n => (save.items[n] ? save.items[n].rarity : (starterItems()[n] || [])[2]) || 3;
     const rank = n => rar(n) * 1e14 + (save.items[n] ? -save.items[n].t / 1e3 : 1e12);
-    const names = [...new Set([...Object.keys(save.items), ...Object.keys(STARTER.items)])]
+    const names = [...new Set([...Object.keys(save.items), ...Object.keys(starterItems())])]
       .sort((a, b) => rank(a) - rank(b)).slice(0, 400);
     return `- 已經有的東西：${names.join('、')}。
   不同配方可以合出同一樣東西。如果結果就是其中某一樣（包括同義詞或不同寫法，例如「蒸汽」和「蒸氣」），請用上面一字不差的名字，不要另外取名。不是的話就正常取新名字。`;
@@ -2269,7 +2323,7 @@ ${now === FAIL ? '- 原本判定合成失敗，請再想想有沒有合理的結
     const list = names.map(n => `「${n}」`).join('、');
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家把 ${list} 這 ${names.length} 樣東西合在一起，請決定會產生什麼。
-${describe(names)}規則：
+${themeRule()}${describe(names)}規則：
 ${NAME_RULE}
 - 結果要合理，看到的人想得通為什麼會變成這個，不要天馬行空亂湊。
 - 但不要老是退到最籠統的大類（例如能量、物質、生命、自然）。優先選具體、有意思的東西；冷門但說得通的結果也很好。
@@ -2291,7 +2345,7 @@ ${againRule(avoid, names)}${DETAIL_RULES()}`;
   async function askExtract(name, avoid){
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家想把「${name}」萃取、拆解，反推出構成它的、更原始更基本的東西。
-${describe([name])}規則：
+${themeRule()}${describe([name])}規則：
 - 回傳 parts，2 到 3 樣東西，每一樣都要比「${name}」更原始、更基本，而且合在一起說得通能變成「${name}」。
 - 不能是「${name}」本身。
 ${knownRule()}
@@ -2316,7 +2370,7 @@ ${DETAIL_RULES()}`;
   async function askDetail(name){
     const prompt =
 `你是「1+1=?」合成遊戲的圖鑑編輯。請為遊戲裡的「${name}」寫圖鑑資料。
-${DETAIL_RULES()}`;
+${themeRule()}${DETAIL_RULES()}`;
     return keepSub(cleanDetail(await ask(prompt, DETAIL_SCHEMA)));
   }
 
@@ -2918,11 +2972,11 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   function lsSnap(){ try { return JSON.parse(store.get(SNAP_KEY)); } catch(e){ return null; } }
   function snapshot(reason){
     const at = Date.now(), data = JSON.stringify(save);  // 當下就把存檔抄起來，之後的改動不會混進去
-    const prev = snapMeta;
-    snapMeta = {at, reason}; renderSnap();
-    idbSet('snapshot', {at, reason, data}).then(r => {
+    const prev = snapMeta, w = world || '';  // 記下是在哪個世界拍的，復原時只能回到同一個世界
+    snapMeta = {at, reason, world:w}; renderSnap();
+    idbSet('snapshot', {at, reason, world:w, data}).then(r => {
       if (r.ok){ store.del(SNAP_KEY); return; }
-      if (!store.set(SNAP_KEY, JSON.stringify({at, reason, data:JSON.parse(data)}))){ snapMeta = prev; renderSnap(); }
+      if (!store.set(SNAP_KEY, JSON.stringify({at, reason, world:w, data:JSON.parse(data)}))){ snapMeta = prev; renderSnap(); }
     });
   }
   // 打開遊戲時：舊版放在 localStorage 的快照搬進資料庫，騰出存檔空間
@@ -2934,7 +2988,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
       snapMeta = {at:old.at, reason:old.reason};
     } else {
       const r = await idbGet('snapshot');
-      if (r.ok && r.v && r.v.data) snapMeta = {at:r.v.at, reason:r.v.reason};
+      if (r.ok && r.v && r.v.data) snapMeta = {at:r.v.at, reason:r.v.reason, world:r.v.world || ''};
     }
     renderSnap();
   }
@@ -2943,13 +2997,14 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     b.hidden = !snapMeta;
     if (snapMeta){
       const t = new Date(snapMeta.at).toLocaleString('zh-TW', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
-      b.textContent = `↶ 復原到「${snapMeta.reason}」之前（${t}）`;
+      b.textContent = `↶ 復原到「${snapMeta.reason}」之前（${snapMeta.world ? worldName(snapMeta.world) + '，' : ''}${t}）`;
     }
   }
   $('btn-undo').onclick = async () => {
     let snap = lsSnap(), data = snap && snap.data;
     if (!data){ const r = await idbGet('snapshot'); snap = r.ok && r.v; data = snap && snap.data && JSON.parse(snap.data); }
     if (!data){ snapMeta = null; renderSnap(); toast('找不到快照', true); return; }
+    if ((snap.world || '') !== (world || '')){ toast(`這份快照是在${worldName(snap.world)}拍的，先切換過去再復原`, true); return; }
     if (!confirm(`要把存檔復原到「${snap.reason}」之前嗎？\n\n在那之後發現的東西、做的改動都會消失。\n\n（復原之前會先把現在的樣子留一份，按錯了可以再按一次「復原」回來）`)) return;
     store.del(SNAP_KEY);
     snapshot('復原');  // 復原前把現在的樣子也留一份，按錯了還能再復原回來
@@ -2958,6 +3013,245 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     renderList(); renderSlots(); renderResult(); renderSnap(); closeSettings();
     toast('已經復原了');
   };
+
+  // ---------- 實驗室：切換世界 ----------
+  const saveIndex = () => store.set(LABS_KEY, JSON.stringify(labIndex));
+  const labName = id => { const x = labIndex.find(l => l.id === id); return x ? x.name : '已刪掉的專案'; };
+  const worldName = id => id ? `專案「${labName(id)}」` : '我的世界';
+  // 專案存檔寫進資料庫：連續改動時等一下再一起寫，離開頁面前會馬上寫
+  let labTimer = null, labDirty = null;
+  function persistLab(){
+    labCache.set(world, save);
+    const x = labIndex.find(l => l.id === world);
+    if (x){ const n = Object.keys(save.items).length; if (x.n !== n){ x.n = n; saveIndex(); } }
+    labDirty = world;
+    clearTimeout(labTimer);
+    labTimer = setTimeout(flushLab, 300);
+  }
+  function flushLab(){
+    clearTimeout(labTimer);
+    const id = labDirty; labDirty = null;
+    if (!id || !labCache.has(id)) return;
+    idbSet('lab:' + id, JSON.stringify(labCache.get(id))).then(r => { if (!r.ok) toast('專案存檔失敗：這個瀏覽器可能不讓網頁用資料庫', true); });
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushLab(); });
+  window.addEventListener('pagehide', flushLab);
+  // 打開遊戲時：把所有專案讀進來；上次待在專案裡就回到那個專案
+  async function initLabs(){
+    for (const x of [...labIndex]){
+      const r = await idbGet('lab:' + x.id);
+      try { if (r.ok && r.v) labCache.set(x.id, JSON.parse(r.v)); } catch(e){}
+    }
+    renderLabExport();
+    const lastWorld = store.get(WORLD_KEY);
+    if (lastWorld && labCache.has(lastWorld)) enterWorld(lastWorld, true);
+    else renderWorld();
+  }
+  function enterWorld(id, quiet){
+    if (busy || reorging){ toast('AI 還在忙，等它回來再切換', true); return false; }
+    if (id && !labCache.has(id)){ toast('找不到這個專案', true); return false; }
+    flushLab();
+    if (id){
+      const d = labCache.get(id);
+      world = id; BASE = d.lab.bases;
+      save = fillBase(d); labCache.set(id, save);
+    } else {
+      world = null; BASE = MAIN_BASE;
+      save = load();
+    }
+    store.set(WORLD_KEY, id || '');
+    last = null; resetSlots();
+    catFilter = ''; subFilter = ''; folderFilter = ''; filterUnext = false; foldOpen = false;
+    $('f-unext').classList.remove('on'); $('search').value = '';
+    renderWorld(); renderList(); renderSlots(); renderResult(); renderBackup(); renderSnap();
+    list.scrollTop = 0;
+    if (!quiet) toast(id ? `🧪 進入專案「${save.lab.name}」` : '🌍 回到我的世界');
+    return true;
+  }
+  function renderWorld(){
+    const L = world && save.lab;
+    $('worldbar').hidden = !L;
+    if (L) $('wb-text').textContent = `🧪 ${L.name}｜主題：${L.theme}`;
+    $('btn-lab').classList.toggle('on', !!L);
+    $('btn-lab').title = L ? `實驗室（現在在專案「${L.name}」）` : '實驗室：開新的小世界';
+  }
+  $('wb-home').onclick = () => enterWorld(null);
+  // 專案裡每次問 AI 都附上主題，免得合著合著漂回一般的東西
+  function themeRule(){
+    const L = world && save.lab;
+    if (!L) return '';
+    return `
+【這個世界的主題】${L.theme}${L.prompt ? `
+玩家的補充說明：${L.prompt}` : ''}
+- 這是一個以「${L.theme}」為主題的世界，起點是：${baseNames()}。結果要符合這個主題的世界觀，優先想這個主題裡會出現的東西。
+`;
+  }
+  // 在專案裡時，存檔區這些只對我的世界的操作先擋住
+  const mainOnly = what => { if (!world) return false; toast(`${what}只能在我的世界做，先按上面的「回我的世界」`, true); return true; };
+
+  // 實驗室視窗：我的世界＋所有專案
+  function openWorlds(){
+    const draw = () => {
+      const box = $('wl-list'); box.textContent = '';
+      const row = (id, icon, name, n, sub) => {
+        const r = document.createElement('div'); r.className = 'rg-row wl-row' + ((world || null) === id ? ' here' : '');
+        const t = document.createElement('span'); t.className = 'rg-from'; t.textContent = `${icon} ${name}`;
+        const k = document.createElement('span'); k.className = 'rg-arrow'; k.textContent = `${n} 樣`;
+        const sp = document.createElement('span'); sp.style.flex = '1';
+        r.append(t, k, sp);
+        const btn = (label, title, fn, cls) => { const b = document.createElement('button'); b.className = 'btn co-btn' + (cls ? ' ' + cls : ''); b.textContent = label; b.title = title; b.onclick = fn; r.append(b); return b; };
+        if ((world || null) === id) btn('目前在這裡', '', () => {}).disabled = true;
+        else btn('進入', '', () => { if (enterWorld(id)) $('reorg').classList.remove('open'); }, 'primary');
+        if (id){
+          btn('✎', '改名', () => {
+            const raw = prompt('專案的新名字？（最多 12 個字）', labName(id));
+            if (raw === null || !raw.trim()) return;
+            const nm = raw.trim().slice(0, 12), d = labCache.get(id), x = labIndex.find(l => l.id === id);
+            if (x) x.name = nm; saveIndex();
+            if (d){ d.lab.name = nm; if (world === id) persist(); else idbSet('lab:' + id, JSON.stringify(d)); }
+            renderWorld(); draw();
+          });
+          btn('⤵ 併入', '把這個專案的東西勾選加進我的世界', () => mergeLab(id));
+          btn('✕', '刪掉這個專案', () => {
+            if (!confirm(`確定刪掉專案「${name}」嗎？\n\n裡面的 ${n} 樣東西、配方都會消失，而且沒辦法復原。\n\n想留著的東西，可以先按「⤵ 併入」加進我的世界，或到設定勾「連專案一起匯出」下載備份。`)) return;
+            if (world === id) enterWorld(null, true);
+            labCache.delete(id); labIndex = labIndex.filter(l => l.id !== id); saveIndex();
+            idbDel('lab:' + id); renderLabExport(); draw();
+            toast(`刪掉專案「${name}」了`);
+          });
+        }
+        if (sub){ const d = document.createElement('span'); d.className = 'rg-sub'; d.textContent = sub; r.append(d); }
+        box.append(r);
+      };
+      const mainN = world ? (() => { try { return Object.keys(JSON.parse(store.get(SAVE_KEY)).items).length; } catch(e){ return 0; } })() : Object.keys(save.items).length;
+      row(null, '🌍', '我的世界', mainN, '起點：水、火、風、土');
+      for (const x of labIndex){
+        const d = labCache.get(x.id);
+        row(x.id, '🧪', x.name, d ? Object.keys(d.items).length : x.n, `主題：${x.theme}${d ? `　起點：${d.lab.bases.map(b => b.name).join('、')}` : ''}`);
+      }
+      if (!labIndex.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = '還沒有專案，按下面的「＋ 開新專案」開一個。'; box.append(e); }
+    };
+    draw();
+    $('wl-new').onclick = openNewLab;
+    $('wl-close').onclick = () => $('reorg').classList.remove('open');
+    showPanel('rg-worlds');
+    $('reorg').classList.add('open');
+  }
+  $('btn-lab').onclick = openWorlds;
+
+  // 開新專案：名稱、主題、補充說明 → 請 AI 想起點（可以換一批、拿掉、自己加）→ 開始
+  const BASES_SCHEMA = () => ({bases:{type:'ARRAY', items:{type:'OBJECT', properties:ITEM_SCHEMA, required:Object.keys(ITEM_SCHEMA)}}});
+  let newBases = [];
+  function openNewLab(){
+    newBases = [];
+    ['nl-name', 'nl-theme', 'nl-prompt', 'nl-add'].forEach(id => $(id).value = '');
+    drawNewBases();
+    $('nl-gen').onclick = genBases;
+    $('nl-addbtn').onclick = () => {
+      const n = cleanName($('nl-add').value);
+      if (isBadName(n)){ toast('要打起點的名字', true); return; }
+      if (newBases.some(b => normKey(b.name) === normKey(n))){ toast(`已經有「${n}」了`, true); return; }
+      newBases.push({name:n, emoji:'✨'}); $('nl-add').value = ''; drawNewBases();
+    };
+    $('nl-add').onkeydown = e => { if (e.key === 'Enter') $('nl-addbtn').click(); };
+    $('nl-cancel').onclick = openWorlds;
+    $('nl-start').onclick = startLab;
+    showPanel('rg-newlab');
+    $('reorg').classList.add('open');
+    if (canHover) setTimeout(() => $('nl-name').focus(), 50);
+  }
+  function drawNewBases(){
+    const box = $('nl-bases'); box.textContent = '';
+    newBases.forEach((b, i) => {
+      const r = document.createElement('div'); r.className = 'rg-row gl-row';
+      const t = document.createElement('span'); t.className = 'rg-from'; t.textContent = `${b.emoji} ${b.name}`;
+      const sp = document.createElement('span'); sp.style.flex = '1';
+      const x = document.createElement('button'); x.className = 'btn co-btn'; x.textContent = '✕'; x.title = '拿掉';
+      x.onclick = () => { newBases.splice(i, 1); drawNewBases(); };
+      r.append(t, sp, x);
+      if (b.desc){ const d = document.createElement('span'); d.className = 'rg-sub'; d.textContent = b.desc; r.append(d); }
+      box.append(r);
+    });
+    $('nl-start').disabled = newBases.length < 2;
+  }
+  let genning = false;
+  async function genBases(){
+    if (genning){ stopAI(); return; }
+    const theme = $('nl-theme').value.trim();
+    if (!theme){ toast('先寫主題', true); return; }
+    if (!aiReady()) return;
+    const k = +$('nl-k').value, extra = $('nl-prompt').value.trim();
+    genning = true; freshAI(); $('nl-gen').textContent = '■ 想起點中……（按一下停止）';
+    try {
+      const out = await ask(
+`你是「1+1=?」合成遊戲的設計師。一般的世界從水、火、風、土這四樣最基礎的東西開始，玩家把它們兩兩合成，慢慢做出世界上的各種東西。
+現在玩家要開一個新世界，主題是「${theme}」。${extra ? `
+玩家的補充說明：${extra}` : ''}
+請想出 ${k} 樣這個主題裡「最基礎、最原始」的東西，當作這個世界的起點，取代水火風土。
+- 要夠基礎、夠廣，彼此不一樣，互相合成之後能發展出這個主題裡的各種東西。
+- 不要太細、太特定，也不要直接給這個主題裡最有名的東西（那些留給玩家自己合出來）。
+- 回傳 bases 陣列，剛好 ${k} 樣，每一樣的欄位規則：
+${NAME_RULE}
+${DETAIL_RULES()}`, BASES_SCHEMA());
+      const seen = new Set();
+      const got = (Array.isArray(out.bases) ? out.bases : [])
+        .map(p => ({...aiData(p), name:cleanName(p.name), emoji:String(p.emoji || '').trim().slice(0, 8) || '✨'}))
+        .filter(b => !isBadName(b.name) && !seen.has(normKey(b.name)) && seen.add(normKey(b.name)));
+      if (!got.length) throw new Error('AI 沒給出起點，再試一次');
+      newBases = got; drawNewBases();
+    } catch(e){
+      if (!e.cancelled) toast('想起點失敗：' + e.message, true);
+    } finally {
+      genning = false; $('nl-gen').textContent = '請 AI 想起點';
+    }
+  }
+  function startLab(){
+    const theme = $('nl-theme').value.trim();
+    const name = ($('nl-name').value.trim() || theme).slice(0, 12);
+    if (!theme){ toast('先寫主題', true); return; }
+    if (newBases.length < 2){ toast('起點至少要 2 樣', true); return; }
+    const id = 'L' + Date.now().toString(36);
+    const bases = newBases.map(b => ({...b}));
+    const items = {};
+    bases.forEach((b, i) => { const it = {...b, t:i}; delete it.name; items[b.name] = it; });
+    const d = {items, recipes:{}, extracts:{}, folders:[], userCats:[], lab:{id, name, theme, prompt:$('nl-prompt').value.trim(), bases, t:Date.now()}};
+    labCache.set(id, d);
+    labIndex.push({id, name, theme, n:bases.length, t:Date.now()}); saveIndex();
+    idbSet('lab:' + id, JSON.stringify(d)).then(r => { if (!r.ok) toast('這個瀏覽器不讓網頁用資料庫，專案可能存不起來', true); });
+    renderLabExport();
+    $('reorg').classList.remove('open');
+    enterWorld(id);
+  }
+  // 把專案的東西併入我的世界：跟合併朋友的存檔同一個勾選視窗
+  function mergeLab(id){
+    const d = labCache.get(id); if (!d) return;
+    if (world && !enterWorld(null, true)) return;
+    const copy = JSON.parse(JSON.stringify(d)); delete copy.lab;
+    mergeFriend(copy, {from:`專案「${d.lab.name}」`, lab:d.lab.name});
+  }
+  // 匯入、合併的存檔裡帶著專案：問過之後加進實驗室（一律當成新專案，原本的專案不動）
+  function addLabs(list){
+    const ok = (Array.isArray(list) ? list : []).filter(d => d && d.lab && Array.isArray(d.lab.bases) && d.lab.bases.length && d.items && d.recipes);
+    if (!ok.length) return 0;
+    if (!confirm(`這份存檔裡還有 ${ok.length} 個實驗室專案：${ok.map(d => d.lab.name).join('、')}。\n\n要一起加進你的實驗室嗎？（當成新專案加進去，你原本的專案不會被動）`)) return 0;
+    ok.forEach((d, i) => {
+      const id = 'L' + (Date.now() + i).toString(36);
+      const c = JSON.parse(JSON.stringify(d)); c.lab.id = id;
+      labCache.set(id, c);
+      labIndex.push({id, name:c.lab.name, theme:c.lab.theme || '', n:Object.keys(c.items).length, t:Date.now()});
+      idbSet('lab:' + id, JSON.stringify(c));
+    });
+    saveIndex(); renderLabExport();
+    toast(`加進了 ${ok.length} 個專案，按上面的 🧪 可以進去玩`);
+    return ok.length;
+  }
+  // 設定裡「連專案一起匯出」：有專案才顯示，勾選會記住
+  function renderLabExport(){
+    $('ex-labs-row').hidden = !labIndex.length;
+    $('ex-labs-n').textContent = labIndex.length;
+    $('ex-labs').checked = !!prefs.exportLabs;
+  }
+  $('ex-labs').onchange = () => { prefs.exportLabs = $('ex-labs').checked; store.set(PREF_KEY, JSON.stringify(prefs)); };
 
   // ---------- 刪除 ----------
   // 刪掉一條配方：下次合這組會重新問 AI。它帶出來的反向萃取也一起刪
@@ -2979,7 +3273,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   }
   // 刪掉一樣東西：跟它有關的配方、萃取紀錄一起刪
   function askDeleteItem(name){
-    if (BASE.some(b => b.name === name)){ toast('水、火、風、土是最初的元素，不能刪', true); return; }
+    if (BASE.some(b => b.name === name)){ toast(`${baseNames()}是最初的元素，不能刪`, true); return; }
     const recipeKeys = Object.entries(save.recipes)
       .filter(([k, v]) => v.includes(name) || k.split('+').includes(name)).map(([k]) => k);
     const extractKeys = Object.entries(save.extracts)
@@ -3076,7 +3370,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     $('c-del').hidden = BASE.some(b => b.name === name);
     $('c-edit').hidden = !it.custom;
     $('c-redesc').hidden = !!it.custom;
-    $('c-time').textContent = it.t > 1e12 ? `${it.friend ? '從朋友的存檔得到' : '發現'}於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
+    $('c-time').textContent = it.t > 1e12 ? `${it.labFrom ? `從專案「${it.labFrom}」併入` : it.friend ? '從朋友的存檔得到' : '發現'}於 ${new Date(it.t).toLocaleString('zh-TW', {dateStyle:'medium', timeStyle:'short'})}` : '';
     const fs = foldersOf(name);
     $('c-fav').textContent = fs.length ? `★ 收藏（${fs.length}）` : '☆ 收藏';
     $('c-fav').classList.toggle('on', fs.length > 0);
@@ -3129,8 +3423,8 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     const box = $('c-route'); box.textContent = '';
     if (BASE.some(b => b.name === name)) return;
     const steps = routeTo(name);
-    if (!steps){ box.append('路線：找不到從水、火、風、土出發的路線'); return; }
-    box.append(`路線：從水火風土出發，最少 ${steps.length} 步`);
+    if (!steps){ box.append(`路線：找不到從${baseNames()}出發的路線`); return; }
+    box.append(`路線：從${world ? '起點' : '水火風土'}出發，最少 ${steps.length} 步`);
     const t = document.createElement('button'); t.className = 'btn co-btn rt-toggle';
     t.textContent = routeOpen ? '收起' : '🗺 看路線';
     t.onclick = () => { routeOpen = !routeOpen; drawRoute(name); };
@@ -3314,7 +3608,13 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   let exportTime = new Date();
   const saveName = () => `1+1 save ${stamp(exportTime)}.json`;
   // 檔案裡也記下存檔時間，匯入或合併時看得到
-  const exportText = pretty => { exportTime = new Date(); return JSON.stringify({...save, exportedAt:exportTime.getTime()}, null, pretty ? 1 : 0); };
+  // 匯出的一律是我的世界（在專案裡時從 localStorage 讀）；有勾「連專案一起匯出」就把專案放在 labs 裡
+  const mainData = () => { if (!world) return save; try { return JSON.parse(store.get(SAVE_KEY)); } catch(e){ return {items:{}, recipes:{}}; } };
+  const exportText = pretty => {
+    exportTime = new Date(); flushLab();
+    const labs = prefs.exportLabs && labCache.size ? {labs:[...labCache.values()]} : {};
+    return JSON.stringify({...mainData(), ...labs, exportedAt:exportTime.getTime()}, null, pretty ? 1 : 0);
+  };
   const timeText = t => { const d = new Date(t); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
   $('btn-export').onclick = () => {
     const blob = new Blob([exportText(true)], {type:'application/json'});
@@ -3405,10 +3705,10 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     $('modal').classList.remove('open');
     $('reorg').classList.add('open');
   }
-  $('btn-partial').onclick = openPartial;
+  $('btn-partial').onclick = () => { if (!mainOnly('部分匯出')) openPartial(); };
   let fileMode = 'import';
-  $('btn-import').onclick = () => { fileMode = 'import'; $('file').click(); };
-  $('btn-merge').onclick = () => { fileMode = 'merge'; $('file').click(); };
+  $('btn-import').onclick = () => { if (mainOnly('匯入存檔')) return; fileMode = 'import'; $('file').click(); };
+  $('btn-merge').onclick = () => { if (mainOnly('合併朋友的存檔')) return; fileMode = 'merge'; $('file').click(); };
   $('file').onchange = async e => {
     const f = e.target.files[0]; e.target.value = '';
     if (!f) return;
@@ -3417,7 +3717,8 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
       s = JSON.parse(await f.text());
       if (!s || typeof s.items !== 'object' || typeof s.recipes !== 'object') throw 0;
     } catch(_){ toast('這個檔案看起來不是存檔', true); return; }
-    if (fileMode === 'merge') return mergeFriend(s);
+    const labs = s.labs; delete s.labs;  // 存檔裡帶的專案另外處理
+    if (fileMode === 'merge'){ addLabs(labs); return mergeFriend(s); }
     const when = s.exportedAt ? `\n\n這份存檔的時間：${timeText(s.exportedAt)}（${Object.keys(s.items).length} 樣東西）` : '';
     if (s.partial && !confirm(`注意：這是「部分匯出」的存檔，只有 ${Object.keys(s.items).length} 樣東西。\n\n用「匯入」會把你現在的存檔整個換掉，只剩這些。想把它加進你的存檔，請按取消，改用「合併朋友的存檔」。\n\n還是要整個換掉嗎？`)) return;
     delete s.partial;
@@ -3427,10 +3728,13 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     save = fillBase(s); persist(); last = null; resetSlots();
     if (save.meta && AI_MODES.includes(save.meta.ai) && save.meta.ai !== prefs.ai) setPref('ai', save.meta.ai);  // 照存檔裡的 AI 來源
     renderList(); renderSlots(); renderResult(); toast('存檔已匯入');
+    addLabs(labs);
   };
 
   // 合併朋友的存檔：只加進自己沒有的東西、配方、萃取紀錄；有的一律以自己的為主
-  function mergeFriend(raw){
+  // opt：從實驗室專案併入時是 {from:'專案「X」', lab:'X'}
+  function mergeFriend(raw, opt = {}){
+    const from = opt.from || '朋友的存檔';
     const fr = fillBase(JSON.parse(JSON.stringify(raw)));
     const newItems = Object.keys(fr.items).filter(n => !save.items[n] && fr.items[n] && typeof fr.items[n] === 'object');
     // 配方用到的材料和結果都要存在（朋友的存檔可能有缺），缺了就不算
@@ -3438,7 +3742,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     const newRecipes = Object.keys(fr.recipes).filter(k => !save.recipes[k] && Array.isArray(fr.recipes[k]) && fr.recipes[k].length
       && k.split('+').every(has) && (fr.recipes[k][0] === FAIL || has(fr.recipes[k][0])));
     const conflicts = Object.keys(fr.recipes).filter(k => save.recipes[k] && fr.recipes[k] && fr.recipes[k][0] !== save.recipes[k][0]).length;
-    if (!newItems.length && !newRecipes.length){ toast('朋友的存檔裡沒有你沒有的東西'); return; }
+    if (!newItems.length && !newRecipes.length){ toast(`${from}裡沒有你沒有的東西`); return; }
     const recipeText = k => `${k.split('+').join('＋')}＝${fr.recipes[k][0] === FAIL ? '💥 合成失敗' : fr.recipes[k][0]}`;
     // 會跟著某樣新東西一起來的配方：配方裡有用到這樣新東西
     const tied = k => [...k.split('+'), fr.recipes[k][0]].some(n => newItems.includes(n));
@@ -3476,7 +3780,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     for (const k of newRecipes.filter(k => !tied(k))) recipeRows.push({k, cb:row($('fm-recipes'), recipeText(k))});
     $('fm-h-items').hidden = $('fm-items').hidden = !itemRows.length;
     $('fm-h-recipes').hidden = $('fm-recipes').hidden = !recipeRows.length;
-    $('fm-summary').textContent = `${raw.exportedAt ? `這份存檔的時間：${timeText(raw.exportedAt)}。` : ''}朋友的存檔裡有 ${newItems.length} 樣你沒有的東西、${newRecipes.length} 條你沒有的配方${conflicts ? `，另外有 ${conflicts} 條配方跟你的不一樣（一律保留你的）` : ''}。勾選想加入的：`;
+    $('fm-summary').textContent = `${raw.exportedAt ? `這份存檔的時間：${timeText(raw.exportedAt)}。` : ''}${from}裡有 ${newItems.length} 樣你沒有的東西、${newRecipes.length} 條你沒有的配方${conflicts ? `，另外有 ${conflicts} 條配方跟你的不一樣（一律保留你的）` : ''}。勾選想加入的：`;
     const all = v => { [...itemRows, ...recipeRows].forEach(r => r.cb.checked = v); catCbs.forEach(cb => cb.checked = v); itemRows.forEach(r => r.rowEl.hidden = !v); };
     $('fm-all').onclick = () => all(true);
     $('fm-none').onclick = () => all(false);
@@ -3485,7 +3789,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     $('reorg').classList.add('open');
     $('fm-cancel').onclick = () => $('reorg').classList.remove('open');
     $('fm-apply').onclick = () => {
-      snapshot('合併朋友的存檔');
+      snapshot(opt.lab ? `併入專案 ${opt.lab}` : '合併朋友的存檔');
       const pickItems = itemRows.filter(r => r.cb.checked).map(r => r.name);
       const pickRecipes = new Set(recipeRows.filter(r => r.cb.checked).map(r => r.k));
       $('reorg').classList.remove('open');
@@ -3494,7 +3798,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
         const it = {...fr.items[n]};
         delete it.fav; delete it._asking; delete it.extracted;  // 收藏夾、萃取進度是朋友自己的，不帶過來
         it.t = now + i;                    // 算成你剛拿到的
-        it.friend = true;
+        if (opt.lab) it.labFrom = opt.lab; else it.friend = true;
         save.items[n] = it;
       });
       // 配方：跟著新東西來的，只要用到的東西都在就加；你已有東西的新配方，要有勾才加
@@ -3514,6 +3818,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   }
 
   $('btn-reset').onclick = () => {
+    if (mainOnly('全部重來')) return;
     if (!confirm('確定要全部重來嗎？所有發現和配方都會清掉（鑰匙會保留）。\n\n清掉之後，還可以用設定裡的「復原」救回一次。')) return;
     snapshot('全部重來');
     save = fresh(); persist();
@@ -3549,12 +3854,18 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     for (const [id, k] of SEGS)
       $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs[k]));
     const am = $('aimode');
-    am.textContent = 'AI：' + ({gemini:'Gemini', openrouter:'OpenRouter', manual:'手動'}[prefs.ai] || 'Gemini');
+    // 小手機擺不下，「AI：」三個字藏起來
+    am.textContent = ''; const pre = document.createElement('span'); pre.className = 'sm-hide'; pre.textContent = 'AI：';
+    am.append(pre, {gemini:'Gemini', openrouter:'OpenRouter', manual:'手動'}[prefs.ai] || 'Gemini');
     am.classList.toggle('manual', prefs.ai === 'manual');
   }
   function setPref(k, v){
     prefs[k] = v; store.set(PREF_KEY, JSON.stringify(prefs)); applyPrefs();
-    if (k === 'ai'){ (save.meta || (save.meta = {})).ai = v; persist(); }
+    if (k === 'ai'){
+      // AI 來源記在我的世界的存檔；在專案裡時直接改 localStorage 那份
+      if (world){ try { const m = JSON.parse(store.get(SAVE_KEY)); (m.meta || (m.meta = {})).ai = v; store.set(SAVE_KEY, JSON.stringify(m)); } catch(e){} }
+      else { (save.meta || (save.meta = {})).ai = v; persist(); }
+    }
     if (k === 'theme'){ renderList(); renderSlots(); renderResult(); }
     if (k === 'fold' || k === 'foldDays') renderList();  // 邊框顏色深淺跟主題有關，重畫
   }
@@ -3634,6 +3945,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   // ---------- 開場 ----------
   renderSnap(); initSnap(); renderBackup();
   persist();
+  initLabs();
   renderList();
   renderSlots();
   if (prefs.ai !== 'manual' && !hasAutoKey()) setTimeout(() => openSettings('', true), 300);
