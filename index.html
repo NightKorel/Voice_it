@@ -711,7 +711,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.58';
+  const VERSION = '0.0.59';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2596,6 +2596,7 @@ ${lines}
     return steps;
   }
   let routeOpen = false;
+  const ROUTE_SHOW = 5;
   function drawRoute(name){
     const box = $('c-route'); box.textContent = '';
     if (BASE.some(b => b.name === name)) return;
@@ -2607,8 +2608,11 @@ ${lines}
     t.onclick = () => { routeOpen = !routeOpen; drawRoute(name); };
     box.append(t);
     if (!routeOpen) return;
-    const ol = document.createElement('ol'); ol.className = 'rt-list';
-    for (const st of steps){
+    // 只列最後 ROUTE_SHOW 步（最接近這樣東西的），前面的點步驟裡的東西打開它的卡片，就能繼續往回看
+    const skip = Math.max(0, steps.length - ROUTE_SHOW);
+    if (skip){ const m = document.createElement('div'); m.style.fontSize = '.8rem'; m.textContent = `前面還有 ${skip} 步，點下面的東西可以繼續往回看`; box.append(m); }
+    const ol = document.createElement('ol'); ol.className = 'rt-list'; ol.start = skip + 1;
+    for (const st of steps.slice(skip)){
       const li = document.createElement('li');
       if (st.ins){ st.ins.forEach((n, j) => { if (j) li.append('＋'); li.append(link(n)); }); li.append('＝'); li.append(link(st.out)); }
       else { li.append('萃取 '); li.append(link(st.src)); li.append(' → '); li.append(link(st.out)); }
