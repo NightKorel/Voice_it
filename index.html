@@ -438,7 +438,7 @@
         <button class="chipbtn" id="f-unext" title="只看還沒萃取過的東西">未萃取</button>
         <button class="chipbtn" id="btn-select" title="勾選好幾樣，一次加進收藏夾">☑ 多選</button>
         <div style="flex:1"></div>
-        <button class="chipbtn" id="btn-catorder" title="自己排分類的順序">排序分類</button>
+        <button class="chipbtn" id="btn-catorder" title="分類改名、排順序、刪掉自己建的分類">管理分類</button>
         <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、合併分類、檢查分類">整理</button>
       </div>
       <div id="selbar" hidden>
@@ -563,14 +563,14 @@
         <li>新分類會加進給 AI 看的分類清單。之後煉出新東西、補介紹時，AI 覺得適合就會把東西放進這一類。</li>
         <li>按「整理」檢查分類時，AI 也可能建議把別類的東西搬進來（一樣會先問你）。</li>
         <li>如果只是想把幾樣東西收在一起、不想影響 AI 怎麼分，用收藏夾就好。</li>
-        <li>你建的分類整理時不會被 AI 併掉；裡面沒東西也會留著。不要了可以到「排序分類」按 ✕ 刪掉。</li>
+        <li>你建的分類整理時不會被 AI 併掉；裡面沒東西也會留著。不要了可以到「管理分類」按 ✕ 刪掉。</li>
       </ul>
       <div class="favnew"><input id="nc-name" maxlength="12" placeholder="新分類的名字（最多 12 個字）" autocomplete="off"><button class="btn primary" id="nc-add">建立</button></div>
       <div class="actions"><button class="btn" id="nc-cancel">取消</button></div>
     </div>
     <div id="rg-order" hidden>
-      <h2>排序分類</h2>
-      <p>也可以直接在清單上方長按分類標籤，左右拖曳排順序。這裡用 ↑ ↓ 調整，上面的分類會排在前面。分類標籤、「依分類」排序都照這個順序。之後新出現的分類會接在最後面。</p>
+      <h2>管理分類</h2>
+      <p>✎ 改名（改成已經有的名字，就是把兩類併在一起）。排順序可以直接在清單上方長按分類標籤左右拖曳，或在這裡用 ↑ ↓ 調整，上面的分類會排在前面。分類標籤、「依分類」排序都照這個順序。之後新出現的分類會接在最後面。</p>
       <div id="co-list" class="rg-list"></div>
       <div class="actions">
         <button class="btn primary" id="co-done">完成</button>
@@ -729,7 +729,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.65';
+  const VERSION = '0.0.66';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1234,7 +1234,9 @@
         const sp = document.createElement('span'); sp.style.flex = '1';
         const mv = (d, label, dis) => { const b = document.createElement('button'); b.className = 'btn co-btn'; b.textContent = label; b.disabled = dis;
           b.onclick = () => { const names = counts.map(([x]) => x); [names[i], names[i + d]] = [names[i + d], names[i]]; save.catOrder = names; persist(); draw(); renderList(); }; return b; };
-        r.append(t, k, sp, mv(-1, '↑', i === 0), mv(1, '↓', i === counts.length - 1));
+        const rn = document.createElement('button'); rn.className = 'btn co-btn'; rn.textContent = '✎'; rn.title = '改名';
+        rn.onclick = () => { if (renameCat(c)) draw(); };
+        r.append(t, k, sp, rn, mv(-1, '↑', i === 0), mv(1, '↓', i === counts.length - 1));
         if (save.userCats.includes(c)){
           // 自己建的分類可以刪：只拿掉「自己建的」身分，裡面的東西不動（還有東西的話，這類照常存在）
           t.textContent = `${c}（自己建的）`;
@@ -1256,6 +1258,25 @@
     $('reorg').classList.add('open');
   }
   $('btn-catorder').onclick = openCatOrder;
+  // 分類改名：裡面的東西、自己建的分類、排序都跟著換；改成已有的名字＝併進那一類（先問）
+  function renameCat(old){
+    if (old === PROPER_CAT){ toast(`「${PROPER_CAT}」是固定分類，不能改名`, true); return false; }
+    const raw = prompt(`把分類「${old}」改成什麼？（最多 ${CAT_MAX_USER} 個字）`, old);
+    if (raw === null) return false;
+    if (!raw.trim()){ toast('分類名稱不能空白', true); return false; }
+    const nw = cleanCat(raw, CAT_MAX_USER);
+    if (nw === old) return false;
+    const exists = catCounts().some(([c]) => c === nw);
+    if (exists && !confirm(`已經有「${nw}」這個分類了。\n\n要把「${old}」裡的東西全部併進「${nw}」嗎？`)) return false;
+    snapshot(`分類改名 ${old} → ${nw}`);
+    for (const it of Object.values(save.items)) if (it.cat === old) it.cat = nw;
+    if (save.userCats.includes(old)) save.userCats = exists || save.userCats.includes(nw) ? save.userCats.filter(c => c !== old) : save.userCats.map(c => c === old ? nw : c);
+    if (save.catOrder) save.catOrder = exists ? save.catOrder.filter(c => c !== old) : save.catOrder.map(c => c === old ? nw : c);
+    if (catFilter === old) catFilter = nw;
+    persist(); renderList();
+    toast(exists ? `「${old}」併進「${nw}」了` : `改名成「${nw}」了`);
+    return true;
+  }
   function chip(cls, name){
     const it = save.items[name] || {emoji:'❓'};
     const el = document.createElement('div');
