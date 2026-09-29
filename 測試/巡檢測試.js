@@ -64,7 +64,10 @@ function answerFor(pr){
     catch(e){ const loc = (e.message.match(/waiting for (locator\([^\n]*\))/) || [])[1] || ''; results.push([false, `${name}（${e.message.split('\n')[0]} ${loc}）`]); }
     await closeAll();
   };
-  const tap = async sel => { try { await p.click(sel, {timeout:3000}); } catch(e){
+  // 設定有頁籤：要點的東西在別的頁籤時，先切過去
+  const toTab = sel => p.evaluate(sel => { const el = document.querySelector(sel.replace(/ >> nth=\d+/, '').replace(/:has-text\([^)]*\)/, '')); const tab = el && el.closest('.stab');
+    if (tab && tab.hidden) document.querySelector(`#set-tabs button[data-t="${tab.dataset.tab}"]`).click(); }, sel).catch(() => {});
+  const tap = async sel => { await toTab(sel); try { await p.click(sel, {timeout:3000}); } catch(e){
     const info = await p.evaluate(sel => { const el = document.querySelector(sel.replace(/ >> nth=\d+/, '').replace(/:has-text\([^)]*\)/, '')); if (!el) return '找不到'; const r = el.getBoundingClientRect(); const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
       return `disabled=${el.disabled} hidden=${el.hidden || !el.offsetParent} 蓋住的是=${top && (top.id || top.className)}`; }, sel).catch(() => '');
     throw new Error(`點不到 ${sel}：${info}`); } };
@@ -76,7 +79,9 @@ function answerFor(pr){
   await step('真的嗎', async () => { await tap('#btn-really'); await p.waitForTimeout(300); });
   await step('內建配方合成', async () => { await clear(); await tap('#list .litem:has-text("水") >> nth=0'); await tap('#list .litem:has-text("火") >> nth=0'); await tap('#btn-craft'); });
   await step('萃取', async () => { await clear(); await tap('#list .litem:has-text("測試甲")'); await tap('#btn-extract'); await p.waitForTimeout(300); });
-  await step('隨機、釘子、清空', async () => { await tap('#btn-random'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); });
+  await step('隨機、釘子、清空', async () => {
+    for (let i = 0; i < 30; i++){ await tap('#btn-random'); const s = await p.$$eval('.slot.filled .nm, .slot.filled', x => x.map(e => e.textContent)); if (new Set(s).size !== s.length) throw new Error('隨機抽到重複的'); }
+    await tap('#btn-random'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); });
   await step('卡片、收藏、改分類、子分類', async () => {
     await card('皮卡丘'); await tap('#c-fav'); await p.fill('#c-favname', '巡檢夾'); await tap('#c-favadd');
     await tap('#c-cat'); await p.fill('#c-subin', '巡檢子類'); await tap('#c-catok');
@@ -106,13 +111,13 @@ function answerFor(pr){
   await step('統計', async () => { await tap('#btn-stats'); });
   await step('設定每個選項', async () => {
     await tap('#btn-settings');
-    for (const seg of ['seg-theme', 'seg-font', 'seg-motion', 'seg-lite', 'seg-border', 'seg-fold', 'seg-folddays', 'seg-temp'])
-      for (const btn of await p.$$(`#${seg} button`)) await btn.click();
-    await p.click('#adv summary'); await tap('#adv-tpl .btn >> nth=2'); await tap('#adv-save');
+    for (const seg of ['seg-theme', 'seg-font', 'seg-motion', 'seg-lite', 'seg-border', 'seg-fold', 'seg-folddays', 'seg-randdup', 'seg-temp']){
+      await toTab('#' + seg); for (const btn of await p.$$(`#${seg} button`)) await btn.click(); }
+    await toTab('#adv'); await p.click('#adv summary'); await tap('#adv-tpl .btn >> nth=2'); await tap('#adv-save');
   });
   let file = path.join(os.tmpdir(), 'xunjian.json');
   await step('下載存檔（連專案）', async () => {
-    await tap('#btn-settings'); await p.check('#ex-labs').catch(() => {});
+    await tap('#btn-settings'); await toTab('#ex-labs'); await p.check('#ex-labs').catch(() => {});
     const [dl] = await Promise.all([p.waitForEvent('download'), tap('#btn-export')]); await dl.saveAs(file);
   });
   if (PHONE) await step('分享存檔', async () => { await tap('#btn-settings'); await tap('#btn-share'); });  // 電腦沒有分享功能，按鈕本來就藏起來

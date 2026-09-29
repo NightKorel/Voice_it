@@ -128,8 +128,8 @@
   .co-btn.pinned{border-color:var(--accent);color:var(--accent)}
   .wl-head{display:flex;align-items:center;gap:.6rem}
   .wl-head h2{flex:1}
-  .ex-labs{display:flex;align-items:center;gap:.4rem;font-size:.86rem;margin:.2rem 0 .4rem;cursor:pointer}
-  .ex-labs[hidden]{display:none}
+  #modal .ex-labs{display:flex;align-items:center;gap:.4rem;font-size:.86rem;margin:.2rem 0 .4rem;cursor:pointer}
+  #modal .ex-labs[hidden]{display:none}  /* 要加 #modal：設定裡的 label 一律 display:block，會蓋掉 hidden（v0.0.77～0.0.83 沒專案也會顯示） */
   #nl-bases{display:flex;flex-direction:column;gap:.35rem;margin:.5rem 0}
   .bk-btns{display:flex;gap:.35rem;flex-wrap:wrap;margin-left:auto}
   #btn-stop{border-color:var(--danger);color:var(--danger)}
@@ -279,6 +279,11 @@
   #modal .actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.8rem}
   #modal hr{border:none;border-top:1px solid var(--line);margin:1.1rem 0 0}
   #modal a{color:var(--accent)}
+  /* 設定頁籤：外觀、遊戲、存檔、AI（2026-09-29 納可要求） */
+  .set-tabs{display:flex;gap:.3rem;margin:.3rem 0 .4rem;border-bottom:1px solid var(--line);position:sticky;top:-1.2rem;background:var(--panel);padding-top:.4rem;z-index:1}
+  .set-tabs button{flex:1;border:none;border-bottom:2px solid transparent;background:transparent;color:var(--muted);padding:.5rem .2rem;font-size:.9rem;cursor:pointer;font-family:inherit}
+  .set-tabs button.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .stab[hidden]{display:none}
   #adv{margin:.6rem 0;border:1px solid var(--line);border-radius:.7rem;padding:.4rem .7rem}
   #adv summary{cursor:pointer;font-size:.88rem;color:var(--accent);padding:.2rem 0}
   #adv textarea{width:100%;border-radius:.6rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:.85rem;font-family:inherit;padding:.5rem;resize:vertical;outline:none;line-height:1.6}
@@ -757,7 +762,9 @@
 <div id="modal">
   <div class="box">
     <div class="head"><h2>設定</h2><button class="btn" id="btn-close">關閉</button></div>
+    <div class="set-tabs" id="set-tabs"><button data-t="look">外觀</button><button data-t="game">遊戲</button><button data-t="save">存檔</button><button data-t="ai">AI</button></div>
 
+    <div class="stab" data-tab="look">
     <h3>外觀</h3>
     <div class="setrow"><span class="lbl">字體大小</span>
       <input type="range" id="scale" min="0.8" max="1.6" step="0.05"><span id="scale-val"></span></div>
@@ -776,13 +783,22 @@
     <div class="setrow"><span class="lbl">低耗能模式</span>
       <div class="seg" id="seg-lite"><button data-v="on">開</button><button data-v="off">關</button></div></div>
     <p class="muted">低耗能模式會一次關掉所有特效：動畫、合成特效、陰影、發光、毛玻璃、背景花紋。手機比較省電，舊手機也比較順。</p>
+    </div>
+
+    <div class="stab" data-tab="game">
+    <h3>清單</h3>
     <div class="setrow"><span class="lbl">收合少用的</span>
       <div class="seg" id="seg-fold"><button data-v="on">開</button><button data-v="off">關</button></div></div>
     <div class="setrow"><span class="lbl">幾天沒用算少用</span>
       <div class="seg" id="seg-folddays"><button data-v="3">3 天</button><button data-v="7">7 天</button><button data-v="14">14 天</button><button data-v="30">30 天</button></div></div>
     <p class="muted">東西超過 300 樣時，清單的「全部」只顯示最近用過、最近發現、收藏夾裡的東西，其他收到最底下，按「展開」就看得到。搜尋、點分類或收藏夾時一律顯示全部。</p>
+    <h3>隨機</h3>
+    <div class="setrow"><span class="lbl">允許重複</span>
+      <div class="seg" id="seg-randdup"><button data-v="on">允許</button><button data-v="off">不允許</button></div></div>
+    <p class="muted">「🎲 隨機」預設不會抽到重複的東西（兩格、三格一樣都算重複）。選「允許」就可能抽到一樣的，像「水＋水」。</p>
+    </div>
 
-    <hr>
+    <div class="stab" data-tab="save">
     <h3>存檔</h3>
     <p class="muted">你的發現存在這個瀏覽器裡。想換裝置或怕不見，可以分享或下載成檔案備份，之後再匯入。每多發現 30 樣會提醒你備份一次。</p>
     <div class="actions">
@@ -811,7 +827,9 @@
     <p class="muted">加到主畫面後，就能像 App 一樣全螢幕打開；沒網路時，合過的組合照樣能玩（新組合要問 AI 才需要網路）。iPhone 加到主畫面後，存檔也比較不會被 Safari 自動清掉。</p>
     <p class="muted">iPhone／iPad：用 Safari 打開這個網頁 → 按下方的「分享」按鈕 → 選「加入主畫面」。<br>Android：用 Chrome 打開 → 右上角選單 → 「加到主畫面」或「安裝應用程式」。電腦的 Chrome／Edge：網址列右邊的安裝圖示。</p>
 
-    <hr>
+    </div>
+
+    <div class="stab" data-tab="ai">
     <h3 id="keys-anchor">AI 來源與鑰匙</h3>
     <div class="setrow"><span class="lbl">來源</span>
       <div class="seg" id="seg-ai"><button data-v="gemini">Gemini</button><button data-v="openrouter">OpenRouter</button><button data-v="manual">手動複製貼上</button></div></div>
@@ -859,6 +877,7 @@
       <button class="btn primary" id="btn-orsave">儲存鑰匙</button>
       <button class="btn" id="btn-ortest">測試鑰匙</button>
     </div>
+    </div>
     <p class="muted" id="ver2" style="margin-top:1rem;text-align:right"></p>
   </div>
 </div>
@@ -876,7 +895,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.83';
+  const VERSION = '0.0.84';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1956,8 +1975,15 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     clearUnpinned();
     const keep = filled().length;
     const n = Math.max(Math.random() < .5 ? 2 : 3, keep + 1);
-    for (let i = 0, k = keep; i < slots.length && k < n; i++)
-      if (!slots[i]){ slots[i] = pool[Math.floor(Math.random() * pool.length)]; if (save.items[slots[i]]) save.items[slots[i]].used = Date.now(); k++; }
+    // 預設不抽重複的（跟釘住的也不重複）；設定「遊戲」頁可以允許重複
+    const dup = prefs.randDup === 'on';
+    let left = dup ? pool : pool.filter(x => !slots.includes(x));
+    for (let i = 0, k = keep; i < slots.length && k < n && left.length; i++)
+      if (!slots[i]){
+        const pick = left[Math.floor(Math.random() * left.length)];
+        slots[i] = pick; if (!dup) left = left.filter(x => x !== pick);
+        if (save.items[pick]) save.items[pick].used = Date.now(); k++;
+      }
     renderSlots();
     document.querySelectorAll('.slot').forEach((el, i) => { if (slots[i]){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); } });
   };
@@ -3645,16 +3671,25 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
   });
 
   // ---------- 設定 ----------
+  // 設定頁籤：記住上次看的那頁（這次打開遊戲期間）；缺鑰匙才打開的，直接跳到 AI
+  let setTab = 'look';
+  function showSetTab(t){
+    setTab = t;
+    document.querySelectorAll('#set-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+    document.querySelectorAll('#modal .stab').forEach(d => d.hidden = d.dataset.tab !== t);
+    $('modal').querySelector('.box').scrollTop = 0;
+  }
+  $('set-tabs').addEventListener('click', e => { const t = e.target.dataset && e.target.dataset.t; if (t) showSetTab(t); });
   function openSettings(msg, toKeys){
     renderAdv();
+    showSetTab(msg || toKeys ? 'ai' : setTab);
     if (prefs.exportLabs) ensureAllLabs();  // 先把封存的專案讀進來，按「分享」時才來得及
     $('key').value = getKey();
     $('orkey').value = getOrKey();
     fillModels();
     $('modal').classList.add('open');
     if (msg) toast(msg, true);
-    if (msg || toKeys) setTimeout(() => $('keys-anchor').scrollIntoView({block:'start'}), 50);  // 缺鑰匙才打開的，直接捲到鑰匙那段
-    else $('modal').querySelector('.box').scrollTop = 0;
+
   }
   async function fillModels(){
     const sel = $('model'), o = getOverride();
@@ -3942,8 +3977,8 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
   };
 
   // ---------- 外觀與 AI 來源 ----------
-  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-lite','lite'], ['seg-border','border'], ['seg-fold','fold'], ['seg-folddays','foldDays'], ['seg-ai','ai'], ['seg-temp','temp']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7', trimN:300, lite:'off', temp:'0.7'};
+  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-lite','lite'], ['seg-border','border'], ['seg-fold','fold'], ['seg-folddays','foldDays'], ['seg-ai','ai'], ['seg-temp','temp'], ['seg-randdup','randDup']];
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7', trimN:300, lite:'off', temp:'0.7', randDup:'off'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
   // AI 來源也記在存檔裡（save.meta.ai）：換裝置、加到主畫面後匯入存檔，照樣是原本的來源，手動就不會一直問鑰匙
