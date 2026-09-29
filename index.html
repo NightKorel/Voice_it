@@ -708,7 +708,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.56';
+  const VERSION = '0.0.57';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2363,25 +2363,70 @@ ${lines}
 
   // ---------- 快照（可以復原） ----------
   // 刪除、整理、合併朋友存檔、匯入、全部重來之前，先把整份存檔拍一張快照；出事可以一鍵回到那之前
+  // 快照放在瀏覽器資料庫（IndexedDB）：空間大、跟存檔的 5MB 分開，不會跟存檔搶位置
+  // 瀏覽器不讓用資料庫時（例如某些無痕模式），才照舊放在 localStorage
   const SNAP_KEY = 'wuxian_snapshot';
+  let idbP = null;
+  function idbOpen(){
+    return idbP || (idbP = new Promise((res, rej) => {
+      const r = indexedDB.open('wuxian', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }));
+  }
+  async function idbDo(mode, fn){
+    try {
+      const db = await idbOpen();
+      return await new Promise((res, rej) => {
+        const tx = db.transaction('kv', mode);
+        const q = fn(tx.objectStore('kv'));
+        tx.oncomplete = () => res({ok:true, v:q.result});
+        tx.onerror = tx.onabort = () => rej(tx.error);
+      });
+    } catch(e){ idbP = null; return {ok:false}; }
+  }
+  const idbGet = k => idbDo('readonly', st => st.get(k));
+  const idbSet = (k, v) => idbDo('readwrite', st => st.put(v, k));
+  const idbDel = k => idbDo('readwrite', st => st.delete(k));
+  let snapMeta = null;  // 目前快照的時間和原因（給復原按鈕顯示用）
+  function lsSnap(){ try { return JSON.parse(store.get(SNAP_KEY)); } catch(e){ return null; } }
   function snapshot(reason){
-    if (!store.set(SNAP_KEY, JSON.stringify({at:Date.now(), reason, data:save}))) return;
+    const at = Date.now(), data = JSON.stringify(save);  // 當下就把存檔抄起來，之後的改動不會混進去
+    const prev = snapMeta;
+    snapMeta = {at, reason}; renderSnap();
+    idbSet('snapshot', {at, reason, data}).then(r => {
+      if (r.ok){ store.del(SNAP_KEY); return; }
+      if (!store.set(SNAP_KEY, JSON.stringify({at, reason, data:JSON.parse(data)}))){ snapMeta = prev; renderSnap(); }
+    });
+  }
+  // 打開遊戲時：舊版放在 localStorage 的快照搬進資料庫，騰出存檔空間
+  async function initSnap(){
+    const old = lsSnap();
+    if (old && old.data){
+      const r = await idbSet('snapshot', {at:old.at, reason:old.reason, data:JSON.stringify(old.data)});
+      if (r.ok) store.del(SNAP_KEY);
+      snapMeta = {at:old.at, reason:old.reason};
+    } else {
+      const r = await idbGet('snapshot');
+      if (r.ok && r.v && r.v.data) snapMeta = {at:r.v.at, reason:r.v.reason};
+    }
     renderSnap();
   }
   function renderSnap(){
-    let snap = null; try { snap = JSON.parse(store.get(SNAP_KEY)); } catch(e){}
     const b = $('btn-undo');
-    b.hidden = !(snap && snap.data);
-    if (snap && snap.data){
-      const t = new Date(snap.at).toLocaleString('zh-TW', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
-      b.textContent = `↶ 復原到「${snap.reason}」之前（${t}）`;
+    b.hidden = !snapMeta;
+    if (snapMeta){
+      const t = new Date(snapMeta.at).toLocaleString('zh-TW', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+      b.textContent = `↶ 復原到「${snapMeta.reason}」之前（${t}）`;
     }
   }
-  $('btn-undo').onclick = () => {
-    let snap = null; try { snap = JSON.parse(store.get(SNAP_KEY)); } catch(e){}
-    if (!snap || !snap.data) return;
+  $('btn-undo').onclick = async () => {
+    let snap = lsSnap(), data = snap && snap.data;
+    if (!data){ const r = await idbGet('snapshot'); snap = r.ok && r.v; data = snap && snap.data && JSON.parse(snap.data); }
+    if (!data){ snapMeta = null; renderSnap(); toast('找不到快照', true); return; }
     if (!confirm(`要把存檔復原到「${snap.reason}」之前嗎？\n\n在那之後發現的東西、做的改動都會消失。`)) return;
-    save = fillBase(snap.data); persist(); store.del(SNAP_KEY);
+    save = fillBase(data); persist(); store.del(SNAP_KEY); idbDel('snapshot'); snapMeta = null;
     last = null; resetSlots();
     renderList(); renderSlots(); renderResult(); renderSnap(); closeSettings();
     toast('已經復原了');
@@ -2950,7 +2995,7 @@ ${lines}
   window.addEventListener('appinstalled', () => toast('裝好了！之後可以從主畫面打開'));
 
   // ---------- 開場 ----------
-  renderSnap(); renderBackup();
+  renderSnap(); initSnap(); renderBackup();
   persist();
   renderList();
   renderSlots();
