@@ -708,7 +708,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.55';
+  const VERSION = '0.0.56';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -735,7 +735,8 @@
 
   const store = {
     get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
-    set(k,v){ try { localStorage.setItem(k,v); return true; } catch(e){ return false; } },
+    set(k,v){ try { localStorage.setItem(k,v); this.full = false; return true; }
+      catch(e){ this.full = e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014); return false; } },
     del(k){ try { localStorage.removeItem(k); } catch(e){} }
   };
 
@@ -809,8 +810,29 @@
     } catch(e){}
     return fresh();
   }
+  // 存檔：瀏覽器空間滿了，先問玩家，同意後清掉最早發現、沒收藏的 TRIM_N 樣東西的介紹，再存一次（還不夠就再問）
+  const TRIM_N = 300;
+  let trimAsking = false;
   function persist(){
-    if (!store.set(SAVE_KEY, JSON.stringify(save))) toast('存檔失敗，瀏覽器可能不讓這個網頁存資料', true);
+    if (store.set(SAVE_KEY, JSON.stringify(save))) return;
+    if (!store.full){ toast('存檔失敗，瀏覽器可能不讓這個網頁存資料', true); return; }
+    if (trimAsking) return;
+    trimAsking = true;
+    try {
+      while (!store.set(SAVE_KEY, JSON.stringify(save)) && store.full){
+        const faved = new Set(save.folders.flatMap(f => f.items));
+        const SI = STARTER.items;
+        const cand = Object.keys(save.items)
+          .filter(n => { const it = save.items[n]; return it.desc && !faved.has(n) && !it.custom && !SI[n] && !BASE.some(b => b.name === n); })
+          .sort((a, b) => save.items[a].t - save.items[b].t).slice(0, TRIM_N);
+        if (!cand.length){ toast('存檔空間滿了，也沒有介紹可以清了。請先下載備份，再刪掉一些東西。', true); return; }
+        const ok = confirm(`存檔空間滿了，最新的進度存不進去。\n\n要清掉最早發現、而且沒放進收藏夾的 ${cand.length} 樣東西的介紹來騰出空間嗎？（從「${cand[0]}」開始）\n\n東西、配方、分類、稀有度都不會動，只清介紹。之後打開卡片可以按「補上介紹」請 AI 重寫。\n內建的東西、你自己設定的東西、收藏夾裡的東西不會清。\n\n按「取消」就不清，但這次的進度不會存下來，建議先下載備份。`);
+        if (!ok){ toast('沒有存到，記得到設定下載備份', true); return; }
+        for (const n of cand){ delete save.items[n].desc; save.items[n].descCut = true; }
+        toast(`清掉 ${cand.length} 樣的介紹了`);
+      }
+      if (store.full === false) renderList();
+    } finally { trimAsking = false; }
   }
   const comboKey = names => [...names].sort().join('+');
   const FAIL = '💥';  // 合成失敗（爆炸）的記號：只用在「真的嗎？」的歷史紀錄裡，不會存進配方（失敗不記錄，下次再合會重新問）
@@ -2445,7 +2467,7 @@ ${lines}
     $('c-cat').textContent = (it.cat || (it.custom ? '只在「我的」' : '未分類')) + (it.catLocked && it.cat ? '（自己分的）' : '') + ' ✎';
     $('c-catedit').hidden = true;
     const asking = !!it._asking;
-    $('c-desc').textContent = it.desc || (asking ? '介紹生成中……' : '還沒有介紹');
+    $('c-desc').textContent = it.desc || (asking ? '介紹生成中……' : it.descCut ? '介紹為了騰出存檔空間清掉了' : '還沒有介紹');
     $('c-desc').classList.toggle('muted', !it.desc);
     $('c-fillrow').hidden = !!it.desc || asking;
     // 煉法
@@ -2487,7 +2509,7 @@ ${lines}
     $('card').classList.add('open');
     box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
     // 用 Gemini 時自動補介紹；手動模式由玩家按「補上介紹」
-    if (!it.desc && !asking && !it.custom && hasAutoKey()) fillDetail(name);  // 自己設定的東西不讓 AI 補
+    if (!it.desc && !asking && !it.custom && !it.descCut && hasAutoKey()) fillDetail(name);  // 為了騰空間清掉的介紹不自動補  // 自己設定的東西不讓 AI 補
   }
   // 路線圖：從水火風土出發，一步步合（或萃取）到這樣東西的最短路線；只用存檔裡的配方，不問 AI
   function routeLevels(){
