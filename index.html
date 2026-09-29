@@ -183,10 +183,12 @@
   #qs-pick .gl-row{cursor:pointer}
   #qs-pick .gl-row.on{border-color:var(--accent)}
   #qs-list,#qs-done{margin-top:.6rem}
+  .qs-fold{cursor:pointer;user-select:none}
   .qs-wallet{display:flex;align-items:center;gap:.6rem;margin:.3rem 0 .6rem;font-size:1.05rem;font-variant-numeric:tabular-nums}
   .qs-coins{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:.2rem;margin:0 0 .7rem}
   .qs-coins button{font-size:min(1.3rem,5vw);min-width:0;line-height:1.6;padding:0;background:none;border:2px solid transparent;border-radius:10px;cursor:pointer}
   .qs-coins button.on{border-color:var(--accent)}
+  .qs-coins[hidden]{display:none}
   .co-row.co-sub{padding-left:1.4rem;font-size:.88rem}
   .tabrow{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
   .tabrow::-webkit-scrollbar{height:4px}
@@ -928,7 +930,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.14';
+  const VERSION = '0.1.15';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1717,7 +1719,7 @@ window.addEventListener('error', e => {
     Q.on.push({name, t:Date.now(), by});
     return true;
   }
-  let questPick = null, questBusy = false, questTimer = 0;
+  let questPick = null, questBusy = false, questTimer = 0, questDoneOpen = false;  // 完成的紀錄預設收起來
   async function questAsk(){
     if (questBusy) return;
     const Q = quests(), room = QUEST_MAX - Q.on.length;
@@ -1796,8 +1798,10 @@ ${themeRule()}規則：
       // 完成的：最近完成的在上面，顯示花了多久
       const dn = $('qs-done'); dn.textContent = '';
       if (Q.done.length){
-        dn.append(span('muted', `完成了 ${Q.done.length} 個`));
-        for (const d of Q.done){
+        const h = span('muted qs-fold', `${questDoneOpen ? '▾' : '▸'} 完成了 ${Q.done.length} 個`);
+        h.onclick = () => { questDoneOpen = !questDoneOpen; draw(); };
+        dn.append(h);
+        if (questDoneOpen) for (const d of Q.done){
           const r = row(); r.classList.add('got');
           const t = span('rg-from', save.items[d.item] ? `${save.items[d.item].emoji} ${d.item}` : d.name);
           if (save.items[d.item]){ t.title = '看卡片'; t.onclick = () => { $('reorg').classList.remove('open'); openCard(d.item); }; }

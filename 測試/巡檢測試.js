@@ -140,6 +140,8 @@ function answerFor(pr){
     const s = await p.evaluate(() => JSON.parse(localStorage.getItem('wuxian_save_v1')));
     if (!s.quests || s.quests.on.length !== 1 || s.quests.on[0].name !== '巡檢題甲') throw new Error('任務沒存對：' + JSON.stringify(s.quests));
     if (!/0 日 0 時 0 分/.test(await p.$eval('#qs-list', e => e.textContent))) throw new Error('計時沒顯示');
+    await tap('#qs-done .qs-fold').catch(() => {});
+    if (await p.$eval('#qs-coins', e => e.offsetHeight > 0)) throw new Error('貨幣圖案沒收起來');
     await tap('#qs-coinpick'); if ((await p.$$('#qs-coins button')).length !== 30) throw new Error('貨幣圖案不是 30 個');
     await tap('#qs-coins button >> nth=21');
     if (!(await p.$eval('#qs-coin', e => e.textContent)).startsWith('🐱')) throw new Error('換貨幣圖案沒反應');
