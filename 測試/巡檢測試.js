@@ -95,6 +95,11 @@ function answerFor(pr){
     await tap('#cattabs .cattab:has-text("專有名詞")'); await tap('#subtabs .cattab >> nth=1'); await tap('#cattabs .cattab:has-text("我的")'); await tap('#favtabs .cattab >> nth=0');
   });
   await step('請 AI 分子分類', async () => { await tap('#cattabs .cattab:has-text("專有名詞")'); await tap('#subtabs .cattab.ai'); await p.waitForTimeout(300); });
+  await step('一般分類的子分類（東西 20 樣以上）', async () => {
+    await tap('#cattabs .cattab:has-text("全部")'); await tap('#cattabs .cattab:has-text("自然")');
+    if (await p.$eval('#subtabs', e => e.hidden)) throw new Error('自然有 20 樣以上卻沒有子分類標籤');
+    await tap('#subtabs .cattab.ai'); await p.waitForTimeout(300);
+  });
   await step('多選改分類、加收藏夾', async () => {
     if (await p.$('#favtabs .cattab.on')) await tap('#favtabs .cattab.on');  // 收藏夾篩選關掉
     await tap('#cattabs .cattab:has-text("全部")'); await tap('#btn-select'); await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1');
