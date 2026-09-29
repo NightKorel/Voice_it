@@ -296,6 +296,9 @@
   #c-route .rt-list{margin:.3rem 0 0;padding-left:1.6rem}
   #c-route .rt-list li{margin:.1rem 0}
   #c-route .rt-toggle{margin-left:.2rem}
+  .foldbar{width:100%;margin:.5rem 0 .2rem;padding:.45rem .7rem;border:1px dashed var(--line);border-radius:.7rem;background:transparent;
+    color:var(--muted);font:inherit;font-size:.85rem;cursor:pointer;text-align:left}
+  .foldbar:hover{border-color:var(--accent);color:var(--text)}
   .litem.tried{opacity:.42}
   .litem.tried::after{content:'✓';font-size:.75em;color:var(--muted)}
   .clink{color:var(--text);cursor:pointer;border-bottom:1px dashed var(--muted)}
@@ -629,6 +632,11 @@
       <div class="seg" id="seg-border"><button data-v="thick">粗框</button><button data-v="thin">細框</button></div></div>
     <div class="setrow"><span class="lbl">動畫</span>
       <div class="seg" id="seg-motion"><button data-v="on">開</button><button data-v="off">關</button></div></div>
+    <div class="setrow"><span class="lbl">收合少用的</span>
+      <div class="seg" id="seg-fold"><button data-v="on">開</button><button data-v="off">關</button></div></div>
+    <div class="setrow"><span class="lbl">幾天沒用算少用</span>
+      <div class="seg" id="seg-folddays"><button data-v="3">3 天</button><button data-v="7">7 天</button><button data-v="14">14 天</button><button data-v="30">30 天</button></div></div>
+    <p class="muted">東西超過 300 樣時，清單的「全部」只顯示最近用過、最近發現、收藏夾裡的東西，其他收到最底下，按「展開」就看得到。搜尋、點分類或收藏夾時一律顯示全部。</p>
 
     <hr>
     <h3>存檔</h3>
@@ -700,7 +708,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.54';
+  const VERSION = '0.0.55';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1179,6 +1187,8 @@
     el.dataset.tip = name;
     return el;
   }
+  const FOLD_MIN = 300;   // 東西超過這麼多才開始收合
+  let foldOpen = false;   // 少用的東西展開了沒（不記住，每次打開遊戲都是收起來的）
   function renderList(){
     const q = $('search').value.trim().toLowerCase();
     let names = Object.keys(save.items);
@@ -1210,7 +1220,18 @@
       cat: (a,b) => co(a) - co(b) || byTime(a,b)
     };
     names.sort(sorters[mode] || byTime);
-    shownNames = names;
+    const faved = new Set(save.folders.flatMap(f => f.items));
+    // 自動收合少用的東西：東西超過 FOLD_MIN 樣、而且在「全部」又沒搜尋、沒篩選時，
+    // 只顯示最近用過、最近發現、收藏夾裡、槽位裡的（還有水火風土），其他收到最底下「其餘 N 樣」
+    let rest = [];
+    if (prefs.fold !== 'off' && !q && !folderFilter && !filterUnext && !cat && names.length > FOLD_MIN){
+      const cutoff = Date.now() - (parseInt(prefs.foldDays, 10) || 7) * 864e5;
+      const keep = n => I[n].used > cutoff || I[n].t > cutoff || faved.has(n) || slots.includes(n) || BASE.some(b => b.name === n);
+      const active = names.filter(keep);
+      rest = names.filter(n => !keep(n));
+      if (rest.length) names = active;
+    }
+    shownNames = foldOpen ? [...names, ...rest] : names;
     list.textContent = '';
     // 「我的」最上面永遠有一個 ＋，可以自己設定一樣東西
     if (cat === MINE){
@@ -1229,8 +1250,17 @@
     let lastCat = null;
     // 東西很多時的速度：先在記憶體裡排好再一次放上畫面；收藏夾先整理成一張表，不用每樣都翻一遍
     const frag = document.createDocumentFragment();
-    const faved = new Set(save.folders.flatMap(f => f.items));
-    for (const n of names){
+    const foldBar = () => {
+      const b = document.createElement('button'); b.className = 'foldbar';
+      b.textContent = foldOpen ? `少用的 ${rest.length} 樣 ▴ 收起` : `其餘 ${rest.length} 樣（最近沒用過） ▸ 展開`;
+      b.title = '多久沒用算少用，可以在設定的「外觀」調';
+      b.onclick = () => { foldOpen = !foldOpen; renderList(); const nb = list.querySelector('.foldbar'); if (foldOpen && nb) nb.scrollIntoView({block:'start'}); };
+      frag.append(b);
+      lastCat = null;
+    };
+    const all = rest.length && foldOpen ? [...names, null, ...rest] : names;
+    for (const n of all){
+      if (n === null){ foldBar(); continue; }
       const it = I[n];
       if (mode === 'cat' && it.cat !== lastCat){
         lastCat = it.cat;
@@ -1243,6 +1273,7 @@
       if (it.t > recent){ const s = document.createElement('span'); s.className = 'star'; s.title = '最近發現'; el.append(s); }
       frag.append(el);
     }
+    if (rest.length && !foldOpen) foldBar();
     list.append(frag);
     markTried();
   }
@@ -1368,6 +1399,7 @@
     const i = slots.indexOf(null);
     if (i < 0){ toast('三個槽位都滿了，點一下槽位可以拿掉', true); return; }
     slots[i] = name;
+    if (save.items[name]) save.items[name].used = Date.now();  // 記下上次用的時間，清單收合看這個
     renderSlots(i);
   }
   document.querySelectorAll('.slot').forEach((el, i) => el.addEventListener('click', () => {
@@ -1395,7 +1427,7 @@
     const keep = filled().length;
     const n = Math.max(Math.random() < .5 ? 2 : 3, keep + 1);
     for (let i = 0, k = keep; i < slots.length && k < n; i++)
-      if (!slots[i]){ slots[i] = pool[Math.floor(Math.random() * pool.length)]; k++; }
+      if (!slots[i]){ slots[i] = pool[Math.floor(Math.random() * pool.length)]; if (save.items[slots[i]]) save.items[slots[i]].used = Date.now(); k++; }
     renderSlots();
     document.querySelectorAll('.slot').forEach((el, i) => { if (slots[i]){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); } });
   };
@@ -2795,8 +2827,8 @@ ${lines}
   };
 
   // ---------- 外觀與 AI 來源 ----------
-  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-border','border'], ['seg-ai','ai']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new'};
+  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-border','border'], ['seg-fold','fold'], ['seg-folddays','foldDays'], ['seg-ai','ai']];
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
   function applyPrefs(){
@@ -2820,7 +2852,8 @@ ${lines}
   }
   function setPref(k, v){
     prefs[k] = v; store.set(PREF_KEY, JSON.stringify(prefs)); applyPrefs();
-    if (k === 'theme'){ renderList(); renderSlots(); renderResult(); }  // 邊框顏色深淺跟主題有關，重畫
+    if (k === 'theme'){ renderList(); renderSlots(); renderResult(); }
+    if (k === 'fold' || k === 'foldDays') renderList();  // 邊框顏色深淺跟主題有關，重畫
   }
   for (const [id, k] of SEGS)
     $(id).addEventListener('click', e => { const v = e.target.dataset && e.target.dataset.v; if (v) setPref(k, v); });
