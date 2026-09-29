@@ -112,7 +112,7 @@
   .st-bar span{display:block;height:100%;background:var(--accent);border-radius:1rem}
   .st-n{width:2.5rem;text-align:right;color:var(--muted)}
   #topbar .btn,#aimode{white-space:nowrap;flex:none}
-  @media (max-width:420px){ #ver{display:none} #topbar{gap:.35rem} #topbar .btn{padding:.35rem .6rem} #aimode{padding:.15rem .45rem} }
+  @media (max-width:420px){ #ver{font-size:.62rem} #topbar{gap:.35rem} #topbar .btn{padding:.35rem .6rem} #aimode{padding:.15rem .45rem} }
   #backupbar{margin:0 1rem;padding:.55rem .8rem;border:1px dashed var(--accent);border-radius:.8rem;font-size:.82rem;color:var(--muted);
     display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;animation:rise .22s ease-out}
   #backupbar[hidden],#btn-undo[hidden]{display:none}
@@ -727,7 +727,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.62';
+  const VERSION = '0.0.63';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
