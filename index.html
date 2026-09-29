@@ -128,7 +128,7 @@
   #reorg p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #reorg .muted{color:var(--muted);font-size:.8rem}
   #reorg .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
-  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],#rg-setcat[hidden],#rg-mine[hidden],#rg-stats[hidden],#c-edit[hidden],#btn-install[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
+  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],#rg-setcat[hidden],#rg-newcat[hidden],#rg-mine[hidden],#rg-stats[hidden],#c-edit[hidden],#btn-install[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
   .favnew{display:flex;gap:.5rem;margin:.6rem 0}
   .favnew input{flex:1;min-width:0;padding:.45rem .65rem;border-radius:.6rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:.88rem;font-family:inherit;outline:none}
   .favnew input:focus{border-color:var(--accent)}
@@ -340,6 +340,7 @@
   #side-head{gap:.45rem;background:linear-gradient(to bottom, color-mix(in srgb, var(--panel) 100%, transparent), var(--panel))}
   .tabrow{-webkit-mask-image:linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);mask-image:linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);padding-right:1.2rem}
   #favtabs:empty{display:none}
+  .nc-note{margin:.2rem 0 .8rem;padding-left:1.2rem;font-size:.85rem;color:var(--muted);line-height:1.6}
   /* 依分類分組的標題後面拉一條細線 */
   .group{display:flex;align-items:center;gap:.5rem}
   .group::after{content:'';flex:1;height:1px;background:var(--line)}
@@ -531,6 +532,18 @@
       <div class="favnew"><input id="fd-name" placeholder="新收藏夾的名字" autocomplete="off"><button class="btn" id="fd-add">新增收藏夾</button></div>
       <div class="actions"><button class="btn primary" id="fd-done">完成</button></div>
     </div>
+    <div id="rg-newcat" hidden>
+      <h2>新建分類</h2>
+      <p>注意：新分類會影響 AI 怎麼分類。</p>
+      <ul class="nc-note">
+        <li>新分類會加進給 AI 看的分類清單。之後煉出新東西、補介紹時，AI 覺得適合就會把東西放進這一類。</li>
+        <li>按「整理」檢查分類時，AI 也可能建議把別類的東西搬進來（一樣會先問你）。</li>
+        <li>如果只是想把幾樣東西收在一起、不想影響 AI 怎麼分，用收藏夾就好。</li>
+        <li>你建的分類整理時不會被 AI 併掉；裡面沒東西也會留著。不要了可以到「排序分類」按 ✕ 刪掉。</li>
+      </ul>
+      <div class="favnew"><input id="nc-name" placeholder="新分類的名字（最多 6 個字）" autocomplete="off"><button class="btn primary" id="nc-add">建立</button></div>
+      <div class="actions"><button class="btn" id="nc-cancel">取消</button></div>
+    </div>
     <div id="rg-order" hidden>
       <h2>排序分類</h2>
       <p>用 ↑ ↓ 調整順序，上面的分類會排在前面。分類標籤、「依分類」排序都照這個順序。之後新出現的分類會接在最後面。</p>
@@ -681,7 +694,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.52';
+  const VERSION = '0.0.53';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -726,6 +739,8 @@
     s.extracts = s.extracts || {};
     // 收藏夾：[{name, items:[名稱...]}]，跟分類無關；舊存檔的 ★ 收藏搬進「我的收藏」
     if (!Array.isArray(s.folders)) s.folders = [];
+    // 玩家自己新建的分類：就算裡面沒東西也留著，AI 分類時會看到，整理時不會被併掉
+    if (!Array.isArray(s.userCats)) s.userCats = [];
     const oldFav = Object.keys(s.items).filter(n => s.items[n] && s.items[n].fav);
     if (oldFav.length){
       let f = s.folders.find(x => x.name === '我的收藏');
@@ -913,7 +928,7 @@
 
   // ---------- 清單 ----------
   // 整理視窗裡一次只顯示一個面板
-  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-mine', 'rg-stats'];
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-mine', 'rg-stats'];
   function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
 
   // ---------- 收藏夾 ----------
@@ -1064,6 +1079,7 @@
   function catCounts(){
     const m = new Map();
     for (const it of Object.values(save.items)) if (it.cat) m.set(it.cat, (m.get(it.cat) || 0) + 1);
+    for (const c of save.userCats || []) if (!m.has(c)) m.set(c, 0);
     const order = save.catOrder || [];
     const pos = c => { const i = order.indexOf(c); return i < 0 ? 1e6 : i; };
     return [...m].sort((a, b) => pos(a[0]) - pos(b[0]) || b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
@@ -1084,10 +1100,33 @@
     tab('', `全部 ${Object.keys(save.items).length}`);
     tab(MINE, `我的 ${Object.values(save.items).filter(it => it.custom).length}`);
     for (const [c, n] of counts) tab(c, `${c} ${n}`);
+    const add = document.createElement('button'); add.className = 'cattab';
+    add.textContent = '＋ 新分類'; add.title = '自己新建一個分類';
+    add.onclick = openNewCat;
+    box.append(add);
     const on = box.querySelector('.on');
     if (on) on.scrollIntoView({block:'nearest', inline:'nearest'});
   }
 
+  // 新建分類：會加進 AI 的分類清單，所以先說明清楚
+  function openNewCat(){
+    $('nc-name').value = '';
+    $('nc-add').onclick = () => {
+      const raw = $('nc-name').value.trim();
+      if (!raw){ toast('分類要有名字', true); return; }
+      const c = cleanCat(raw);
+      if (catCounts().some(([x]) => x === c)){ toast(`已經有「${c}」這個分類了`, true); return; }
+      save.userCats.push(c); persist();
+      $('reorg').classList.remove('open');
+      catFilter = c; renderList(); list.scrollTop = 0;
+      toast(`建好「${c}」了。多選或卡片上改分類，就能把東西放進來`);
+    };
+    $('nc-name').onkeydown = e => { if (e.key === 'Enter') $('nc-add').click(); };
+    $('nc-cancel').onclick = () => $('reorg').classList.remove('open');
+    showPanel('rg-newcat');
+    $('reorg').classList.add('open');
+    if (canHover) setTimeout(() => $('nc-name').focus(), 50);
+  }
   // 自己排分類的順序
   function openCatOrder(){
     const draw = () => {
@@ -1101,6 +1140,16 @@
         const mv = (d, label, dis) => { const b = document.createElement('button'); b.className = 'btn co-btn'; b.textContent = label; b.disabled = dis;
           b.onclick = () => { const names = counts.map(([x]) => x); [names[i], names[i + d]] = [names[i + d], names[i]]; save.catOrder = names; persist(); draw(); renderList(); }; return b; };
         r.append(t, k, sp, mv(-1, '↑', i === 0), mv(1, '↓', i === counts.length - 1));
+        if (save.userCats.includes(c)){
+          // 自己建的分類可以刪：只拿掉「自己建的」身分，裡面的東西不動（還有東西的話，這類照常存在）
+          t.textContent = `${c}（自己建的）`;
+          const x = document.createElement('button'); x.className = 'btn co-btn'; x.textContent = '✕'; x.title = '刪掉這個自己建的分類';
+          x.onclick = () => {
+            if (!confirm(n ? `刪掉自己建的分類「${c}」嗎？\n\n裡面的 ${n} 樣東西不會動，分類也還在，只是變回普通分類，整理時 AI 可以把它併掉。` : `刪掉自己建的分類「${c}」嗎？`)) return;
+            save.userCats = save.userCats.filter(x => x !== c); persist(); draw(); renderList();
+          };
+          r.append(x);
+        }
         box.append(r);
       });
       if (!counts.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = '還沒有分類'; box.append(e); }
@@ -1167,7 +1216,7 @@
     if (!names.length){
       const e = document.createElement('div'); e.className = 'empty';
       const ff = folderFilter && save.folders.find(x => x.name === folderFilter);
-      e.textContent = filterUnext && !ff && !catFilter && !q ? '全部都萃取過了！' : ff && !ff.items.length ? `「${folderFilter}」裡還沒有東西。長按東西打開卡片，按「收藏」就能放進來。` : '找不到符合的東西';
+      e.textContent = filterUnext && !ff && !catFilter && !q ? '全部都萃取過了！' : ff && !ff.items.length ? `「${folderFilter}」裡還沒有東西。長按東西打開卡片，按「收藏」就能放進來。` : catFilter && catFilter !== MINE && !q && !ff && !filterUnext ? `「${catFilter}」裡還沒有東西。用「☑ 多選」的「✎ 改分類」，或在卡片上點分類標籤，就能把東西放進來。` : '找不到符合的東西';
       list.append(e); return;
     }
     const recent = Date.now() - 10 * 60 * 1000;
@@ -2066,7 +2115,8 @@ ${lines}
 
 輸出 merges 陣列，每一筆是 {"from":"要被併掉的分類","to":"併進去的分類"}。
 - 請看每個分類「裡面實際放了什麼東西」來判斷，不要只看分類名稱。
-- 「${PROPER_CAT}」這個分類要保留，不要把它併掉，也不要把別的分類併進它。
+- 「${PROPER_CAT}」這個分類要保留，不要把它併掉，也不要把別的分類併進它。${save.userCats.length ? `
+- 這些是玩家自己建的分類，要保留，不要把它們併掉：${save.userCats.join('、')}。` : ''}
 - from 必須一字不差地從上面的分類名稱抄（不要抄括號和冒號後面的東西）。
 - to 可以是上面已有的分類，也可以是新的 2 到 4 個字的大類名稱。
 - 不需要合併的分類不要寫。都不需要合併就回 {"merges":[]}。
@@ -2076,6 +2126,7 @@ ${lines}
           for (const m of out.merges || []){
             const from = String(m.from || '').trim(), to = cleanCat(m.to);
             if (from === PROPER_CAT || to === PROPER_CAT) continue;  // 專有名詞這類不併
+            if (save.userCats.includes(from)) continue;  // 玩家自己建的分類不併掉
             if (from && from !== to && counts.some(([c]) => c === from)) sugg.set(from, to);
           }
           if (sugg.size){
@@ -2713,7 +2764,7 @@ ${lines}
     line(`配方 ${Object.keys(save.recipes).length} 條、萃取紀錄 ${Object.keys(save.extracts).length} 條、收藏夾 ${save.folders.length} 個。`);
     sec('稀有度');
     bars(RARITY.map((r, i) => [`${stars(i + 1)} ${r}`, names.filter(n => (I[n].rarity || 1) === i + 1).length]));
-    const cats = catCounts().slice(0, 10);
+    const cats = catCounts().filter(([, n]) => n).slice(0, 10);
     if (cats.length){ sec('分類（前 10）'); bars(cats); }
     // 最常用的材料：在幾條配方裡出現過
     const use = new Map();
