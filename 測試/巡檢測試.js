@@ -93,6 +93,13 @@ function answerFor(pr){
     await tap('#btn-slotundo'); if (!(await sl()).includes(want[0])) throw new Error('再上一步應該回到合成前');
     await tap('#btn-slotredo'); if ((await sl()).some(Boolean)) throw new Error('下一步沒恢復');
   });
+  await step('有配方的東西萃取也問 AI（不能拆成原本的配方）', async () => {
+    await clear(); await tap('#r-out .rchip >> nth=0'); await tap('#btn-extract'); await p.waitForTimeout(400);
+    const pr = await p.$eval('#m-prompt', e => e.value).catch(() => '');
+    if (!pr.includes('已經知道的合成方法')) throw new Error('萃取沒問 AI，或沒附上原本的配方');
+    await autoAnswer(); await p.waitForTimeout(300);
+    if (!(await p.$eval('#r-out', e => e.textContent)).includes('巡檢零件')) throw new Error('萃取結果沒出來');
+  });
   await step('萃取', async () => { await clear(); await tap('#list .litem:has-text("測試甲")'); await tap('#btn-extract'); await p.waitForTimeout(300); });
   await step('隨機、釘子、清空', async () => {
     for (let i = 0; i < 30; i++){ await tap('#btn-random'); const s = await p.$$eval('.slot.filled .nm, .slot.filled', x => x.map(e => e.textContent)); if (new Set(s).size !== s.length) throw new Error('隨機抽到重複的'); }

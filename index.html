@@ -937,7 +937,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.16';
+  const VERSION = '0.1.17';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1895,9 +1895,9 @@ ${themeRule()}規則：
     $('count').innerHTML = `已發現 <b>${names.length}</b> 樣`;
     renderFolderTabs();
     renderGoalBtn(); renderQuestBtn();
-    // 有配方的東西一律算萃取過（萃取結果就是它的第一個配方）
-    const made = new Set(Object.values(save.recipes).map(v => v[0]));
-    const isUnext = n => !save.items[n].extracted && !made.has(n);
+    // 真的萃取過才算（萃取紀錄剛好就是它的配方的，是合成時順手記下的，不算）
+    const rk = new Set(Object.entries(save.recipes).map(([k, v]) => v[0] + '|' + k));
+    const isUnext = n => { const e = save.extracts[n]; return !(e && e.length && !rk.has(n + '|' + comboKey(e))); };
     const unext = names.filter(isUnext).length;
     $('f-unext').textContent = `未萃取 ${unext}`;
     renderCatFilter();
@@ -2269,13 +2269,12 @@ ${themeRule()}規則：
     }
     const tip = document.createElement('div'); tip.className = 'muted'; tip.style.cssText = 'font-size:.78rem;color:var(--muted)';
     tip.textContent = last.fail ? '這幾樣合不起來。失敗不會記錄，之後可以再合一次試試，或按「真的嗎？」請 AI 再想想'
-      : last.fromRecipe ? '有配方的東西，萃取出來固定是它的第一個配方。點結果可以放進槽位'
       : '點結果可以放進槽位，長按看卡片';
     const really = document.createElement('button'); really.className = 'btn'; really.id = 'btn-really';
     really.textContent = '真的嗎？'; really.title = '請 AI 想像另一種可能';
     really.onclick = doReally;
     const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center';
-    if (!last.fromRecipe) row.append(really);
+    row.append(really);
     if (last.outputs.length){
       const fav = document.createElement('button'); fav.className = 'btn'; fav.textContent = '★ 加入收藏夾';
       fav.onclick = () => pickFolder(last.outputs, last.outputs.length > 1 ? `把萃取出來的 ${last.outputs.length} 樣加進哪個收藏夾？` : `把「${last.outputs[0]}」加進哪個收藏夾？`);
@@ -2439,9 +2438,11 @@ ${themeRule()}規則：
     const same = parts => new Set(parts).size === 1;
     return [...all.filter(p => !same(p)), ...all.filter(same)];
   }
-  function firstRecipe(name){
-    for (const parts of recipesOf(name)) if (parts.every(n => save.items[n])) return parts;
-    return null;
+  // 萃取的結果（納可 2026-09-29：萃取跳出原本的配方沒有意義）：萃取紀錄剛好就是它的某個配方的不算，要請 AI 想新的拆法
+  const isRecipeOf = (name, parts) => { const k = comboKey(parts); return recipesOf(name).some(r => comboKey(r) === k); };
+  function realExtract(name){
+    const k = (save.extracts[name] || []).filter(n => save.items[n]);
+    return k.length && !isRecipeOf(name, save.extracts[name]) ? k : null;
   }
   // 合成時順便記下反向萃取：A＋B＝C，之後萃取 C 直接得到 A、B（已經有萃取紀錄就不動）
   function recordExtract(result, inputs){
@@ -2457,11 +2458,9 @@ ${themeRule()}規則：
     const names = filled();
     if (busy || names.length !== 1) return;
     const name = names[0];
-    // 有配方的東西：萃取固定是它的第一個配方（不花次數）
-    const fr = firstRecipe(name);
-    if (fr){ save.extracts[name] = fr; finish('extract', [name], fr, []); last.fromRecipe = true; renderResult(); return; }
-    const known = (save.extracts[name] || []).filter(n => save.items[n]);
-    if (known.length) return finish('extract', [name], known, []);
+    // 萃取過的：結果固定；有配方的東西也一樣問 AI，只是不能拆成它現有的配方
+    const known = realExtract(name);
+    if (known) return finish('extract', [name], known, []);
     if (!aiReady()) return;
     setBusy(true, '萃取中……');
     try {
@@ -2691,7 +2690,8 @@ ${againRule(avoid, names)}${DETAIL_RULES()}`;
 `你是「1+1=?」合成遊戲的引擎。玩家想把「${name}」萃取、拆解，反推出構成它的、更原始更基本的東西。
 ${themeRule()}${describe([name])}規則：
 - 回傳 parts，2 到 3 樣東西，每一樣都要比「${name}」更原始、更基本，而且合在一起說得通能變成「${name}」。
-- 不能是「${name}」本身。
+- 不能是「${name}」本身。${recipesOf(name).length ? `
+- 「${name}」現在已經知道的合成方法：${recipesOf(name).slice(0, 12).map(r => r.join('＋')).join('；')}。萃取要想一種新的拆法，不能跟這些組合一樣。` : ''}
 ${knownRule()}
 ${avoid && avoid.length ? `
 【玩家問「真的嗎？」】
@@ -2708,6 +2708,7 @@ ${DETAIL_RULES()}`;
       .filter(p => !isBadName(p.name) && p.name !== name && !seen.has(p.name) && seen.add(p.name))
       .slice(0, 3);
     if (!parts.length) throw new Error('AI 沒拆出東西，再試一次');
+    if (isRecipeOf(name, parts.map(p => p.name))) throw new Error('AI 拆出來的跟原本的配方一樣，再按一次試試');
     return parts;
   }
   // 舊的發現沒有介紹：補一次
@@ -3763,12 +3764,10 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
     const mk = $('c-makes'); mk.textContent = '';
     if (makes.length){ mk.append('能煉出：'); makes.forEach((n, i) => { if (i) mk.append('、'); mk.append(link(n)); }); }
     const ex = $('c-ext'); ex.textContent = '';
-    const fr = firstRecipe(name);
-    const exs = fr || (save.extracts[name] || []).filter(n => save.items[n]);
-    if (exs.length){
+    const exs = realExtract(name);
+    if (exs){
       ex.append('能萃取出：'); exs.forEach((n, i) => { if (i) ex.append('、'); ex.append(link(n)); });
-      if (fr) ex.append('（第一個配方）');
-      else ex.append(delBtn('刪掉這個萃取結果', () => askDeleteExtract(name)));
+      ex.append(delBtn('刪掉這個萃取結果', () => askDeleteExtract(name)));
     }
     drawRoute(name);
     $('c-del').hidden = BASE.some(b => b.name === name);
