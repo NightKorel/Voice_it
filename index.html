@@ -649,6 +649,9 @@
     <p class="muted">跟朋友交換：把「分享存檔」或「下載存檔」的檔案傳給對方，對方按「合併朋友的存檔」。只會加進你沒有的東西和配方，你已經有的一律以你的為主。</p>
     <div class="actions"><button class="btn" id="btn-undo" hidden></button></div>
     <p class="muted">刪除、整理、合併朋友的存檔、匯入、全部重來之前，會自動留一份快照；按上面的「復原」可以回到那之前（只保留最近一次）。</p>
+    <div class="setrow"><span class="lbl">空間滿時清幾樣介紹</span>
+      <input type="range" id="trimn" min="100" max="1000" step="100"><span id="trimn-val" class="rv" style="width:4.5rem"></span></div>
+    <p class="muted">存檔空間滿了時，會先問你，同意後從最早發現、沒放進收藏夾的東西開始，一次清掉這麼多樣的介紹。</p>
     <div class="actions">
       <button class="btn" id="btn-import">匯入存檔（整個換掉）</button>
       <button class="btn danger" id="btn-reset">全部重來</button>
@@ -708,7 +711,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.57';
+  const VERSION = '0.0.58';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -810,8 +813,7 @@
     } catch(e){}
     return fresh();
   }
-  // 存檔：瀏覽器空間滿了，先問玩家，同意後清掉最早發現、沒收藏的 TRIM_N 樣東西的介紹，再存一次（還不夠就再問）
-  const TRIM_N = 300;
+  // 存檔：瀏覽器空間滿了，先問玩家，同意後清掉最早發現、沒收藏的 prefs.trimN 樣（設定可調）東西的介紹，再存一次（還不夠就再問）
   let trimAsking = false;
   function persist(){
     if (store.set(SAVE_KEY, JSON.stringify(save))) return;
@@ -824,7 +826,7 @@
         const SI = STARTER.items;
         const cand = Object.keys(save.items)
           .filter(n => { const it = save.items[n]; return it.desc && !faved.has(n) && !it.custom && !SI[n] && !BASE.some(b => b.name === n); })
-          .sort((a, b) => save.items[a].t - save.items[b].t).slice(0, TRIM_N);
+          .sort((a, b) => save.items[a].t - save.items[b].t).slice(0, prefs.trimN || 300);
         if (!cand.length){ toast('存檔空間滿了，也沒有介紹可以清了。請先下載備份，再刪掉一些東西。', true); return; }
         const ok = confirm(`存檔空間滿了，最新的進度存不進去。\n\n要清掉最早發現、而且沒放進收藏夾的 ${cand.length} 樣東西的介紹來騰出空間嗎？（從「${cand[0]}」開始）\n\n東西、配方、分類、稀有度都不會動，只清介紹。之後打開卡片可以按「補上介紹」請 AI 重寫。\n內建的東西、你自己設定的東西、收藏夾裡的東西不會清。\n\n按「取消」就不清，但這次的進度不會存下來，建議先下載備份。`);
         if (!ok){ toast('沒有存到，記得到設定下載備份', true); return; }
@@ -2895,7 +2897,7 @@ ${lines}
 
   // ---------- 外觀與 AI 來源 ----------
   const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-border','border'], ['seg-fold','fold'], ['seg-folddays','foldDays'], ['seg-ai','ai']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7'};
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7', trimN:300};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
   function applyPrefs(){
@@ -2910,6 +2912,8 @@ ${lines}
     r.style.setProperty('--side-w', prefs.sidew + '%');
     $('sidew').value = prefs.sidew;
     $('sidew-val').textContent = prefs.sidew + '%';
+    $('trimn').value = prefs.trimN;
+    $('trimn-val').textContent = prefs.trimN + ' 樣';
     $('scale-val').textContent = Math.round(prefs.scale * 100) + '%';
     for (const [id, k] of SEGS)
       $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs[k]));
@@ -2926,6 +2930,7 @@ ${lines}
     $(id).addEventListener('click', e => { const v = e.target.dataset && e.target.dataset.v; if (v) setPref(k, v); });
   $('scale').addEventListener('input', e => setPref('scale', parseFloat(e.target.value)));
   $('sidew').addEventListener('input', e => setPref('sidew', parseInt(e.target.value, 10)));
+  $('trimn').addEventListener('input', e => setPref('trimN', parseInt(e.target.value, 10)));
   $('aimode').onclick = () => {
     const order = ['gemini', 'openrouter', 'manual'];
     setPref('ai', order[(order.indexOf(prefs.ai) + 1) % order.length]);
