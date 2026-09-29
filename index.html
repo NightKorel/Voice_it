@@ -534,7 +534,7 @@
       <div id="c-catedit" hidden>
         <input id="c-catin" list="catlist" maxlength="12" placeholder="選一個分類，或打新的名字（最多 12 個字）" autocomplete="off">
         <datalist id="catlist"></datalist>
-        <div id="c-subrow" hidden><input id="c-subin" list="sublist" maxlength="12" placeholder="子分類（可以空著），例如動物底下的鳥類" autocomplete="off"></div>
+        <div id="c-subrow" hidden><input id="c-subin" list="sublist" maxlength="12" placeholder="子分類（可以空著），例如生物底下的鳥類" autocomplete="off"></div>
         <datalist id="sublist"></datalist>
         <div class="actions">
           <button class="btn primary" id="c-catok">確定</button>
@@ -898,7 +898,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.4';
+  const VERSION = '0.1.5';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2339,14 +2339,14 @@ ${parts[i].join('、')}
   });
   // 分類名的好壞範例（納可 2026-09-29：AI 寫的分類名不太好）：要開新分類、設計分類時都附上
   const CAT_NAME_GUIDE = `  分類名稱的寫法：2 到 4 個字，一看就知道裡面放什麼，像圖書館書架上的標籤。
-  好的例子：動物、植物、食物、飲料、天氣、地形、建築、交通工具、工具、武器、服飾、樂器、職業、天體、神話生物、情緒、運動、節慶。
+  好的例子：生物、植物、食物、飲料、天氣、地形、建築、交通工具、工具、武器、服飾、樂器、職業、天文、神話奇幻、情緒、運動、節慶。
   主題世界的好例子：海賊王 → 角色、海域、島嶼、船隻、寶物、果實能力、組織；中世紀 → 人物、城堡、兵器、魔法、怪物、道具。
   不好的例子：
   - 「其他」「雜項」「綜合」：什麼都能丟，等於沒分。
-  - 「物品類」「動物們」：不要加「類」「們」，直接寫「物品」「動物」。
-  - 「自然元素與現象」「抽象概念與精神」：太長，還把兩類硬塞在一起。
+  - 「物品類」「生物們」：不要加「類」「們」，直接寫「物品」「生物」。
+  - 「自然元素與現象」「抽象概念與精神」：太長，還用「與」「和」把兩類硬塞在一起（「神話奇幻」「文化娛樂」這種四個字的慣用說法可以）。
   - 「紅色的東西」「會飛的東西」：照外表或特徵分，不是照它是什麼分。
-  - 「海洋動物」和「動物」同時存在：彼此重疊，要選一個。
+  - 「海洋生物」和「生物」同時存在：彼此重疊，細的那層要放在子分類。
   - 英文或拼音。`;
   // list：開實驗室時，AI 自己定的分類清單（genBases 傳進來）；在專案裡時用那個專案的分類（save.lab.cats）
   // 給 AI 看：哪些分類底下有哪些子分類（專有名詞附說明）
