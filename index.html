@@ -843,6 +843,8 @@
     <div class="stab" data-tab="save">
     <h3>存檔</h3>
     <p class="muted">你的發現存在這個瀏覽器裡。想換裝置或怕不見，可以分享或下載成檔案備份，之後再匯入。每多發現 30 樣會提醒你備份一次。</p>
+    <div class="setrow"><span class="lbl">你的名字</span><input type="text" id="username" maxlength="16" placeholder="選填" autocomplete="off" style="flex:1;min-width:0;width:auto"></div>
+    <p class="muted">只用在存檔的檔名，還有朋友合併你的存檔時，會看到這是誰的。檔名只放得進英文和數字（中文檔名在有些瀏覽器會變成「download」），中文名字一樣會記在檔案裡，朋友看得到。</p>
     <div class="actions">
       <button class="btn" id="btn-share" hidden>分享存檔</button>
       <button class="btn" id="btn-export">下載存檔</button>
@@ -851,6 +853,7 @@
     </div>
     <label class="ex-labs" id="ex-labs-row" hidden><input type="checkbox" id="ex-labs"> 下載、分享時連實驗室的專案一起匯出（<span id="ex-labs-n"></span> 個）</label>
     <p class="muted">跟朋友交換：把「分享存檔」或「下載存檔」的檔案傳給對方，對方按「合併朋友的存檔」。只會加進你沒有的東西和配方，你已經有的一律以你的為主。</p>
+    <details id="merge-log" hidden><summary></summary><div id="merge-log-list"></div></details>
     <div class="actions"><button class="btn" id="btn-undo" hidden></button></div>
     <p class="muted">刪除、整理、合併朋友的存檔、匯入、全部重來之前，會自動留一份快照；按上面的「復原」可以回到那之前（只保留最近一次）。</p>
     <div class="setrow"><span class="lbl">空間滿時清幾樣介紹</span>
@@ -937,7 +940,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.18';
+  const VERSION = '0.1.19';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -3950,6 +3953,8 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
     if (prefs.exportLabs) ensureAllLabs();  // 先把封存的專案讀進來，按「分享」時才來得及
     $('key').value = getKey();
     $('orkey').value = getOrKey();
+    $('username').value = prefs.user || '';
+    renderMergeLog();
     fillModels();
     $('modal').classList.add('open');
     if (msg) toast(msg, true);
@@ -4016,14 +4021,18 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
   const pad = n => String(n).padStart(2, '0');
   const stamp = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
   let exportTime = new Date();
-  const saveName = () => `1+1 save ${stamp(exportTime)}.json`;
+  // 玩家的名字（納可 2026-09-29）：只用在檔名、匯出檔裡的 by，朋友合併時看得到是誰的
+  const userName = () => String(prefs.user || '').replace(/[\\/:*?"<>|\s]+/g, ' ').trim().slice(0, 16);
+  // 檔名只放名字裡的英文、數字（中文檔名在有些瀏覽器會被改成「download」，實測過）；中文名字照樣記在檔案裡
+  const nameTag = () => { const n = userName().replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim(); return n ? `${n} ` : ''; };
+  const saveName = () => `1+1 save ${nameTag()}${stamp(exportTime)}.json`;
   // 檔案裡也記下存檔時間，匯入或合併時看得到
   // 匯出的一律是我的世界（在專案裡時從 localStorage 讀）；有勾「連專案一起匯出」就把專案放在 labs 裡
   const mainData = () => { if (!world) return save; try { return JSON.parse(store.get(SAVE_KEY)); } catch(e){ return {items:{}, recipes:{}}; } };
   const exportText = pretty => {
     exportTime = new Date(); flushLab();
     const labs = prefs.exportLabs && labCache.size ? {labs:[...labCache.values()]} : {};
-    return JSON.stringify({...mainData(), ...labs, exportedAt:exportTime.getTime()}, null, pretty ? 1 : 0);
+    return JSON.stringify({...mainData(), ...labs, exportedAt:exportTime.getTime(), ...(userName() ? {by:userName()} : {})}, null, pretty ? 1 : 0);
   };
   const timeText = t => { const d = new Date(t); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
   $('btn-export').onclick = async () => {
@@ -4095,9 +4104,9 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
       for (const [k, v] of Object.entries(save.recipes)) if (set.has(v[0]) && k.split('+').every(n => set.has(n))) recipes[k] = [...v];
       for (const [k, v] of Object.entries(save.extracts)) if (set.has(k) && v.every(n => set.has(n))) extracts[k] = [...v];
       exportTime = new Date();
-      return JSON.stringify({items, recipes, extracts, folders:[], partial:true, exportedAt:exportTime.getTime()}, null, 1);
+      return JSON.stringify({items, recipes, extracts, folders:[], partial:true, exportedAt:exportTime.getTime(), ...(userName() ? {by:userName()} : {})}, null, 1);
     };
-    const fname = () => `1+1 part ${stamp(exportTime)}.json`;
+    const fname = () => `1+1 part ${nameTag()}${stamp(exportTime)}.json`;
     $('px-dl').onclick = () => {
       const blob = new Blob([build()], {type:'application/json'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname(); a.click();
@@ -4122,6 +4131,20 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
   $('btn-partial').onclick = () => { if (!mainOnly('部分匯出')) openPartial(); };
   let fileMode = 'import';
   $('btn-import').onclick = () => { if (mainOnly('匯入存檔')) return; fileMode = 'import'; $('file').click(); };
+  // 以往合併過誰的存檔（設定「存檔」頁），最近的在上面
+  function renderMergeLog(){
+    const L = mainData().imports || [], box = $('merge-log-list');
+    $('merge-log').hidden = !L.length;
+    $('merge-log').querySelector('summary').textContent = `合併紀錄（${L.length} 次）`;
+    box.textContent = '';
+    for (const r of L){
+      const d = document.createElement('p'); d.className = 'muted';
+      const t = new Date(r.t);
+      d.textContent = `${t.getFullYear()}/${t.getMonth() + 1}/${t.getDate()}　${r.by || '（沒寫名字）'}　加入 ${r.items} 樣東西、${r.recipes} 條新配方`;
+      box.append(d);
+    }
+  }
+  $('username').addEventListener('change', e => setPref('user', String(e.target.value || '').trim().slice(0, 16)));
   $('btn-merge').onclick = () => { if (mainOnly('合併朋友的存檔')) return; fileMode = 'merge'; $('file').click(); };
   $('file').onchange = async e => {
     const f = e.target.files[0]; e.target.value = '';
@@ -4133,11 +4156,11 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
     } catch(_){ toast('這個檔案看起來不是存檔', true); return; }
     const labs = s.labs; delete s.labs;  // 存檔裡帶的專案另外處理
     if (fileMode === 'merge'){ addLabs(labs); return mergeFriend(s); }
-    const when = s.exportedAt ? `\n\n這份存檔的時間：${timeText(s.exportedAt)}（${Object.keys(s.items).length} 樣東西）` : '';
+    const when = (s.by ? `\n\n這是 ${String(s.by).slice(0, 16)} 的存檔。` : '') + (s.exportedAt ? `${s.by ? '' : '\n\n'}這份存檔的時間：${timeText(s.exportedAt)}（${Object.keys(s.items).length} 樣東西）` : '');
     if (s.partial && !confirm(`注意：這是「部分匯出」的存檔，只有 ${Object.keys(s.items).length} 樣東西。\n\n用「匯入」會把你現在的存檔整個換掉，只剩這些。想把它加進你的存檔，請按取消，改用「合併朋友的存檔」。\n\n還是要整個換掉嗎？`)) return;
     delete s.partial;
     if (!confirm(`匯入會把你現在的存檔整個換掉，確定嗎？${when}\n\n（想保留自己的、只加朋友的新東西，請用「合併朋友的存檔」）`)) return;
-    delete s.exportedAt;
+    delete s.exportedAt; delete s.by;
     snapshot('匯入存檔');
     save = fillBase(s); persist(); last = null; resetSlots();
     if (save.meta && AI_MODES.includes(save.meta.ai) && save.meta.ai !== prefs.ai) setPref('ai', save.meta.ai);  // 照存檔裡的 AI 來源
@@ -4148,7 +4171,8 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
   // 合併朋友的存檔：只加進自己沒有的東西、配方、萃取紀錄；有的一律以自己的為主
   // opt：從實驗室專案併入時是 {from:'專案「X」', lab:'X'}
   function mergeFriend(raw, opt = {}){
-    const from = opt.from || '朋友的存檔';
+    const who = String(raw.by || '').trim().slice(0, 16);
+    const from = opt.from || (who ? `${who} 的存檔` : '朋友的存檔');
     const fr = fillBase(JSON.parse(JSON.stringify(raw)));
     const newItems = Object.keys(fr.items).filter(n => !save.items[n] && fr.items[n] && typeof fr.items[n] === 'object');
     // 配方用到的材料和結果都要存在（朋友的存檔可能有缺），缺了就不算
@@ -4228,7 +4252,9 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
       }
       fillBase(save);
       persist(); renderList(); renderSlots();
-      toast(pickItems.length || added ? `加入了 ${pickItems.length} 樣東西、${added} 條配方` : '什麼都沒有加');
+      toast(pickItems.length || added ? `${who && !opt.lab ? `從 ${who} ` : ''}加入了 ${pickItems.length} 樣東西、${added} 條配方` : '什麼都沒有加');
+      // 合併紀錄：誰、什麼時候、加了幾樣東西幾條配方（專案併入不記）
+      if (!opt.lab){ save.imports = [{by:who, t:now, items:pickItems.length, recipes:added}, ...(save.imports || [])].slice(0, 50); persist(); renderMergeLog(); }
       // 朋友的標籤你這邊沒有（納可 2026-09-29）：問要不要請 AI 幫那些東西從你的標籤清單重新挑
       const strange = pickItems.filter(n => save.items[n] && tagsOf(save.items[n]).some(c => !myCats.has(c)));
       if (strange.length){

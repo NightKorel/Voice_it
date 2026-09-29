@@ -185,8 +185,11 @@ function answerFor(pr){
   });
   let file = path.join(os.tmpdir(), 'xunjian.json');
   await step('下載存檔（連專案）', async () => {
-    await tap('#btn-settings'); await toTab('#ex-labs'); await p.check('#ex-labs').catch(() => {});
+    await tap('#btn-settings'); await toTab('#username'); await p.fill('#username', '巡檢者 K9'); await p.press('#username', 'Tab');
+    await toTab('#ex-labs'); await p.check('#ex-labs').catch(() => {});
     const [dl] = await Promise.all([p.waitForEvent('download'), tap('#btn-export')]); await dl.saveAs(file);
+    if (!dl.suggestedFilename().includes('save K9 ')) throw new Error('檔名沒有名字：' + dl.suggestedFilename());
+    const j = JSON.parse(fs.readFileSync(file, 'utf8')); if (j.by !== '巡檢者 K9') throw new Error('存檔裡沒記名字');
   });
   if (PHONE) await step('分享存檔', async () => { await tap('#btn-settings'); await tap('#btn-share'); });  // 電腦沒有分享功能，按鈕本來就藏起來
   await step('部分匯出', async () => { await tap('#btn-settings'); await tap('#btn-partial'); await p.check('#px-cats input >> nth=0'); const [dl] = await Promise.all([p.waitForEvent('download'), tap('#px-dl')]); });
@@ -205,9 +208,15 @@ function answerFor(pr){
     await tap('#btn-lab'); await tap('#wl-list .wl-row:has-text("巡檢主題") button:has-text("封存")');
     await tap('#wl-list .foldbar'); await tap('#wl-list .wl-row:has-text("巡檢主題") button:has-text("還原")');
   });
-  await step('合併朋友的存檔（含專案）', async () => {
-    await tap('#btn-settings'); const [fc] = await Promise.all([p.waitForEvent('filechooser'), tap('#btn-merge')]); await fc.setFiles(file); await p.waitForTimeout(400);
+  await step('合併朋友的存檔（含專案）、顯示是誰的、合併紀錄', async () => {
+    const f2 = path.join(os.tmpdir(), 'xunjian-friend.json'), j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    j.by = '巡檢朋友'; j.items['巡檢朋友的東西'] = {emoji:'🎁', desc:'朋友的', rarity:2, cat:'物品', color:'#aa8844', t:1}; fs.writeFileSync(f2, JSON.stringify(j));
+    await tap('#btn-settings'); const [fc] = await Promise.all([p.waitForEvent('filechooser'), tap('#btn-merge')]); await fc.setFiles(f2); await p.waitForTimeout(400);
+    if (!(await p.$eval('#fm-summary', e => e.textContent)).includes('巡檢朋友 的存檔')) throw new Error('合併時沒顯示是誰的');
     await tap('#fm-apply').catch(() => {});
+    await p.waitForTimeout(300); await closeAll().catch(() => {});
+    await tap('#btn-settings'); await toTab('#merge-log');
+    if (!(await p.$eval('#merge-log', e => !e.hidden && e.textContent.includes('巡檢朋友')))) throw new Error('合併紀錄沒記下來');
   });
   await step('匯入存檔、復原', async () => {
     await tap('#btn-settings'); const [fc] = await Promise.all([p.waitForEvent('filechooser'), tap('#btn-import')]); await fc.setFiles(file); await p.waitForTimeout(400);
