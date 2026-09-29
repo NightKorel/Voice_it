@@ -74,6 +74,11 @@
   .slot.filled{border-style:solid;background:var(--chip);color:var(--text);box-shadow:var(--shadow)}
   .slot.pop{animation:pop .3s ease-out}
   .slot .ph{font-size:1.5rem;opacity:.5}
+  .slot{position:relative}
+  .slot .pin{position:absolute;top:.15rem;right:.2rem;font-size:.85rem;line-height:1;padding:.2rem;border-radius:.4rem;opacity:.3;filter:grayscale(1);cursor:pointer}
+  .slot .pin:hover{opacity:.75}
+  .slot.pinned .pin{opacity:1;filter:none}
+  .slot.pinned{box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
   #actions{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center}
   #actions .btn{padding:.6rem 1.3rem;font-size:1rem}
 
@@ -123,7 +128,7 @@
   #reorg p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #reorg .muted{color:var(--muted);font-size:.8rem}
   #reorg .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
-  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],#rg-mine[hidden],#rg-stats[hidden],#c-edit[hidden],#btn-install[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
+  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],#rg-setcat[hidden],#rg-mine[hidden],#rg-stats[hidden],#c-edit[hidden],#btn-install[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
   .favnew{display:flex;gap:.5rem;margin:.6rem 0}
   .favnew input{flex:1;min-width:0;padding:.45rem .65rem;border-radius:.6rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:.88rem;font-family:inherit;outline:none}
   .favnew input:focus{border-color:var(--accent)}
@@ -418,6 +423,7 @@
         <button class="chipbtn" id="sel-all">全選</button>
         <button class="chipbtn" id="sel-none">全不選</button>
         <button class="chipbtn on" id="sel-fav">★ 加入收藏夾</button>
+        <button class="chipbtn on" id="sel-cat">✎ 改分類</button>
         <button class="chipbtn" id="sel-done">完成</button>
       </div>
       <div id="favtabs" class="tabrow"></div>
@@ -510,6 +516,13 @@
       <div id="pk-list" class="rg-list"></div>
       <div class="favnew"><input id="pk-name" placeholder="或取名一個新收藏夾" autocomplete="off"><button class="btn" id="pk-add">新增並加入</button></div>
       <div class="actions"><button class="btn" id="pk-cancel">取消</button></div>
+    </div>
+    <div id="rg-setcat" hidden>
+      <h2>改分類</h2>
+      <p id="sc-desc"></p>
+      <div id="sc-list" class="rg-list"></div>
+      <div class="favnew"><input id="sc-name" placeholder="或打一個新分類的名字" autocomplete="off"><button class="btn" id="sc-add">改到新分類</button></div>
+      <div class="actions"><button class="btn" id="sc-cancel">取消</button></div>
     </div>
     <div id="rg-folders" hidden>
       <h2>管理收藏夾</h2>
@@ -668,7 +681,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.51';
+  const VERSION = '0.0.52';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -900,7 +913,7 @@
 
   // ---------- 清單 ----------
   // 整理視窗裡一次只顯示一個面板
-  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-mine', 'rg-stats'];
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-mine', 'rg-stats'];
   function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
 
   // ---------- 收藏夾 ----------
@@ -1200,16 +1213,48 @@
     for (const n of [...selected]) if (!save.items[n]) selected.delete(n);
     $('sel-count').textContent = `已選 ${selected.size} 樣（點東西勾選）`;
     $('sel-fav').disabled = !selected.size;
+    $('sel-cat').disabled = !selected.size;
   }
   $('btn-select').addEventListener('click', () => setSelectMode(!selectMode));
   $('sel-done').addEventListener('click', () => setSelectMode(false));
   $('sel-all').addEventListener('click', () => { shownNames.forEach(n => selected.add(n)); updateSelbar(); renderList(); });
   $('sel-none').addEventListener('click', () => { selected.clear(); updateSelbar(); renderList(); });
   $('sel-fav').addEventListener('click', () => { if (selected.size) pickFolder([...selected], `把勾選的 ${selected.size} 樣加進哪個收藏夾？`, () => setSelectMode(false)); });
+  $('sel-cat').addEventListener('click', () => { if (selected.size) pickCat([...selected], () => setSelectMode(false)); });
+  // 一次改好幾樣東西的分類：選現有分類，或打新的；改完算「自己分的」，整理時 AI 不會動
+  function pickCat(names, after){
+    names = names.filter(n => save.items[n]);
+    if (!names.length) return;
+    $('sc-desc').textContent = `把勾選的 ${names.length} 樣改到哪個分類？改完算「自己分的」，整理時 AI 不會動。`;
+    const box = $('sc-list'); box.textContent = '';
+    const apply = c => {
+      if (!String(c || '').trim()){ toast('分類名稱不能空白', true); return; }
+      c = cleanCat(c);
+      for (const n of names){ save.items[n].cat = c; save.items[n].catLocked = true; }
+      persist(); renderList(); $('reorg').classList.remove('open');
+      toast(`${names.length} 樣改到「${c}」了`);
+      if (after) after();
+    };
+    for (const [c, k] of catCounts()){
+      const allIn = names.every(n => save.items[n].cat === c);
+      const b = document.createElement('button'); b.className = 'rg-row pk-row';
+      b.textContent = c;
+      const t = document.createElement('span'); t.className = 'rg-arrow'; t.textContent = allIn ? '全部已經在這類' : `${k} 樣`;
+      b.append(t); b.onclick = () => apply(c);
+      box.append(b);
+    }
+    $('sc-name').value = '';
+    $('sc-add').onclick = () => apply($('sc-name').value);
+    $('sc-name').onkeydown = e => { if (e.key === 'Enter') $('sc-add').click(); };
+    $('sc-cancel').onclick = () => $('reorg').classList.remove('open');
+    showPanel('rg-setcat');
+    $('reorg').classList.add('open');
+  }
   $('f-unext').addEventListener('click', () => { filterUnext = !filterUnext; $('f-unext').classList.toggle('on', filterUnext); renderList(); list.scrollTop = 0; });
 
   // ---------- 槽位 ----------
   const slots = [null, null, null];
+  const pinned = [false, false, false];  // 釘住的槽位：合成、萃取、清空、隨機都不會動它，要再按一次釘子才解開
   let busy = false;
   const filled = () => slots.filter(Boolean);
   function renderSlots(popIndex){
@@ -1221,21 +1266,26 @@
         const it = save.items[n] || {emoji:'❓'};
         const em = document.createElement('span'); em.className = 'em'; em.textContent = it.emoji;
         const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = n;
-        el.append(em, nm);
+        const pin = document.createElement('span'); pin.className = 'pin'; pin.textContent = '📌';
+        pin.title = pinned[i] ? '已釘住，按一下解開' : '釘住：合成後也留在這格';
+        pin.onclick = e => { e.stopPropagation(); if (busy) return; pinned[i] = !pinned[i]; renderSlots(); };
+        el.append(em, nm, pin);
         paint(el, it);
-        el.dataset.tip = n; el.dataset.tipHint = '點一下拿掉';
+        el.dataset.tip = n; el.dataset.tipHint = pinned[i] ? '已釘住，按右上角的釘子解開' : '點一下拿掉，右上角的釘子可以釘住';
       } else {
         paint(el, null);
         const ph = document.createElement('span'); ph.className = 'ph'; ph.textContent = '＋';
         el.append(ph);
         delete el.dataset.tip; delete el.dataset.tipHint;
       }
+      if (!n) pinned[i] = false;
+      el.classList.toggle('pinned', !!n && pinned[i]);
       if (i === popIndex){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
     });
     const f = filled().length;
     $('btn-craft').disabled = busy || f < 2;
     $('btn-extract').disabled = busy || f !== 1;
-    $('btn-clearslots').disabled = busy || f === 0;
+    $('btn-clearslots').disabled = busy || slots.every((n, i) => !n || pinned[i]);
     $('btn-random').disabled = busy;
   }
   function addToSlot(name){
@@ -1247,19 +1297,30 @@
   }
   document.querySelectorAll('.slot').forEach((el, i) => el.addEventListener('click', () => {
     if (busy || !slots[i]) return;
+    if (pinned[i]){ toast('這格釘住了，先按右上角的釘子解開'); return; }
     slots[i] = null;
-    // 往前補，讓空格都在後面
-    const rest = slots.filter(Boolean); slots.fill(null); rest.forEach((n, j) => slots[j] = n);
+    packSlots();
     renderSlots();
   }));
-  $('btn-clearslots').onclick = () => { slots.fill(null); renderSlots(); };
+  // 清掉沒釘住的槽位；剩下沒釘的往前補，讓空格都在後面（釘住的留在原位）
+  function clearUnpinned(){ for (let i = 0; i < slots.length; i++) if (!pinned[i]) slots[i] = null; }
+  function packSlots(){
+    const free = [], rest = [];
+    for (let i = 0; i < slots.length; i++) if (!pinned[i] || !slots[i]){ free.push(i); if (slots[i]) rest.push(slots[i]); slots[i] = null; }
+    rest.forEach((n, j) => slots[free[j]] = n);
+  }
+  function resetSlots(){ slots.fill(null); pinned.fill(false); }
+  $('btn-clearslots').onclick = () => { clearUnpinned(); renderSlots(); };
   // 隨機：從清單「目前看得到的」東西裡抽兩或三樣（每格各抽各的，所以可能重複），換掉槽位裡原本的
   $('btn-random').onclick = () => {
     if (busy) return;
     const pool = shownNames.length ? shownNames : Object.keys(save.items);
-    const n = Math.random() < .5 ? 2 : 3;
-    slots.fill(null);
-    for (let i = 0; i < n; i++) slots[i] = pool[Math.floor(Math.random() * pool.length)];
+    // 釘住的留著，只抽其他格；總數還是兩或三樣
+    clearUnpinned();
+    const keep = filled().length;
+    const n = Math.max(Math.random() < .5 ? 2 : 3, keep + 1);
+    for (let i = 0, k = keep; i < slots.length && k < n; i++)
+      if (!slots[i]){ slots[i] = pool[Math.floor(Math.random() * pool.length)]; k++; }
     renderSlots();
     document.querySelectorAll('.slot').forEach((el, i) => { if (slots[i]){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); } });
   };
@@ -1385,7 +1446,7 @@
     last = {type, inputs, outputs, fresh, tried:[outputs.join('、')]};
     if (type === 'extract' && save.items[inputs[0]]) save.items[inputs[0]].extracted = true;  // 記下這樣東西萃取過了
     persist();
-    slots.fill(null);
+    clearUnpinned(); packSlots();
     setBusy(false);
     renderResult();
     renderList();
@@ -2190,7 +2251,7 @@ ${lines}
     if (!snap || !snap.data) return;
     if (!confirm(`要把存檔復原到「${snap.reason}」之前嗎？\n\n在那之後發現的東西、做的改動都會消失。`)) return;
     save = fillBase(snap.data); persist(); store.del(SNAP_KEY);
-    last = null; slots.fill(null);
+    last = null; resetSlots();
     renderList(); renderSlots(); renderResult(); renderSnap(); closeSettings();
     toast('已經復原了');
   };
@@ -2228,7 +2289,7 @@ ${lines}
     recipeKeys.forEach(k => delete save.recipes[k]);
     extractKeys.forEach(k => delete save.extracts[k]);
     for (let i = 0; i < slots.length; i++) if (slots[i] === name) slots[i] = null;
-    const rest = slots.filter(Boolean); slots.fill(null); rest.forEach((x, j) => slots[j] = x);
+    packSlots();
     if (last && (last.inputs.includes(name) || last.outputs.includes(name))) last = null;
     closeCard();
     afterDelete(`「${name}」已刪除`);
@@ -2504,7 +2565,7 @@ ${lines}
     if (!confirm(`匯入會把你現在的存檔整個換掉，確定嗎？${when}\n\n（想保留自己的、只加朋友的新東西，請用「合併朋友的存檔」）`)) return;
     delete s.exportedAt;
     snapshot('匯入存檔');
-    save = fillBase(s); persist(); last = null; slots.fill(null);
+    save = fillBase(s); persist(); last = null; resetSlots();
     renderList(); renderSlots(); renderResult(); toast('存檔已匯入');
   };
 
@@ -2582,7 +2643,7 @@ ${lines}
     if (!confirm('確定要全部重來嗎？所有發現和配方都會清掉（鑰匙會保留）。\n\n清掉之後，還可以用設定裡的「復原」救回一次。')) return;
     snapshot('全部重來');
     save = fresh(); persist();
-    last = null; slots.fill(null);
+    last = null; resetSlots();
     location.reload();
   };
 
