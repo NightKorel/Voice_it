@@ -727,7 +727,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.63';
+  const VERSION = '0.0.64';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2896,6 +2896,7 @@ ${lines}
     delete s.exportedAt;
     snapshot('匯入存檔');
     save = fillBase(s); persist(); last = null; resetSlots();
+    if (save.meta && AI_MODES.includes(save.meta.ai) && save.meta.ai !== prefs.ai) setPref('ai', save.meta.ai);  // 照存檔裡的 AI 來源
     renderList(); renderSlots(); renderResult(); toast('存檔已匯入');
   };
 
@@ -2982,6 +2983,10 @@ ${lines}
   let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7', trimN:300, lite:'off'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
+  // AI 來源也記在存檔裡（save.meta.ai）：換裝置、加到主畫面後匯入存檔，照樣是原本的來源，手動就不會一直問鑰匙
+  const AI_MODES = ['gemini', 'openrouter', 'manual'];
+  if (save.meta && AI_MODES.includes(save.meta.ai)) prefs.ai = save.meta.ai;
+  else { (save.meta || (save.meta = {})).ai = prefs.ai; persist(); }
   function applyPrefs(){
     const r = document.documentElement;
     r.dataset.theme = prefs.theme;
@@ -3006,6 +3011,7 @@ ${lines}
   }
   function setPref(k, v){
     prefs[k] = v; store.set(PREF_KEY, JSON.stringify(prefs)); applyPrefs();
+    if (k === 'ai'){ (save.meta || (save.meta = {})).ai = v; persist(); }
     if (k === 'theme'){ renderList(); renderSlots(); renderResult(); }
     if (k === 'fold' || k === 'foldDays') renderList();  // 邊框顏色深淺跟主題有關，重畫
   }
