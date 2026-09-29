@@ -293,6 +293,11 @@
   .meta{font-size:.85rem;color:var(--muted);margin:.3rem 0;line-height:1.8}
   .meta.small{font-size:.75rem}
   .meta:empty{display:none}
+  #c-route .rt-list{margin:.3rem 0 0;padding-left:1.6rem}
+  #c-route .rt-list li{margin:.1rem 0}
+  #c-route .rt-toggle{margin-left:.2rem}
+  .litem.tried{opacity:.42}
+  .litem.tried::after{content:'✓';font-size:.75em;color:var(--muted)}
   .clink{color:var(--text);cursor:pointer;border-bottom:1px dashed var(--muted)}
   .xdel{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:.75rem;padding:0 .25rem;margin-left:.1rem;
     border-radius:.3rem;font-family:inherit;vertical-align:middle}
@@ -457,6 +462,7 @@
       <div class="meta" id="c-from"></div>
       <div class="meta" id="c-makes"></div>
       <div class="meta" id="c-ext"></div>
+      <div class="meta" id="c-route"></div>
       <div class="meta small" id="c-time"></div>
       <div id="c-favbox" hidden>
         <div class="muted" style="font-size:.8rem;margin:.6rem 0 .3rem">放進哪些收藏夾（可以多選）：</div>
@@ -694,7 +700,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.53';
+  const VERSION = '0.0.54';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1238,6 +1244,25 @@
       frag.append(el);
     }
     list.append(frag);
+    markTried();
+  }
+  // 標出合過的組合：槽位放了一兩樣時，清單裡「再放進來就是合過的組合」的東西變淡、打 ✓
+  function markTried(){
+    const f = filled();
+    const done = new Set();
+    if (f.length && f.length < 3 && !selectMode){
+      for (const k of Object.keys(save.recipes)){
+        const parts = k.split('+');
+        if (parts.length !== f.length + 1) continue;
+        const rest = [...parts];
+        if (f.every(n => { const i = rest.indexOf(n); if (i < 0) return false; rest.splice(i, 1); return true; })) done.add(rest[0]);
+      }
+    }
+    list.querySelectorAll('.litem[data-tip]').forEach(el => {
+      const on = done.has(el.dataset.tip);
+      el.classList.toggle('tried', on);
+      if (on) el.dataset.tipHint = '跟槽位裡的東西合過了'; else if (el.dataset.tipHint === '跟槽位裡的東西合過了') delete el.dataset.tipHint;
+    });
   }
   // 打字時等手停一下（0.15 秒）再重畫，東西多時才不會每打一個字就卡一下
   let searchTimer = null;
@@ -1336,6 +1361,7 @@
     $('btn-extract').disabled = busy || f !== 1;
     $('btn-clearslots').disabled = busy || slots.every((n, i) => !n || pinned[i]);
     $('btn-random').disabled = busy;
+    markTried();
   }
   function addToSlot(name){
     if (busy) return;
@@ -2416,6 +2442,7 @@ ${lines}
       if (fr) ex.append('（第一個配方）');
       else ex.append(delBtn('刪掉這個萃取結果', () => askDeleteExtract(name)));
     }
+    drawRoute(name);
     $('c-del').hidden = BASE.some(b => b.name === name);
     $('c-edit').hidden = !it.custom;
     $('c-redesc').hidden = !!it.custom;
@@ -2429,6 +2456,64 @@ ${lines}
     box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
     // 用 Gemini 時自動補介紹；手動模式由玩家按「補上介紹」
     if (!it.desc && !asking && !it.custom && hasAutoKey()) fillDetail(name);  // 自己設定的東西不讓 AI 補
+  }
+  // 路線圖：從水火風土出發，一步步合（或萃取）到這樣東西的最短路線；只用存檔裡的配方，不問 AI
+  function routeLevels(){
+    const best = {};
+    for (const b of BASE) if (save.items[b.name]) best[b.name] = {lvl:0};
+    const recs = Object.entries(save.recipes).map(([k, v]) => [k.split('+'), v[0]]).filter(([, r]) => save.items[r]);
+    const exts = Object.entries(save.extracts).filter(([src]) => save.items[src]);
+    for (let changed = true, guard = 0; changed && guard < 500; guard++){
+      changed = false;
+      for (const [ins, r] of recs){
+        if (!ins.every(n => best[n])) continue;
+        const lvl = 1 + Math.max(...ins.map(n => best[n].lvl));
+        if (!best[r] || lvl < best[r].lvl){ best[r] = {lvl, ins}; changed = true; }
+      }
+      for (const [src, parts] of exts){
+        if (!best[src]) continue;
+        const lvl = best[src].lvl + 1;
+        for (const p of parts) if (save.items[p] && (!best[p] || lvl < best[p].lvl)){ best[p] = {lvl, src}; changed = true; }
+      }
+    }
+    return best;
+  }
+  function routeTo(name){
+    const best = routeLevels();
+    if (!best[name]) return null;
+    const steps = [], seen = new Set();
+    const walk = n => {
+      const b = best[n];
+      if (!b || !b.lvl) return;
+      const key = b.ins ? 'c:' + comboKey(b.ins) : 'x:' + b.src;
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (b.ins){ b.ins.forEach(walk); steps.push({ins:b.ins, out:n}); }
+      else { walk(b.src); steps.push({src:b.src, out:n}); }
+    };
+    walk(name);
+    return steps;
+  }
+  let routeOpen = false;
+  function drawRoute(name){
+    const box = $('c-route'); box.textContent = '';
+    if (BASE.some(b => b.name === name)) return;
+    const steps = routeTo(name);
+    if (!steps){ box.append('路線：找不到從水、火、風、土出發的路線'); return; }
+    box.append(`路線：從水火風土出發，最少 ${steps.length} 步`);
+    const t = document.createElement('button'); t.className = 'btn co-btn rt-toggle';
+    t.textContent = routeOpen ? '收起' : '🗺 看路線';
+    t.onclick = () => { routeOpen = !routeOpen; drawRoute(name); };
+    box.append(t);
+    if (!routeOpen) return;
+    const ol = document.createElement('ol'); ol.className = 'rt-list';
+    for (const st of steps){
+      const li = document.createElement('li');
+      if (st.ins){ st.ins.forEach((n, j) => { if (j) li.append('＋'); li.append(link(n)); }); li.append('＝'); li.append(link(st.out)); }
+      else { li.append('萃取 '); li.append(link(st.src)); li.append(' → '); li.append(link(st.out)); }
+      ol.append(li);
+    }
+    box.append(ol);
   }
   function delBtn(title, fn){
     const b = document.createElement('button'); b.className = 'xdel'; b.textContent = '✕'; b.title = title;
@@ -2498,7 +2583,18 @@ ${lines}
   };
   $('c-favname').addEventListener('keydown', e => { if (e.key === 'Enter') $('c-favadd').click(); });
   $('c-drop').onclick = () => { const n = cardName; closeCard(); addToSlot(n); };
-  window.addEventListener('keydown', e => { if (e.key === 'Escape'){ closeCard(); closeSettings(); } });
+  // Esc 先關視窗；電腦版快捷鍵：Enter 合成、Esc 清空（沒開視窗時）、空白鍵隨機；打字中或視窗開著時不作用
+  window.addEventListener('keydown', e => {
+    const anyOpen = ['card', 'modal', 'reorg', 'manual'].some(id => $(id).classList.contains('open'));
+    if (e.key === 'Escape'){ closeCard(); closeSettings(); }
+    if (anyOpen || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    const t = e.target;
+    if (t && (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName) || t.isContentEditable)) return;
+    if (busy) return;
+    if (e.key === 'Enter'){ if (!$('btn-craft').disabled){ e.preventDefault(); craft(); } }
+    else if (e.key === 'Escape'){ if (!$('btn-clearslots').disabled) $('btn-clearslots').click(); }
+    else if (e.key === ' '){ e.preventDefault(); $('btn-random').click(); }
+  });
 
   // ---------- 設定 ----------
   function openSettings(msg, toKeys){
