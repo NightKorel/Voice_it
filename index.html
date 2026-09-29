@@ -729,7 +729,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.66';
+  const VERSION = '0.0.67';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1115,7 +1115,8 @@
             f.name = nv; persist(); draw(); renderList();
           }),
           btn('刪除', () => {
-            if (!confirm(`確定刪掉收藏夾「${f.name}」嗎？\n\n裡面的 ${f.items.length} 樣東西不會被刪，只是不在這個收藏夾了。`)) return;
+            if (!confirm(`確定刪掉收藏夾「${f.name}」嗎？\n\n裡面的 ${f.items.length} 樣東西不會被刪，只是不在這個收藏夾了。\n\n刪掉之後可以到設定按「復原」救回來（只保留最近一次）。`)) return;
+            snapshot(`刪掉收藏夾 ${f.name}`);
             save.folders.splice(i, 1); persist(); draw(); renderList();
           }));
         box.append(r);
@@ -1456,6 +1457,12 @@
     const apply = c => {
       if (!String(c || '').trim()){ toast('分類名稱不能空白', true); return; }
       c = cleanCat(c, CAT_MAX_USER);
+      const moving = names.filter(n => save.items[n].cat !== c);
+      if (!moving.length){ toast(`都已經在「${c}」了`); return; }
+      if (moving.length > 1){
+        if (!confirm(`確定把 ${moving.length} 樣東西改到「${c}」嗎？\n\n它們原本的分類會被換掉，而且會變成「自己分的」，整理時 AI 不會再動。\n\n改錯了可以到設定按「復原」（只保留最近一次）。`)) return;
+        snapshot(`${moving.length} 樣改到 ${c}`);
+      }
       for (const n of names){ save.items[n].cat = c; save.items[n].catLocked = true; }
       persist(); renderList(); $('reorg').classList.remove('open');
       toast(`${names.length} 樣改到「${c}」了`);
@@ -2569,8 +2576,10 @@ ${lines}
     let snap = lsSnap(), data = snap && snap.data;
     if (!data){ const r = await idbGet('snapshot'); snap = r.ok && r.v; data = snap && snap.data && JSON.parse(snap.data); }
     if (!data){ snapMeta = null; renderSnap(); toast('找不到快照', true); return; }
-    if (!confirm(`要把存檔復原到「${snap.reason}」之前嗎？\n\n在那之後發現的東西、做的改動都會消失。`)) return;
-    save = fillBase(data); persist(); store.del(SNAP_KEY); idbDel('snapshot'); snapMeta = null;
+    if (!confirm(`要把存檔復原到「${snap.reason}」之前嗎？\n\n在那之後發現的東西、做的改動都會消失。\n\n（復原之前會先把現在的樣子留一份，按錯了可以再按一次「復原」回來）`)) return;
+    store.del(SNAP_KEY);
+    snapshot('復原');  // 復原前把現在的樣子也留一份，按錯了還能再復原回來
+    save = fillBase(data); persist();
     last = null; resetSlots();
     renderList(); renderSlots(); renderResult(); renderSnap(); closeSettings();
     toast('已經復原了');
