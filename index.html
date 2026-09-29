@@ -207,6 +207,8 @@
   #manual p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #manual .muted{color:var(--muted);font-size:.8rem}
   #m-reason{color:var(--danger)}
+  #m-step{color:var(--accent);font-weight:600}
+  #m-step[hidden]{display:none}
   #manual textarea{width:100%;border-radius:.7rem;border:1px solid var(--line);background:var(--bg);color:var(--text);
     font-size:.82rem;font-family:ui-monospace,Menlo,Consolas,monospace;padding:.6rem;resize:vertical;outline:none}
   #manual textarea:focus{border-color:var(--accent)}
@@ -677,6 +679,7 @@
   <div class="box">
     <h2>手動問 AI</h2>
     <p id="m-reason" hidden></p>
+    <p id="m-step" hidden></p>
     <p>1. 按「複製問題」。<br>2. 貼給任何一個 AI（ChatGPT、Gemini、Claude 都可以）。<br>3. 把它的回答整段複製，貼到下面，按「完成」。</p>
     <textarea id="m-prompt" readonly></textarea>
     <div class="actions"><button class="btn" id="m-copy">複製問題</button></div>
@@ -793,7 +796,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.75';
+  const VERSION = '0.0.76';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1302,6 +1305,7 @@
         if (i && prefs.ai !== 'manual') await sleep(4000);  // 放慢一點，避免撞到每分鐘上限
         checkStop();
         subSorting = parts.length > 1 ? `分子分類 ${i + 1}/${parts.length}` : '分子分類中……'; renderSubFilter();
+        askStep = `分子分類：第 ${i + 1} 次，共 ${parts.length} 次`;
         const have = subCounts();
         const out = await ask(
 `你是遊戲圖鑑的分類整理員。下面這些東西都在「${PROPER_CAT}」這個分類裡，請再幫它們分到子分類。
@@ -1338,7 +1342,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
       if (!e.cancelled) toast(`分子分類停下來了：${e.message}`, true);
       else toast('分子分類停下來了', true);
     } finally {
-      reorging = false; aiTimeout = 20000; subSorting = ''; renderSubFilter();
+      reorging = false; aiTimeout = 20000; askStep = ''; subSorting = ''; renderSubFilter();
     }
   }
 
@@ -2509,8 +2513,10 @@ ${DETAIL_RULES()}`;
     return JSON.parse(t.slice(a, b + 1));
   }
   let manualPending = null;
+  let askStep = '';          // 整理這種要問好幾次的：「整理：第 3 次，大約共 8 次」
+  let lastAnswer = '', dupOk = false;  // 上一次貼的回答：一模一樣時先提醒，可能貼到舊的
   function jsonPrompt(prompt, props){
-    return `${prompt}
+    return `${askStep ? `【${askStep}】\n\n` : ''}${prompt}
 
 【回答格式】只回一段 JSON，不要加任何說明文字、不要用程式碼框。格式像這樣：
 ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
@@ -2522,6 +2528,9 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     $('m-err').textContent = '';
     $('m-reason').hidden = !reason;
     $('m-reason').textContent = reason || '';
+    $('m-step').hidden = !askStep;
+    $('m-step').textContent = askStep ? `📋 ${askStep}。每一次都要複製新的問題、貼上新的回答。` : '';
+    dupOk = false;
     $('manual').classList.add('open');
     // 跳出來就自動複製；瀏覽器不允許（例如等 AI 等太久、或 iPhone 限制）時，就留給「複製問題」按鈕
     copyPrompt(true);
@@ -2566,6 +2575,9 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
       const miss = Object.keys(manualPending.props).filter(k => !(k in out) && !OPTIONAL.has(k));
       if (!miss.length && 'name' in manualPending.props && isBadName(cleanName(out.name))) throw new Error('名字是空的或看不懂，請 AI 重新回答一次再貼');
       if (miss.length) throw new Error(`回答裡少了：${miss.join('、')}，請 AI 照格式重回一次`);
+      const ans = $('m-answer').value.trim();
+      if (ans === lastAnswer && !dupOk){ dupOk = true; throw new Error('這段回答跟上一次貼的一模一樣，可能貼到舊的了。確定沒貼錯的話，再按一次「完成」。'); }
+      lastAnswer = ans;
       const p = manualPending; manualPending = null;
       $('manual').classList.remove('open');
       p.resolve(out);
@@ -2618,7 +2630,14 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     const progress = t => { btn.textContent = `■ ${t}（按一下停止）`; };
     const res = {items:0, cats:0, moved:0, stars:0};
     let asked = 0;
-    const pace = async () => { if (asked++ && prefs.ai !== 'manual') await sleep(4000); checkStop(); };  // 放慢一點，避免撞到每分鐘上限
+    // 大約要問幾次（跟設定視窗算的一樣；中途合併了東西，後面的次數可能少一點）
+    const n0 = Object.keys(save.items).length, free0 = Object.values(save.items).filter(it => !it.catLocked).length;
+    const total = (doItems ? Math.ceil(n0 / ITEM_BATCH) : 0) + (doCat && catCounts().length > 1 ? 1 : 0) + (doMove ? Math.ceil(free0 / MOVE_BATCH) : 0) + (doStar ? Math.ceil(n0 / STAR_BATCH) : 0);
+    const pace = async () => {
+      if (asked++ && prefs.ai !== 'manual') await sleep(4000);  // 放慢一點，避免撞到每分鐘上限
+      checkStop();
+      askStep = `整理：第 ${asked} 次，大約共 ${Math.max(total, asked)} 次`;  // 手動模式的視窗和問題最上面會顯示
+    };
     try {
       // 1. 相似的東西
       if (doItems){
@@ -2776,7 +2795,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
       if (!e.cancelled) toast(`整理到一半停下來了（已整理的有存起來）：${e.message}`, true);
       else toast('整理停下來了（已整理的有存起來）', true);
     } finally {
-      reorging = false; aiTimeout = 20000; btn.classList.remove('on'); btn.textContent = '整理';
+      reorging = false; aiTimeout = 20000; askStep = ''; btn.classList.remove('on'); btn.textContent = '整理';
     }
   }
 
