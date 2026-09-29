@@ -123,6 +123,11 @@
   #btn-lab.on{border-color:var(--accent);color:var(--accent)}
   .wl-row{cursor:default;flex-wrap:wrap}
   .wl-row.here{border-color:var(--accent)}
+  .wl-row.archived{opacity:.7}
+  .wl-btns{flex-basis:100%;display:flex;gap:.35rem;flex-wrap:wrap}
+  .co-btn.pinned{border-color:var(--accent);color:var(--accent)}
+  .wl-head{display:flex;align-items:center;gap:.6rem}
+  .wl-head h2{flex:1}
   .ex-labs{display:flex;align-items:center;gap:.4rem;font-size:.86rem;margin:.2rem 0 .4rem;cursor:pointer}
   .ex-labs[hidden]{display:none}
   #nl-bases{display:flex;flex-direction:column;gap:.35rem;margin:.5rem 0}
@@ -638,7 +643,7 @@
       <div class="actions"><button class="btn" id="nc-cancel">取消</button></div>
     </div>
     <div id="rg-worlds" hidden>
-      <h2>🧪 實驗室</h2>
+      <div class="wl-head"><h2>🧪 實驗室</h2><select id="wl-sort" class="sel" title="專案怎麼排"></select></div>
       <p class="muted">每個專案是一個獨立的小世界：你定主題，AI 想出這個主題最基礎的幾樣東西當起點，取代水火風土。玩得開心，可以把東西併入我的世界。</p>
       <div id="wl-list"></div>
       <div class="actions">
@@ -835,7 +840,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.77';
+  const VERSION = '0.0.78';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -3038,7 +3043,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   window.addEventListener('pagehide', flushLab);
   // 打開遊戲時：把所有專案讀進來；上次待在專案裡就回到那個專案
   async function initLabs(){
-    for (const x of [...labIndex]){
+    for (const x of labIndex.filter(x => !x.archived)){  // 封存的不讀，要用時才拿
       const r = await idbGet('lab:' + x.id);
       try { if (r.ok && r.v) labCache.set(x.id, JSON.parse(r.v)); } catch(e){}
     }
@@ -3060,6 +3065,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
       save = load();
     }
     store.set(WORLD_KEY, id || '');
+    const lx = id && labIndex.find(l => l.id === id); if (lx){ lx.played = Date.now(); saveIndex(); }  // 排序「最近玩過」用
     last = null; resetSlots();
     catFilter = ''; subFilter = ''; folderFilter = ''; filterUnext = false; foldOpen = false;
     $('f-unext').classList.remove('on'); $('search').value = '';
@@ -3089,53 +3095,96 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   // 在專案裡時，存檔區這些只對我的世界的操作先擋住
   const mainOnly = what => { if (!world) return false; toast(`${what}只能在我的世界做，先按上面的「回我的世界」`, true); return true; };
 
-  // 實驗室視窗：我的世界＋所有專案
+  // 實驗室目錄：我的世界固定最上面；專案可以排序、📌 置頂、🗄 封存；刪除只放在封存區（先封存才能刪，免得手滑）
+  // 封存的專案打開遊戲時不讀進來，專案再多也不會拖慢；要用時才從資料庫拿
+  async function ensureLab(id){
+    if (labCache.has(id)) return true;
+    const r = await idbGet('lab:' + id);
+    try { if (r.ok && r.v){ labCache.set(id, JSON.parse(r.v)); return true; } } catch(e){}
+    toast('讀不到這個專案的存檔', true); return false;
+  }
+  const ensureAllLabs = () => Promise.all(labIndex.map(x => labCache.has(x.id) ? true : idbGet('lab:' + x.id).then(r => { try { if (r.ok && r.v) labCache.set(x.id, JSON.parse(r.v)); } catch(e){} })));
+  const LAB_SORTS = {
+    played:['最近玩過', (a, b) => (b.played || b.t) - (a.played || a.t)],
+    made:['最新建立', (a, b) => b.t - a.t],
+    name:['名稱', (a, b) => a.name.localeCompare(b.name, 'zh-Hant')],
+    size:['東西最多', (a, b) => (b.n || 0) - (a.n || 0)]
+  };
+  let showArchived = false;
   function openWorlds(){
-    const draw = () => {
+    const sel = $('wl-sort');
+    if (!sel.options.length) for (const [k, [label]] of Object.entries(LAB_SORTS)){ const o = document.createElement('option'); o.value = k; o.textContent = label; sel.append(o); }
+    sel.value = LAB_SORTS[prefs.labSort] ? prefs.labSort : 'played';
+    sel.onchange = () => { prefs.labSort = sel.value; store.set(PREF_KEY, JSON.stringify(prefs)); draw(); };
+    const go = async id => { if (id && !await ensureLab(id)) return; if (enterWorld(id)) $('reorg').classList.remove('open'); };
+    function draw(){
       const box = $('wl-list'); box.textContent = '';
-      const row = (id, icon, name, n, sub) => {
-        const r = document.createElement('div'); r.className = 'rg-row wl-row' + ((world || null) === id ? ' here' : '');
-        const t = document.createElement('span'); t.className = 'rg-from'; t.textContent = `${icon} ${name}`;
-        const k = document.createElement('span'); k.className = 'rg-arrow'; k.textContent = `${n} 樣`;
-        const sp = document.createElement('span'); sp.style.flex = '1';
-        r.append(t, k, sp);
-        const btn = (label, title, fn, cls) => { const b = document.createElement('button'); b.className = 'btn co-btn' + (cls ? ' ' + cls : ''); b.textContent = label; b.title = title; b.onclick = fn; r.append(b); return b; };
-        if ((world || null) === id) btn('目前在這裡', '', () => {}).disabled = true;
-        else btn('進入', '', () => { if (enterWorld(id)) $('reorg').classList.remove('open'); }, 'primary');
-        if (id){
-          btn('✎', '改名', () => {
-            const raw = prompt('專案的新名字？（最多 12 個字）', labName(id));
-            if (raw === null || !raw.trim()) return;
-            const nm = raw.trim().slice(0, 12), d = labCache.get(id), x = labIndex.find(l => l.id === id);
-            if (x) x.name = nm; saveIndex();
-            if (d){ d.lab.name = nm; if (world === id) persist(); else idbSet('lab:' + id, JSON.stringify(d)); }
-            renderWorld(); draw();
-          });
-          btn('⤵ 併入', '把這個專案的東西勾選加進我的世界', () => mergeLab(id));
-          btn('✕', '刪掉這個專案', () => {
-            if (!confirm(`確定刪掉專案「${name}」嗎？\n\n裡面的 ${n} 樣東西、配方都會消失，而且沒辦法復原。\n\n想留著的東西，可以先按「⤵ 併入」加進我的世界，或到設定勾「連專案一起匯出」下載備份。`)) return;
-            if (world === id) enterWorld(null, true);
-            labCache.delete(id); labIndex = labIndex.filter(l => l.id !== id); saveIndex();
-            idbDel('lab:' + id); renderLabExport(); draw();
-            toast(`刪掉專案「${name}」了`);
-          });
+      const row = (x, sub) => {
+        const id = x ? x.id : null, here = (world || null) === id;
+        const r = document.createElement('div'); r.className = 'rg-row wl-row' + (here ? ' here' : '') + (x && x.archived ? ' archived' : '');
+        const t = document.createElement('span'); t.className = 'rg-from';
+        t.textContent = x ? `${x.pin ? '📌' : '🧪'} ${x.name}` : '🌍 我的世界';
+        const k = document.createElement('span'); k.className = 'rg-arrow'; k.textContent = `${x ? x.n || 0 : mainCount()} 樣`;
+        // 名字一行，按鈕一行，說明一行：手機上才不會擠成一團
+        const bs = document.createElement('div'); bs.className = 'wl-btns';
+        r.append(t, k, bs);
+        const btn = (label, title, fn, cls) => { const b = document.createElement('button'); b.className = 'btn co-btn' + (cls ? ' ' + cls : ''); b.textContent = label; b.title = title; b.onclick = fn; bs.append(b); return b; };
+        if (x && x.archived){
+          btn('還原', '拿出封存', () => { delete x.archived; saveIndex(); draw(); toast(`「${x.name}」拿出封存了`); });
+          btn('✕ 刪除', '永久刪掉這個專案', () => delLab(x), 'danger');
+        } else {
+          if (here) btn('目前在這裡', '', () => {}).disabled = true;
+          else btn('進入', '', () => go(id), 'primary');
+          if (x){
+            btn(x.pin ? '📌 已置頂' : '📌 置頂', x.pin ? '按一下取消置頂' : '排在最上面', () => { if (x.pin) delete x.pin; else x.pin = true; saveIndex(); draw(); }, x.pin ? 'pinned' : '');
+            btn('✎ 改名', '', () => renameLab(x));
+            btn('⤵ 併入', '把這個專案的東西勾選加進我的世界', async () => { if (await ensureLab(x.id)) mergeLab(x.id); });
+            btn('🗄 封存', '收到下面的封存區，不會出現在清單裡；要刪掉也要先封存', () => {
+              if (world === x.id && !enterWorld(null, true)) return;
+              x.archived = true; delete x.pin; labCache.delete(x.id); saveIndex(); draw();
+              toast(`「${x.name}」封存了，在最下面的「封存」裡`);
+            });
+          }
         }
         if (sub){ const d = document.createElement('span'); d.className = 'rg-sub'; d.textContent = sub; r.append(d); }
         box.append(r);
       };
-      const mainN = world ? (() => { try { return Object.keys(JSON.parse(store.get(SAVE_KEY)).items).length; } catch(e){ return 0; } })() : Object.keys(save.items).length;
-      row(null, '🌍', '我的世界', mainN, '起點：水、火、風、土');
-      for (const x of labIndex){
-        const d = labCache.get(x.id);
-        row(x.id, '🧪', x.name, d ? Object.keys(d.items).length : x.n, `主題：${x.theme}${d ? `　起點：${d.lab.bases.map(b => b.name).join('、')}` : ''}`);
+      row(null, '起點：水、火、風、土');
+      const sortFn = LAB_SORTS[sel.value][1];
+      const active = labIndex.filter(x => !x.archived).sort((a, b) => (!!b.pin - !!a.pin) || sortFn(a, b));
+      const arch = labIndex.filter(x => x.archived).sort(sortFn);
+      const subOfLab = x => { const d = labCache.get(x.id); return `主題：${x.theme}${d ? `　起點：${d.lab.bases.map(b => b.name).join('、')}` : ''}`; };
+      for (const x of active) row(x, subOfLab(x));
+      if (!active.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = arch.length ? '專案都封存了，按下面的「封存」可以拿出來。' : '還沒有專案，按下面的「＋ 開新專案」開一個。'; box.append(e); }
+      if (arch.length){
+        const fb = document.createElement('button'); fb.className = 'foldbar';
+        fb.textContent = `${showArchived ? '▾' : '▸'} 封存（${arch.length}）`;
+        fb.onclick = () => { showArchived = !showArchived; draw(); };
+        box.append(fb);
+        if (showArchived) for (const x of arch) row(x, `主題：${x.theme}`);
       }
-      if (!labIndex.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = '還沒有專案，按下面的「＋ 開新專案」開一個。'; box.append(e); }
-    };
+    }
     draw();
     $('wl-new').onclick = openNewLab;
     $('wl-close').onclick = () => $('reorg').classList.remove('open');
     showPanel('rg-worlds');
     $('reorg').classList.add('open');
+    openWorlds.redraw = draw;
+  }
+  const mainCount = () => { if (!world) return Object.keys(save.items).length; try { return Object.keys(JSON.parse(store.get(SAVE_KEY)).items).length; } catch(e){ return 0; } };
+  async function renameLab(x){
+    const raw = prompt('專案的新名字？（最多 12 個字）', x.name);
+    if (raw === null || !raw.trim()) return;
+    x.name = raw.trim().slice(0, 12); saveIndex();
+    if (await ensureLab(x.id)){ const d = labCache.get(x.id); d.lab.name = x.name; if (world === x.id) persist(); else idbSet('lab:' + x.id, JSON.stringify(d)); }
+    renderWorld(); if (openWorlds.redraw) openWorlds.redraw();
+  }
+  function delLab(x){
+    if (!confirm(`確定永久刪掉專案「${x.name}」嗎？\n\n裡面的 ${x.n || 0} 樣東西、配方都會消失，刪了就救不回來。\n\n想留著的話，可以先按「還原」再「⤵ 併入」我的世界，或到設定勾「連專案一起匯出」下載備份。`)) return;
+    labCache.delete(x.id); labIndex = labIndex.filter(l => l !== x); saveIndex();
+    idbDel('lab:' + x.id); renderLabExport();
+    if (openWorlds.redraw) openWorlds.redraw();
+    toast(`刪掉專案「${x.name}」了`);
   }
   $('btn-lab').onclick = openWorlds;
 
@@ -3251,7 +3300,7 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
     $('ex-labs-n').textContent = labIndex.length;
     $('ex-labs').checked = !!prefs.exportLabs;
   }
-  $('ex-labs').onchange = () => { prefs.exportLabs = $('ex-labs').checked; store.set(PREF_KEY, JSON.stringify(prefs)); };
+  $('ex-labs').onchange = () => { prefs.exportLabs = $('ex-labs').checked; store.set(PREF_KEY, JSON.stringify(prefs)); if (prefs.exportLabs) ensureAllLabs(); };
 
   // ---------- 刪除 ----------
   // 刪掉一條配方：下次合這組會重新問 AI。它帶出來的反向萃取也一起刪
@@ -3537,6 +3586,7 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
 
   // ---------- 設定 ----------
   function openSettings(msg, toKeys){
+    if (prefs.exportLabs) ensureAllLabs();  // 先把封存的專案讀進來，按「分享」時才來得及
     $('key').value = getKey();
     $('orkey').value = getOrKey();
     fillModels();
@@ -3616,7 +3666,8 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
     return JSON.stringify({...mainData(), ...labs, exportedAt:exportTime.getTime()}, null, pretty ? 1 : 0);
   };
   const timeText = t => { const d = new Date(t); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
-  $('btn-export').onclick = () => {
+  $('btn-export').onclick = async () => {
+    if (prefs.exportLabs) await ensureAllLabs();  // 封存的專案平常沒讀進來，匯出前先拿
     const blob = new Blob([exportText(true)], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
