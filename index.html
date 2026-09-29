@@ -92,6 +92,12 @@
 
   #result{display:flex;flex-direction:column;align-items:center;gap:.7rem;min-height:5rem;text-align:center}
   #r-eq{font-size:.88rem;color:var(--muted);line-height:1.8}
+  #r-eq button{font:inherit;font-size:.8rem;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:.8rem;padding:.05rem .6rem;cursor:pointer;letter-spacing:inherit}
+  #r-eq button:hover{color:var(--fg,inherit);border-color:var(--accent)}
+  #slots{position:relative;margin-bottom:.35rem}
+  #undo-bar{position:absolute;bottom:-.8rem;right:1rem;display:flex;gap:.25rem}
+  #undo-bar button{font:inherit;font-size:.8rem;line-height:1;width:1.7rem;height:1.5rem;padding:0;border:1px solid var(--line);border-radius:.6rem;background:var(--bg);color:var(--muted);cursor:pointer}
+  #undo-bar button:disabled{opacity:.35;cursor:default}
   #r-out{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center}
   .rchip{display:inline-flex;align-items:center;gap:.5rem;padding:.55rem 1.05rem;border-radius:.9rem;border:2px solid var(--chip-line);
     background:var(--chip);font-size:1.15rem;cursor:pointer;box-shadow:var(--shadow);-webkit-touch-callout:none;animation:pop .4s ease-out}
@@ -483,6 +489,7 @@
         <button class="slot" data-i="0"></button><span class="plus">＋</span>
         <button class="slot" data-i="1"></button><span class="plus">＋</span>
         <button class="slot" data-i="2"></button>
+        <div id="undo-bar"><button id="btn-slotundo" title="上一步（槽位回到之前的樣子）">↶</button><button id="btn-slotredo" title="下一步（恢復剛剛撤回的）">↷</button></div>
       </div>
       <div id="actions">
         <button class="btn primary" id="btn-craft">合成</button>
@@ -930,7 +937,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.15';
+  const VERSION = '0.1.16';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2123,6 +2130,9 @@ ${themeRule()}規則：
     $('btn-extract').disabled = busy || f !== 1;
     $('btn-clearslots').disabled = busy || slots.every((n, i) => !n || pinned[i]);
     $('btn-random').disabled = busy;
+    slotRecord();
+    $('btn-slotundo').disabled = busy || !slotUndo.length;
+    $('btn-slotredo').disabled = busy || !slotRedo.length;
     markTried();
   }
   function addToSlot(name){
@@ -2147,7 +2157,41 @@ ${themeRule()}規則：
     for (let i = 0; i < slots.length; i++) if (!pinned[i] || !slots[i]){ free.push(i); if (slots[i]) rest.push(slots[i]); slots[i] = null; }
     rest.forEach((n, j) => slots[free[j]] = n);
   }
-  function resetSlots(){ slots.fill(null); pinned.fill(false); }
+  function resetSlots(){ slots.fill(null); pinned.fill(false); slotUndo.length = slotRedo.length = 0; slotCur = null; }
+  // 上一步、下一步（納可 2026-09-29）：記槽位（含釘子）的樣子，最多三步；AI 在想的時候不記
+  const UNDO_MAX = 3, slotUndo = [], slotRedo = [];
+  let slotCur = null;
+  const slotSnap = () => JSON.stringify([slots, pinned]);
+  function slotRecord(){
+    if (busy) return;
+    const now = slotSnap();
+    if (slotCur !== null && now !== slotCur){ slotUndo.push(slotCur); if (slotUndo.length > UNDO_MAX) slotUndo.shift(); slotRedo.length = 0; }
+    slotCur = now;
+  }
+  function slotRestore(snap){
+    const [ss, ps] = JSON.parse(snap);
+    for (let i = 0; i < slots.length; i++){ slots[i] = ss[i] && save.items[ss[i]] ? ss[i] : null; pinned[i] = !!(slots[i] && ps[i]); }
+    slotCur = slotSnap(); renderSlots();
+  }
+  function slotStep(back){
+    if (busy) return;
+    const from = back ? slotUndo : slotRedo, to = back ? slotRedo : slotUndo;
+    if (!from.length) return;
+    to.push(slotCur); slotRestore(from.pop());
+  }
+  $('btn-slotundo').onclick = () => slotStep(true);
+  $('btn-slotredo').onclick = () => slotStep(false);
+  // 把剛剛的配方放回槽位：釘住的留著，其他換掉
+  function putBack(names){
+    if (busy) return;
+    names = names.filter(n => save.items[n]);
+    if (!names.length){ toast('這幾樣已經不在圖鑑裡了', true); return; }
+    clearUnpinned(); packSlots();
+    const room = slots.filter(n => !n).length;
+    names.slice(0, room).forEach(n => { slots[slots.indexOf(null)] = n; });
+    renderSlots();
+    if (names.length > room) toast('釘住的格子太多，有的放不上去', true);
+  }
   $('btn-clearslots').onclick = () => { clearUnpinned(); renderSlots(); };
   // 隨機：從清單「目前看得到的」東西裡抽兩或三樣（每格各抽各的，所以可能重複），換掉槽位裡原本的
   $('btn-random').onclick = () => {
@@ -2207,9 +2251,11 @@ ${themeRule()}規則：
     if (!last) return;
     const eq = document.createElement('div'); eq.id = 'r-eq';
     const nm = n => `${save.items[n] ? save.items[n].emoji + ' ' : ''}${n}`;
-    eq.textContent = last.type === 'combine'
-      ? `${last.inputs.map(nm).join(' ＋ ')} ＝`
-      : `萃取 ${nm(last.inputs[0])} 得到`;
+    // 配方做成小按鈕：點了把這幾樣再放上槽位（納可 2026-09-29）
+    const eb = document.createElement('button'); eb.title = '點一下把這幾樣再放上槽位';
+    eb.textContent = last.type === 'combine' ? last.inputs.map(nm).join(' ＋ ') : `萃取 ${nm(last.inputs[0])}`;
+    const L = last; eb.onclick = () => putBack(L.inputs);
+    eq.append(eb, last.type === 'combine' ? ' ＝' : ' 得到');
     const out = document.createElement('div'); out.id = 'r-out';
     if (last.fail){
       const boom = document.createElement('div'); boom.className = 'boom';
@@ -3867,10 +3913,16 @@ ${DETAIL_RULES(['你自己在 cats 裡定的標籤'])}`, BASES_SCHEMA());
   };
   $('c-favname').addEventListener('keydown', e => { if (e.key === 'Enter') $('c-favadd').click(); });
   $('c-drop').onclick = () => { const n = cardName; closeCard(); addToSlot(n); };
-  // Esc 先關視窗；電腦版快捷鍵：Enter 合成、Esc 清空（沒開視窗時）、空白鍵隨機；打字中或視窗開著時不作用
+  // Esc 先關視窗；電腦版快捷鍵：Enter 合成、Esc 清空（沒開視窗時）、空白鍵隨機、Ctrl＋Z／Y 上一步下一步；打字中或視窗開著時不作用
   window.addEventListener('keydown', e => {
     const anyOpen = ['card', 'modal', 'reorg', 'manual'].some(id => $(id).classList.contains('open'));
     if (e.key === 'Escape'){ closeCard(); closeSettings(); }
+    // Ctrl＋Z 上一步、Ctrl＋Y（或 Ctrl＋Shift＋Z）下一步
+    if ((e.ctrlKey || e.metaKey) && !anyOpen && !e.altKey && /^[zy]$/i.test(e.key)){
+      const t = e.target;
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+      e.preventDefault(); slotStep(e.key.toLowerCase() === 'z' && !e.shiftKey); return;
+    }
     if (anyOpen || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     const t = e.target;
     if (t && (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName) || t.isContentEditable)) return;

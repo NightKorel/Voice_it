@@ -83,6 +83,16 @@ function answerFor(pr){
   await step('合成（問 AI）', async () => { await tap('#list .litem:has-text("測試甲")'); await tap('#list .litem:has-text("測試乙")'); await tap('#btn-craft'); await p.waitForTimeout(300); });
   await step('真的嗎', async () => { await tap('#btn-really'); await p.waitForTimeout(300); });
   await step('內建配方合成', async () => { await clear(); await tap('#list .litem:has-text("水") >> nth=0'); await tap('#list .litem:has-text("火") >> nth=0'); await tap('#btn-craft'); });
+  await step('配方小按鈕、上一步、下一步', async () => {
+    const sl = () => p.$$eval('.slot', es => es.map(e => (e.querySelector('.nm') || {}).textContent || ''));
+    if ((await sl()).some(Boolean)) throw new Error('合成完槽位沒清');
+    const want = (await p.$eval('#r-eq button', e => e.textContent)).split(' ＋ ').map(x => x.replace(/^\S+ /, ''));
+    await tap('#r-eq button');
+    const a = await sl(); if (want.some(n => !a.includes(n))) throw new Error('配方沒放回槽位：' + a + ' 應該是 ' + want);
+    await tap('#btn-slotundo'); if ((await sl()).some(Boolean)) throw new Error('上一步沒清回去');
+    await tap('#btn-slotundo'); if (!(await sl()).includes(want[0])) throw new Error('再上一步應該回到合成前');
+    await tap('#btn-slotredo'); if ((await sl()).some(Boolean)) throw new Error('下一步沒恢復');
+  });
   await step('萃取', async () => { await clear(); await tap('#list .litem:has-text("測試甲")'); await tap('#btn-extract'); await p.waitForTimeout(300); });
   await step('隨機、釘子、清空', async () => {
     for (let i = 0; i < 30; i++){ await tap('#btn-random'); const s = await p.$$eval('.slot.filled .nm, .slot.filled', x => x.map(e => e.textContent)); if (new Set(s).size !== s.length) throw new Error('隨機抽到重複的'); }
