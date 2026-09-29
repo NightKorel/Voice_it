@@ -898,7 +898,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.2';
+  const VERSION = '0.1.3';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2321,6 +2321,17 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     sub: String(o.sub || '').trim() ? cleanCat(o.sub) : '',
     color: /^#[0-9a-f]{6}$/i.test(String(o.color || '').trim()) ? String(o.color).trim() : ''
   });
+  // 分類名的好壞範例（納可 2026-09-29：AI 寫的分類名不太好）：要開新分類、設計分類時都附上
+  const CAT_NAME_GUIDE = `  分類名稱的寫法：2 到 4 個字，一看就知道裡面放什麼，像圖書館書架上的標籤。
+  好的例子：動物、植物、食物、飲料、天氣、地形、建築、交通工具、工具、武器、服飾、樂器、職業、天體、神話生物、情緒、運動、節慶。
+  主題世界的好例子：海賊王 → 角色、海域、島嶼、船隻、寶物、果實能力、組織；中世紀 → 人物、城堡、兵器、魔法、怪物、道具。
+  不好的例子：
+  - 「其他」「雜項」「綜合」：什麼都能丟，等於沒分。
+  - 「物品類」「動物們」：不要加「類」「們」，直接寫「物品」「動物」。
+  - 「自然元素與現象」「抽象概念與精神」：太長，還把兩類硬塞在一起。
+  - 「紅色的東西」「會飛的東西」：照外表或特徵分，不是照它是什麼分。
+  - 「海洋動物」和「動物」同時存在：彼此重疊，要選一個。
+  - 英文或拼音。`;
   // list：開實驗室時，AI 自己定的分類清單（genBases 傳進來）；在專案裡時用那個專案的分類（save.lab.cats）
   function catRule(list){
     const have = catCounts().map(([c]) => c);
@@ -2330,6 +2341,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     else list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
     if (!list.includes(PROPER_CAT)) list.push(PROPER_CAT);
     return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。
+${CAT_NAME_GUIDE}
   專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方，例如「皮卡丘」「哈利波特」「艾菲爾鐵塔」）一律分到「${PROPER_CAT}」。
 - sub：只有分到「${PROPER_CAT}」時才填，是它底下的子分類，優先從這些選：${subList().join('、')}${subDescs('＝').length ? `（${subDescs('＝').join('，')}）` : ''}。不是專有名詞就填空字串 ""。`;
   }
@@ -2831,6 +2843,7 @@ ${see.join('、')}
 
 任務：照這些東西實際的樣子，重新設計一套分類，讓每樣東西都有合適的地方放。
 - 回傳 cats 陣列，8 到 15 個分類名稱，每個 2 到 4 個字，是大類不要太細，彼此不要重疊。
+${CAT_NAME_GUIDE}
 - 這些分類一定要保留、原封不動放進去：${keep.join('、')}。`, CATS_SCHEMA);
         let cats = [...new Set([...keep, ...(Array.isArray(out.cats) ? out.cats : []).map(c => cleanCat(c)).filter(Boolean)])];
         progress('等你確認……');
@@ -2888,6 +2901,7 @@ ${lines}
 - 這些是玩家自己建的分類，要保留，不要把它們併掉：${save.userCats.join('、')}。` : ''}
 - from 必須一字不差地從上面的分類名稱抄（不要抄括號和冒號後面的東西）。
 - to 可以是上面已有的分類，也可以是新的 2 到 4 個字的大類名稱。
+${CAT_NAME_GUIDE}
 - 不需要合併的分類不要寫。都不需要合併就回 {"merges":[]}。
 - 整理完分類總數最好不超過 20 個左右。
 範例：{"merges":[{"from":"動物","to":"生物"},{"from":"甜點","to":"食物"}]}`, CATMERGE_SCHEMA);
@@ -2936,6 +2950,7 @@ ${lines}
 - 參考上面每個分類裡已經放了什麼，放進最像的那一類。
 - 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」。
 - category 優先用現有分類；真的都不適合才開新的 2 到 4 個字的大類。
+${CAT_NAME_GUIDE}
 - 分得對的不要列。全部都對就回 {"moves":[]}。
 範例：{"moves":[{"name":"蘋果","category":"食物"}]}`, MOVE_SCHEMA);
           for (const m of out.moves || []){
@@ -3393,7 +3408,8 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
 請想出 ${k} 樣這個主題裡「最基礎、最原始」的東西，當作這個世界的起點，取代水火風土。
 - 要夠基礎、夠廣，彼此不一樣，互相合成之後能發展出這個主題裡的各種東西。
 - 不要太細、太特定，也不要直接給這個主題裡最有名的東西（那些留給玩家自己合出來）。
-- 另外回傳 cats 陣列：這個世界裡的東西大概會分成哪幾類。給 6 到 10 個分類名稱，每個 2 到 4 個字，是大類不要太細，要涵蓋這個主題常見的東西（例如角色、地點、道具、事件、能力這類，照主題來定）。之後合出來的東西都會放進這些分類。
+- 另外回傳 cats 陣列：這個世界裡的東西大概會分成哪幾類。給 6 到 10 個分類名稱，每個 2 到 4 個字，是大類不要太細，要涵蓋這個主題常見的東西，照主題來定。之後合出來的東西都會放進這些分類。
+${CAT_NAME_GUIDE}
 - 回傳 bases 陣列，剛好 ${k} 樣，每一樣的欄位規則：
 ${NAME_RULE}
 ${DETAIL_RULES(['你自己在 cats 裡定的分類'])}`, BASES_SCHEMA());
