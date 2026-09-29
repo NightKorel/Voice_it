@@ -94,6 +94,11 @@ function answerFor(pr){
     await tap('#f-unext'); await tap('#f-unext');
     await tap('#cattabs .cattab:has-text("專有名詞")'); await tap('#subtabs .cattab >> nth=1'); await tap('#cattabs .cattab:has-text("我的")'); await tap('#favtabs .cattab >> nth=0');
   });
+  await step('排除分類', async () => {
+    await tap('#cattabs .cattab:has-text("全部")'); await tap('#cattabs .cattab:has-text("⊘")'); await tap('#cattabs .cattab:has-text("物品")'); await tap('#cattabs .cattab:has-text("⊘")');
+    if (!(await p.$('.hidebar'))) throw new Error('排除後沒有提示列');
+    await tap('.hidebar');
+  });
   await step('請 AI 分子分類', async () => { await tap('#cattabs .cattab:has-text("專有名詞")'); await tap('#subtabs .cattab.ai'); await p.waitForTimeout(300); });
   await step('一般分類的子分類（東西 20 樣以上）', async () => {
     await tap('#cattabs .cattab:has-text("全部")'); await tap('#cattabs .cattab:has-text("自然")');

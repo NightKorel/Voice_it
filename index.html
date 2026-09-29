@@ -187,6 +187,8 @@
     font-size:.8rem;cursor:pointer;font-family:inherit;white-space:nowrap}
   .cattab:hover{border-color:var(--accent);color:var(--text)}
   .cattab.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+  .cattab.off{text-decoration:line-through;opacity:.55}
+  .foldbar.hidebar{margin:0 0 .4rem}
   .rg-sub{font-size:.8rem;color:var(--muted);flex-basis:100%;padding-left:1.6rem;line-height:1.5}
   #reorg h3{font-size:.92rem;color:var(--accent);margin:.9rem 0 .3rem}
   .rg-opt{display:flex;gap:.5rem;align-items:flex-start;font-size:.9rem;line-height:1.6;margin:.5rem 0;cursor:pointer}
@@ -898,7 +900,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.5';
+  const VERSION = '0.1.6';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -912,7 +914,7 @@ window.addEventListener('error', e => {
   const OR_KEY = 'wuxian_or_key';
   const API = 'https://generativelanguage.googleapis.com/v1beta';
   // 分類是活的：AI 會優先用已有的分類，都不適合才自己開新分類。一開始沒什麼分類時，拿這些當參考
-  const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話奇幻','科技','文化娛樂','概念','天文','專有名詞'];
+  const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話','奇幻','科技','文化娛樂','概念','天文','專有名詞'];
   const PROPER_CAT = '專有名詞';  // 特定角色、作品、品牌、真實存在的特定人事物，一律放這類
   // 專有名詞底下的子分類（納可 2026-09-29 要求）：存在東西的 sub 欄位，只有分類是專有名詞時才算數
   const PROPER_SUBS = ['角色','作品','真實人物','地點建築','品牌商品','其他'];
@@ -963,6 +965,15 @@ window.addEventListener('error', e => {
     if (!Array.isArray(s.folders)) s.folders = [];
     // 玩家自己新建的分類：就算裡面沒東西也留著，AI 分類時會看到，整理時不會被併掉
     if (!Array.isArray(s.userCats)) s.userCats = [];
+    // 「神話奇幻」拆成「神話」和「奇幻」（納可 2026-09-29）：內建圖鑑的照新分類，其他先放「神話」，之後可以用整理再分
+    if (Object.values(s.items).some(it => it && it.cat === '神話奇幻')){
+      const SI0 = (window.STARTER || {}).items || {};
+      for (const [n, it] of Object.entries(s.items)) if (it && it.cat === '神話奇幻') it.cat = (!s.lab && SI0[n] && SI0[n][3]) || '神話';
+      const ren = c => c === '神話奇幻' ? '神話' : c;
+      s.userCats = [...new Set(s.userCats.map(ren))];
+      if (Array.isArray(s.catOrder)) s.catOrder = [...new Set(s.catOrder.map(ren))];
+      if (s.lab && Array.isArray(s.lab.cats)) s.lab.cats = [...new Set(s.lab.cats.map(ren))];
+    }
     // 舊版的子分類順序只有專有名詞（save.subs），搬進 subMap
     if (Array.isArray(s.subs)){ s.subMap = {...(s.subMap || {}), [PROPER_CAT]:s.subs}; delete s.subs; }
     const oldFav = Object.keys(s.items).filter(n => s.items[n] && s.items[n].fav);
@@ -1340,14 +1351,26 @@ window.addEventListener('error', e => {
   // 分類標籤：點一下只看那一類；「我的」是玩家自己設定的東西
   let catFilter = '';
   const MINE = '__mine__';
+  // 排除分類（納可 2026-09-29）：save.hideCats（每個世界各自記）；排除的分類不會出現在「全部」裡，點進那個分類照樣看得到
+  let excludeMode = false;
+  function toggleHide(c){
+    const h = new Set(save.hideCats || []);
+    if (h.has(c)) h.delete(c); else h.add(c);
+    save.hideCats = [...h]; persist(); renderList();
+  }
   function renderCatFilter(){
     const box = $('cattabs'), counts = catCounts();
     if (catFilter && catFilter !== MINE && !counts.some(([c]) => c === catFilter)) catFilter = '';
     box.textContent = '';
+    const hid = new Set(save.hideCats || []);
     const tab = (value, label) => {
-      const b = document.createElement('button'); b.className = 'cattab' + (catFilter === value ? ' on' : '');
+      const b = document.createElement('button'); b.className = 'cattab' + (catFilter === value ? ' on' : '') + (hid.has(value) ? ' off' : '');
       tabLabel(b, label);
-      b.onclick = () => { if (catDragEnd > Date.now() - 300) return; catFilter = catFilter === value ? '' : value; subFilter = ''; renderList(); list.scrollTop = 0; };  // 再按一次回到全部
+      b.onclick = () => {
+        if (catDragEnd > Date.now() - 300) return;
+        if (excludeMode && value && value !== MINE){ toggleHide(value); return; }  // 排除模式：點分類＝排除／取消排除
+        catFilter = catFilter === value ? '' : value; subFilter = ''; renderList(); list.scrollTop = 0;  // 再按一次回到全部
+      };
       if (value && value !== MINE){ b.dataset.cat = value; b.title = '長按可以左右拖曳排順序'; b.addEventListener('pointerdown', e => catDragDown(e, b)); }
       box.append(b);
     };
@@ -1358,6 +1381,10 @@ window.addEventListener('error', e => {
     add.textContent = '＋ 新分類'; add.title = '自己新建一個分類';
     add.onclick = openNewCat;
     box.append(add);
+    const ex = document.createElement('button'); ex.className = 'cattab' + (excludeMode ? ' on' : '');
+    ex.textContent = excludeMode ? '⊘ 排除中（按這裡結束）' : '⊘ 排除'; ex.title = '開著的時候，點分類就能排除或取消排除；排除的分類不會出現在「全部」裡' + (canHover ? '。電腦也可以直接右鍵點分類' : '');
+    ex.onclick = () => { excludeMode = !excludeMode; renderList(); if (excludeMode) toast('點分類就能排除或取消排除，排除的不會出現在「全部」裡'); };
+    box.append(ex);
     const on = box.querySelector('.on');
     if (on) on.scrollIntoView({block:'nearest', inline:'nearest'});
     renderSubFilter();
@@ -1509,7 +1536,11 @@ ${parts[i].join('、')}
   window.addEventListener('pointercancel', () => { if (catDrag && !catDrag.on){ clearTimeout(catDrag.timer); catDrag = null; } });  // 拖曳中被瀏覽器接手時，改用 touchmove 繼續
   $('cattabs').addEventListener('touchmove', e => { if (catDrag && catDrag.on && e.touches[0]) catDragMove(e.touches[0].clientX, e.touches[0].clientY, e); }, {passive:false});
   $('cattabs').addEventListener('touchend', catDragUp);
-  $('cattabs').addEventListener('contextmenu', e => { if (e.target.closest('.cattab[data-cat]')) e.preventDefault(); });
+  $('cattabs').addEventListener('contextmenu', e => {
+    const t = e.target.closest('.cattab[data-cat]'); if (!t) return;
+    e.preventDefault();
+    if (canHover && !(catDrag && catDrag.on)) toggleHide(t.dataset.cat);  // 電腦右鍵＝排除／取消排除（手機長按是拖曳排序，不算）
+  });
 
   // 新建分類：會加進 AI 的分類清單，所以先說明清楚
   function openNewCat(){
@@ -1748,6 +1779,10 @@ ${parts[i].join('、')}
     }
     if (folderFilter){ const f = save.folders.find(x => x.name === folderFilter); names = names.filter(n => f && f.items.includes(n)); }
     if (filterUnext) names = names.filter(isUnext);
+    // 「全部」不顯示排除的分類（有搜尋也一樣）
+    const hidden = !cat && (save.hideCats || []).length ? new Set(save.hideCats) : null;
+    let hiddenN = 0;
+    if (hidden){ const before = names.length; names = names.filter(n => !hidden.has(save.items[n].cat)); hiddenN = before - names.length; }
     if (cat === MINE) names = names.filter(n => save.items[n].custom);
     else if (cat) names = names.filter(n => save.items[n].cat === cat);
     if (cat && cat !== MINE && subFilter) names = names.filter(n => subOf(n) === (subFilter === NO_SUB ? '' : subFilter));
@@ -1782,6 +1817,12 @@ ${parts[i].join('、')}
     }
     shownNames = foldOpen ? [...names, ...rest] : names;
     list.textContent = '';
+    if (hidden){
+      const hb = document.createElement('button'); hb.className = 'foldbar hidebar';
+      hb.textContent = `⊘ 已排除：${save.hideCats.join('、')}（${hiddenN} 樣）　按這裡全部顯示`;
+      hb.onclick = () => { save.hideCats = []; persist(); renderList(); toast('排除的分類都顯示回來了'); };
+      list.append(hb);
+    }
     // 「我的」最上面永遠有一個 ＋，可以自己設定一樣東西
     if (cat === MINE){
       const add = document.createElement('button'); add.className = 'litem addmine'; add.textContent = '＋ 自己設定一樣東西';
@@ -2339,12 +2380,12 @@ ${parts[i].join('、')}
   });
   // 分類名的好壞範例（納可 2026-09-29：AI 寫的分類名不太好）：要開新分類、設計分類時都附上
   const CAT_NAME_GUIDE = `  分類名稱的寫法：2 到 4 個字，一看就知道裡面放什麼，像圖書館書架上的標籤。
-  好的例子：生物、植物、食物、飲料、天氣、地形、建築、交通工具、工具、武器、服飾、樂器、職業、天文、神話奇幻、情緒、運動、節慶。
+  好的例子：生物、植物、食物、飲料、天氣、地形、建築、交通工具、工具、武器、服飾、樂器、職業、天文、神話、奇幻、情緒、運動、節慶。
   主題世界的好例子：海賊王 → 角色、海域、島嶼、船隻、寶物、果實能力、組織；中世紀 → 人物、城堡、兵器、魔法、怪物、道具。
   不好的例子：
   - 「其他」「雜項」「綜合」：什麼都能丟，等於沒分。
   - 「物品類」「生物們」：不要加「類」「們」，直接寫「物品」「生物」。
-  - 「自然元素與現象」「抽象概念與精神」：太長，還用「與」「和」把兩類硬塞在一起（「神話奇幻」「文化娛樂」這種四個字的慣用說法可以）。
+  - 「自然元素與現象」「抽象概念與精神」：太長，還用「與」「和」把兩類硬塞在一起（「文化娛樂」這種四個字的慣用說法可以）。
   - 「紅色的東西」「會飛的東西」：照外表或特徵分，不是照它是什麼分。
   - 「海洋生物」和「生物」同時存在：彼此重疊，細的那層要放在子分類。
   - 英文或拼音。`;
@@ -2365,6 +2406,7 @@ ${parts[i].join('、')}
     return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。
 ${CAT_NAME_GUIDE}
   專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方，例如「皮卡丘」「哈利波特」「艾菲爾鐵塔」）一律分到「${PROPER_CAT}」。
+  神話、傳說、宗教裡有名字的特定神祇、人物、地方、建築，也是專有名詞，例如「宙斯」「萬神殿」「奧林帕斯山」「孫悟空」。「神話」「奇幻」只放一般的種類，例如龍、鳳凰、天使、精靈、魔法。
 - sub：子分類。如果你選的分類底下已經有子分類，就從那個分類的子分類裡選最合適的一個；那個分類沒有子分類、或都不適合，就填空字串 ""，不要自己開新的。
   現在有子分類的分類：${subRuleList()}。`;
   }
@@ -2886,7 +2928,7 @@ ${parts[i].join('、')}
 任務：把每樣東西放進最合適的分類。
 輸出 moves 陣列，每樣都要列，每一筆是 {"name":"東西名稱","category":"分類"}。
 - name 必須一字不差地從上面抄。category 只能從上面的分類選。
-- 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」。
+- 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」；神話、傳說裡有名字的特定神祇、人物、地方、建築（例如宙斯、萬神殿）也是。
 範例：{"moves":[{"name":"${parts[i][0]}","category":"${cats[1] || cats[0]}"}]}`, MOVE_SCHEMA);
             for (const m of o.moves || []){
               const name = String(m.name || '').trim(), it = save.items[name], c = cleanCat(m.category, CAT_MAX_USER);
@@ -2971,7 +3013,7 @@ ${lines}
 輸出 moves 陣列，只列出「需要換分類」的東西（包含未分類的），每一筆是 {"name":"東西名稱","category":"新的分類"}。
 - name 必須一字不差地從上面抄（冒號前面那段）。
 - 參考上面每個分類裡已經放了什麼，放進最像的那一類。
-- 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」。
+- 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」；神話、傳說裡有名字的特定神祇、人物、地方、建築（例如宙斯、萬神殿）也是。
 - category 優先用現有分類；真的都不適合才開新的 2 到 4 個字的大類。
 ${CAT_NAME_GUIDE}
 - 分得對的不要列。全部都對就回 {"moves":[]}。
