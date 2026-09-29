@@ -183,6 +183,10 @@
   #qs-pick .gl-row{cursor:pointer}
   #qs-pick .gl-row.on{border-color:var(--accent)}
   #qs-list,#qs-done{margin-top:.6rem}
+  .qs-wallet{display:flex;align-items:center;gap:.6rem;margin:.3rem 0 .6rem;font-size:1.05rem;font-variant-numeric:tabular-nums}
+  .qs-coins{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:.2rem;margin:0 0 .7rem}
+  .qs-coins button{font-size:min(1.3rem,5vw);min-width:0;line-height:1.6;padding:0;background:none;border:2px solid transparent;border-radius:10px;cursor:pointer}
+  .qs-coins button.on{border-color:var(--accent)}
   .co-row.co-sub{padding-left:1.4rem;font-size:.88rem}
   .tabrow{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
   .tabrow::-webkit-scrollbar{height:4px}
@@ -714,7 +718,9 @@
     </div>
     <div id="rg-quests" hidden>
       <h2>🎯 任務</h2>
-      <p class="muted">合出目標就完成。不限時間，計時器只記下花了多久。同時最多 10 個，隨時可以放棄。題目只有你看得到，合成的 AI 不知道。</p>
+      <p class="muted">合出目標就完成，每完成一個得到 1 枚小貨幣。不限時間，計時器只記下花了多久。同時最多 10 個，隨時可以放棄。題目只有你看得到，合成的 AI 不知道。</p>
+      <div class="qs-wallet"><span id="qs-coin"></span><button class="btn co-btn" id="qs-coinpick">換圖案</button></div>
+      <div id="qs-coins" class="qs-coins" hidden></div>
       <div class="favnew"><input id="qs-name" maxlength="24" placeholder="自己打一個目標" autocomplete="off"><button class="btn primary" id="qs-add">加進任務</button></div>
       <div class="actions"><button class="btn" id="qs-ai">🎲 AI 出題</button></div>
       <div id="qs-pick"></div>
@@ -922,7 +928,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.13';
+  const VERSION = '0.1.14';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1653,7 +1659,12 @@ window.addEventListener('error', e => {
   // save.quests：{on:[{name, t（接下的時間）, by:'ai'|'me', no:[問過「不算」的名字]}], done:[{name, t, got, item, by}]}
   // 題目只給玩家看，合成的 AI 不知道；不限時間，計時只顯示日、時、分
   const QUEST_MAX = 10, QUEST_PICK = 3, QUEST_DONE_KEEP = 100;
-  const quests = () => { const q = save.quests = save.quests || {}; q.on = q.on || []; q.done = q.done || []; return q; };
+  // 小貨幣：每完成一個任務得 1 枚（save.coins），目前沒有用途；圖案玩家自己挑（prefs.coin），三排各 10 個
+  const COIN_EMOJIS = ['🍬','🍭','🍩','🍪','🧁','🍓','🍒','🍑','🍡','🍙',
+    '🌸','🌷','🌼','🍀','🍄','⭐','🌟','🌙','☁️','🌈',
+    '🐣','🐱','🐰','🐻','🐼','🐹','🦊','🐸','💖','💎'];
+  const coinEmoji = () => COIN_EMOJIS.includes(prefs.coin) ? prefs.coin : COIN_EMOJIS[0];
+  const quests = () => { const q = save.quests = save.quests || {}; q.on = q.on || []; q.done = q.done || []; if (typeof save.coins !== 'number') save.coins = q.done.length; return q; };  // 有貨幣以前完成的也補發
   const questTime = ms => { const m = Math.max(0, Math.floor(ms / 60000)); return `${Math.floor(m / 1440)} 日 ${Math.floor(m / 60) % 24} 時 ${m % 60} 分`; };
   // 名字很像但對不上：一個包含另一個只差一個字，或一樣長只差一個字（例如蒸汽／蒸氣）
   function nameNear(a, b){
@@ -1668,7 +1679,8 @@ window.addEventListener('error', e => {
     Q.on = Q.on.filter(x => x !== q);
     Q.done.unshift({name:q.name, t:q.t, got:Date.now(), item, by:q.by});
     Q.done = Q.done.slice(0, QUEST_DONE_KEEP);
-    toast(`🎯 任務完成！${save.items[item] ? save.items[item].emoji + ' ' : ''}${item}（花了 ${questTime(Date.now() - q.t)}）`, false, 5000);
+    save.coins = (save.coins || 0) + 1;
+    toast(`🎯 任務完成！${save.items[item] ? save.items[item].emoji + ' ' : ''}${item}（花了 ${questTime(Date.now() - q.t)}）　${coinEmoji()} +1`, false, 5000);
   }
   // 圖鑑裡有同名的就完成；fresh：這次新合出來的，名字很像的問玩家算不算
   function questCheck(fresh){
@@ -1739,6 +1751,13 @@ ${themeRule()}規則：
     const span = (cls, txt) => { const e = document.createElement('span'); e.className = cls; e.textContent = txt; return e; };
     const draw = () => {
       const Q = quests(), room = QUEST_MAX - Q.on.length;
+      $('qs-coin').textContent = `${coinEmoji()} × ${save.coins || 0}`;
+      const cp = $('qs-coins'); cp.textContent = '';
+      for (const e of COIN_EMOJIS){
+        const b = document.createElement('button'); b.textContent = e; if (e === coinEmoji()) b.className = 'on';
+        b.onclick = () => { prefs.coin = e; store.set(PREF_KEY, JSON.stringify(prefs)); draw(); };
+        cp.append(b);
+      }
       // AI 出的題目：點選要接的，最多 3 個（也不能超過剩下的空位）
       const pk = $('qs-pick'); pk.textContent = '';
       if (questPick){
@@ -1796,6 +1815,8 @@ ${themeRule()}規則：
     };
     $('qs-name').onkeydown = e => { if (e.key === 'Enter') $('qs-add').click(); };
     $('qs-ai').onclick = questAsk;
+    $('qs-coinpick').onclick = () => { $('qs-coins').hidden = !$('qs-coins').hidden; $('qs-coinpick').textContent = $('qs-coins').hidden ? '換圖案' : '選好了'; };
+    $('qs-coins').hidden = true; $('qs-coinpick').textContent = '換圖案';
     $('qs-close').onclick = () => $('reorg').classList.remove('open');
     $('qs-name').value = '';
     draw();
