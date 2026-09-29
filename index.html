@@ -666,6 +666,18 @@
         <button class="btn" id="nl-cancel">取消</button>
       </div>
     </div>
+    <div id="rg-editlab" hidden>
+      <h2>編輯專案</h2>
+      <div class="mn-row"><label>名稱</label><input id="el-name" maxlength="12" placeholder="最多 12 個字" autocomplete="off"></div>
+      <div class="mn-row"><label>主題</label><input id="el-theme" maxlength="24" autocomplete="off"></div>
+      <div class="mn-row"><label>補充</label><textarea id="el-prompt" maxlength="300" placeholder="可以空著。想要的風格、方向或限制，這個專案每次合成 AI 都會看到"></textarea></div>
+      <p class="muted" id="el-bases"></p>
+      <p class="muted">改完之後的合成、萃取會照新的主題和補充說明走，已經合出來的東西不會變。</p>
+      <div class="actions">
+        <button class="btn primary" id="el-save">儲存</button>
+        <button class="btn" id="el-cancel">取消</button>
+      </div>
+    </div>
     <div id="rg-goals" hidden>
       <h2>📓 目標本</h2>
       <p class="muted">記下想合出來的東西，合出來就會自動打勾。</p>
@@ -840,7 +852,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.78';
+  const VERSION = '0.0.79';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1114,7 +1126,7 @@
 
   // ---------- 清單 ----------
   // 整理視窗裡一次只顯示一個面板
-  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-partial', 'rg-mine', 'rg-stats', 'rg-goals', 'rg-worlds', 'rg-newlab'];
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-partial', 'rg-mine', 'rg-stats', 'rg-goals', 'rg-worlds', 'rg-newlab', 'rg-editlab'];
   function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
 
   // ---------- 收藏夾 ----------
@@ -3137,7 +3149,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
           else btn('進入', '', () => go(id), 'primary');
           if (x){
             btn(x.pin ? '📌 已置頂' : '📌 置頂', x.pin ? '按一下取消置頂' : '排在最上面', () => { if (x.pin) delete x.pin; else x.pin = true; saveIndex(); draw(); }, x.pin ? 'pinned' : '');
-            btn('✎ 改名', '', () => renameLab(x));
+            btn('✎ 編輯', '改名稱、主題、補充說明', () => editLab(x));
             btn('⤵ 併入', '把這個專案的東西勾選加進我的世界', async () => { if (await ensureLab(x.id)) mergeLab(x.id); });
             btn('🗄 封存', '收到下面的封存區，不會出現在清單裡；要刪掉也要先封存', () => {
               if (world === x.id && !enterWorld(null, true)) return;
@@ -3172,12 +3184,24 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     openWorlds.redraw = draw;
   }
   const mainCount = () => { if (!world) return Object.keys(save.items).length; try { return Object.keys(JSON.parse(store.get(SAVE_KEY)).items).length; } catch(e){ return 0; } };
-  async function renameLab(x){
-    const raw = prompt('專案的新名字？（最多 12 個字）', x.name);
-    if (raw === null || !raw.trim()) return;
-    x.name = raw.trim().slice(0, 12); saveIndex();
-    if (await ensureLab(x.id)){ const d = labCache.get(x.id); d.lab.name = x.name; if (world === x.id) persist(); else idbSet('lab:' + x.id, JSON.stringify(d)); }
-    renderWorld(); if (openWorlds.redraw) openWorlds.redraw();
+  // 編輯專案：名稱、主題、補充說明都能改；改完之後的合成照新的走，已經合出來的東西不動。起點不能改
+  async function editLab(x){
+    if (!await ensureLab(x.id)) return;
+    const d = labCache.get(x.id);
+    $('el-name').value = x.name; $('el-theme').value = d.lab.theme || ''; $('el-prompt').value = d.lab.prompt || '';
+    $('el-bases').textContent = `起點：${d.lab.bases.map(b => `${b.emoji} ${b.name}`).join('、')}（起點不能改）`;
+    $('el-save').onclick = () => {
+      const theme = $('el-theme').value.trim();
+      if (!theme){ toast('主題不能空白', true); return; }
+      x.name = ($('el-name').value.trim() || theme).slice(0, 12); x.theme = theme; saveIndex();
+      Object.assign(d.lab, {name:x.name, theme, prompt:$('el-prompt').value.trim()});
+      if (world === x.id) persist(); else idbSet('lab:' + x.id, JSON.stringify(d));
+      renderWorld(); openWorlds();
+      toast('改好了，之後的合成會照新的主題走');
+    };
+    $('el-cancel').onclick = openWorlds;
+    showPanel('rg-editlab');
+    $('reorg').classList.add('open');
   }
   function delLab(x){
     if (!confirm(`確定永久刪掉專案「${x.name}」嗎？\n\n裡面的 ${x.n || 0} 樣東西、配方都會消失，刪了就救不回來。\n\n想留著的話，可以先按「還原」再「⤵ 併入」我的世界，或到設定勾「連專案一起匯出」下載備份。`)) return;
