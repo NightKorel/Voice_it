@@ -24,6 +24,7 @@ let uid = 0;
 function answerFor(pr){
   const js = pr.slice(pr.lastIndexOf('【回答格式】'));
   const item = n => ({name:n, emoji:'🧪', proper:false, desc:'測試用的東西', rarity:3, tags:['物品', '科技'], color:'#44aa66'});
+  if (js.includes('"quests"')) return {quests:[{name:'巡檢題甲', emoji:'🎯'}, {name:'巡檢題乙', emoji:'🎯'}, {name:'水', emoji:'💧'}]};
   if (js.includes('"parts"')) return {parts:[item('巡檢零件' + (++uid)), item('巡檢零件' + (++uid))]};
   if (js.includes('"bases"')) return {cats:['巡檢角色', '巡檢地點', '巡檢道具'], bases:[item('巡檢起點甲'), item('巡檢起點乙'), item('巡檢起點丙')]};
   // 提議新標籤：給一個，貼到測試甲上
@@ -130,6 +131,17 @@ function answerFor(pr){
     await tap('#btn-select'); await tap('#list .litem >> nth=0'); await tap('#sel-fav'); await tap('#pk-list .rg-row >> nth=0'); await tap('#sel-done').catch(() => {});
   });
   await step('目標本', async () => { await tap('#btn-goals'); await p.fill('#gl-name', '巡檢目標'); await tap('#gl-add'); await tap('#gl-list .gl-row button >> nth=0'); });
+  await step('任務：自己打、AI 出題、接下、放棄', async () => {
+    await tap('#btn-quests'); await p.fill('#qs-name', '巡檢任務'); await tap('#qs-add');
+    await tap('#qs-ai'); await p.waitForTimeout(400); await autoAnswer(); await p.waitForTimeout(300);
+    if ((await p.$$('#qs-pick .gl-row')).length !== 2) throw new Error('出題沒把已經有的「水」拿掉');
+    await tap('#qs-pick .gl-row >> nth=0'); await tap('#qs-pick button:has-text("接下")');
+    await tap('#qs-list .gl-row:has-text("巡檢任務") button');
+    const s = await p.evaluate(() => JSON.parse(localStorage.getItem('wuxian_save_v1')));
+    if (!s.quests || s.quests.on.length !== 1 || s.quests.on[0].name !== '巡檢題甲') throw new Error('任務沒存對：' + JSON.stringify(s.quests));
+    if (!/0 日 0 時 0 分/.test(await p.$eval('#qs-list', e => e.textContent))) throw new Error('計時沒顯示');
+    await tap('#qs-close');
+  });
   await step('管理標籤、新標籤', async () => {
     await tap('#btn-catorder'); await tap('#co-list .co-row button:has-text("↓") >> nth=0'); await tap('#co-list .co-row button:has-text("✎") >> nth=1'); await tap('#co-done');
     await tap('#cattabs .cattab:has-text("新標籤")'); await p.fill('#nc-name', '巡檢類'); await tap('#nc-add');

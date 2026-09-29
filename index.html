@@ -173,11 +173,16 @@
   .sm-icon{display:none}
   @media (max-width:380px){ .sm-icon{display:inline} .sm-text{display:none} #btn-lab,#btn-stats{padding-left:.45rem;padding-right:.45rem} #topbar{gap:.25rem;padding-left:.6rem;padding-right:.6rem} }
   @media (max-width:420px){ .gl-word,.sm-hide{display:none} #side-head .row.tools{gap:.3rem} #side-head .row.tools .chipbtn{padding-left:.5rem;padding-right:.5rem} }
+  @media (max-width:380px){ #side-head .row.tools{gap:.2rem} #side-head .row.tools .chipbtn{padding-left:.35rem;padding-right:.35rem} }
   #gl-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
   .gl-row{cursor:default;flex-wrap:nowrap}
   .gl-row.got{border-color:var(--accent)}
   .gl-row.got .rg-from{cursor:pointer}
   .gl-mark{flex:none;width:1.4rem;text-align:center}
+  .qs-time{font-variant-numeric:tabular-nums;white-space:nowrap}
+  #qs-pick .gl-row{cursor:pointer}
+  #qs-pick .gl-row.on{border-color:var(--accent)}
+  #qs-list,#qs-done{margin-top:.6rem}
   .co-row.co-sub{padding-left:1.4rem;font-size:.88rem}
   .tabrow{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
   .tabrow::-webkit-scrollbar{height:4px}
@@ -431,7 +436,7 @@
   /* 標籤上的數量淡一點，數字等寬不會跳 */
   .cattab .n{opacity:.6;font-variant-numeric:tabular-nums}
   .cattab.on .n{opacity:.75}
-  #count b,#btn-goals,#f-unext{font-variant-numeric:tabular-nums}
+  #count b,#btn-goals,#btn-quests,#f-unext{font-variant-numeric:tabular-nums}
   /* 清單上方的小按鈕和標籤：指上去有反應 */
   .chipbtn{transition:border-color .12s,color .12s}
   .chipbtn:hover:not(:disabled):not(.on){border-color:var(--accent);color:var(--text)}
@@ -503,6 +508,7 @@
         <button class="chipbtn" id="f-unext" title="只看還沒萃取過的東西">未萃取</button>
         <button class="chipbtn" id="btn-select" title="勾選好幾樣，一次加進收藏夾">☑ 多選</button>
         <button class="chipbtn" id="btn-goals" title="記下想合出來的東西">📓 目標</button>
+        <button class="chipbtn" id="btn-quests" title="任務：AI 出題或自己打，合出來就完成，會計時">🎯 任務</button>
         <div class="row-r">
           <button class="chipbtn" id="btn-catorder" title="標籤改名、排順序、刪掉自己加的標籤"><span class="sm-hide">管理</span>標籤</button>
           <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、檢查標籤、提議新標籤">整理</button>
@@ -706,6 +712,16 @@
       <div id="gl-list"></div>
       <div class="actions"><button class="btn primary" id="gl-done">關閉</button></div>
     </div>
+    <div id="rg-quests" hidden>
+      <h2>🎯 任務</h2>
+      <p class="muted">合出目標就完成。不限時間，計時器只記下花了多久。同時最多 10 個，隨時可以放棄。題目只有你看得到，合成的 AI 不知道。</p>
+      <div class="favnew"><input id="qs-name" maxlength="24" placeholder="自己打一個目標" autocomplete="off"><button class="btn primary" id="qs-add">加進任務</button></div>
+      <div class="actions"><button class="btn" id="qs-ai">🎲 AI 出題</button></div>
+      <div id="qs-pick"></div>
+      <div id="qs-list"></div>
+      <div id="qs-done"></div>
+      <div class="actions"><button class="btn primary" id="qs-close">關閉</button></div>
+    </div>
     <div id="rg-order" hidden>
       <h2>管理標籤</h2>
       <p>✎ 改名（改成已經有的名字，就是把兩個標籤併在一起）。排順序可以直接在清單上方長按標籤左右拖曳，或在這裡用 ↑ ↓ 調整，上面的標籤會排在前面。標籤列、「依標籤」排序都照這個順序（依標籤排時，每樣東西照它最主要的標籤）。之後新出現的標籤會接在最後面。</p>
@@ -906,7 +922,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.12';
+  const VERSION = '0.1.13';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1228,7 +1244,7 @@ window.addEventListener('error', e => {
 
   // ---------- 清單 ----------
   // 整理視窗裡一次只顯示一個面板
-  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-tagfind', 'rg-partial', 'rg-mine', 'rg-stats', 'rg-goals', 'rg-worlds', 'rg-newlab', 'rg-editlab'];
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-tagfind', 'rg-partial', 'rg-mine', 'rg-stats', 'rg-goals', 'rg-quests', 'rg-worlds', 'rg-newlab', 'rg-editlab'];
   function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
 
   // ---------- 收藏夾 ----------
@@ -1632,6 +1648,167 @@ window.addEventListener('error', e => {
     if (canHover) setTimeout(() => $('gl-name').focus(), 50);
   }
   $('btn-goals').onclick = openGoals;
+
+  // ---------- 任務（納可 2026-09-29）----------
+  // save.quests：{on:[{name, t（接下的時間）, by:'ai'|'me', no:[問過「不算」的名字]}], done:[{name, t, got, item, by}]}
+  // 題目只給玩家看，合成的 AI 不知道；不限時間，計時只顯示日、時、分
+  const QUEST_MAX = 10, QUEST_PICK = 3, QUEST_DONE_KEEP = 100;
+  const quests = () => { const q = save.quests = save.quests || {}; q.on = q.on || []; q.done = q.done || []; return q; };
+  const questTime = ms => { const m = Math.max(0, Math.floor(ms / 60000)); return `${Math.floor(m / 1440)} 日 ${Math.floor(m / 60) % 24} 時 ${m % 60} 分`; };
+  // 名字很像但對不上：一個包含另一個只差一個字，或一樣長只差一個字（例如蒸汽／蒸氣）
+  function nameNear(a, b){
+    const x = [...normKey(a)], y = [...normKey(b)];
+    if (x.join('') === y.join('') || Math.min(x.length, y.length) < 2 || Math.abs(x.length - y.length) > 1) return false;
+    if (x.length === y.length) return x.filter((c, i) => c !== y[i]).length === 1;
+    const [s, l] = x.length < y.length ? [x.join(''), y.join('')] : [y.join(''), x.join('')];
+    return l.includes(s);
+  }
+  function questFinish(q, item){
+    const Q = quests();
+    Q.on = Q.on.filter(x => x !== q);
+    Q.done.unshift({name:q.name, t:q.t, got:Date.now(), item, by:q.by});
+    Q.done = Q.done.slice(0, QUEST_DONE_KEEP);
+    toast(`🎯 任務完成！${save.items[item] ? save.items[item].emoji + ' ' : ''}${item}（花了 ${questTime(Date.now() - q.t)}）`, false, 5000);
+  }
+  // 圖鑑裡有同名的就完成；fresh：這次新合出來的，名字很像的問玩家算不算
+  function questCheck(fresh){
+    const Q = quests(); if (!Q.on.length) return;
+    let changed = false;
+    for (const q of [...Q.on]){ const n = goalItem(q.name); if (n){ questFinish(q, n); changed = true; } }
+    const near = [];
+    for (const q of Q.on) for (const n of fresh || []) if (save.items[n] && nameNear(q.name, n) && !(q.no || []).includes(n)){ near.push([q, n]); break; }
+    if (changed){ persist(); renderQuestBtn(); }
+    if (!near.length) return;
+    setTimeout(() => {
+      for (const [q, n] of near){
+        if (!quests().on.includes(q)) continue;
+        if (confirm(`合出了「${n}」，跟任務「${q.name}」很像。\n\n這樣算完成嗎？`)) questFinish(q, n);
+        else (q.no = q.no || []).push(n);
+      }
+      persist(); renderQuestBtn();
+      if ($('reorg').classList.contains('open') && !$('rg-quests').hidden) openQuests.draw();
+    }, 400);
+  }
+  function renderQuestBtn(){
+    const n = (save.quests && save.quests.on || []).length;  // 開場就會跑到，不碰後面才宣告的東西
+    const b = $('btn-quests'); b.textContent = '🎯';
+    const w = document.createElement('span'); w.className = 'gl-word'; w.textContent = ' 任務';
+    b.append(w);
+    if (n) b.append(` ${n}`);
+  }
+  function questAdd(name, by){
+    const Q = quests();
+    if (Q.on.length >= QUEST_MAX){ toast(`任務最多同時 ${QUEST_MAX} 個，先完成或放棄一些`, true); return false; }
+    if (Q.on.some(q => normKey(q.name) === normKey(name))){ toast(`「${name}」已經是任務了`, true); return false; }
+    const have = goalItem(name);
+    if (have){ toast(`你已經有「${have}」了，換一個吧`, true); return false; }
+    Q.on.push({name, t:Date.now(), by});
+    return true;
+  }
+  let questPick = null, questBusy = false, questTimer = 0;
+  async function questAsk(){
+    if (questBusy) return;
+    const Q = quests(), room = QUEST_MAX - Q.on.length;
+    if (room <= 0){ toast(`任務最多同時 ${QUEST_MAX} 個，先完成或放棄一些`, true); return; }
+    // 附上玩家已經有的東西（常見的優先），請 AI 避開
+    const rar = n => save.items[n].rarity || 3;
+    const have = Object.keys(save.items).sort((a, b) => rar(a) - rar(b) || save.items[b].t - save.items[a].t).slice(0, 200);
+    const prompt =
+`你是「1+1=?」合成遊戲的出題者。玩家從 ${baseNames()} 這幾樣開始，把兩樣或三樣東西合在一起，變出新東西。請出 6 個題目，讓玩家挑戰把它合出來。
+${themeRule()}規則：
+- 每個題目是一個常見、具體、在字典或百科查得到的名詞（物品、自然現象、生物、地點、食物等），繁體中文（台灣用語），用最通用的寫法，2 到 4 個字最好，最多 ${NAME_LIMIT} 個字。
+- 要合得出來：大部分人都知道它，而且想得到大概要經過哪些東西才合得到。不要出冷門、抽象、拼湊出來的詞，也不能跟政治有關。
+- 難易混在一起：有的幾步就合得到，有的要繞遠一點。
+- 6 個題目不要都是同一類東西。
+- 玩家已經有這些了，不要出：${have.join('、')}${Q.on.length ? `；現在的任務也不要重複：${Q.on.map(q => q.name).join('、')}` : ''}。
+- emoji：一個最貼切的 emoji。`;
+    questBusy = true; $('qs-ai').disabled = true; $('qs-ai').textContent = '出題中……';
+    try {
+      const out = await ask(prompt, {quests:{type:'ARRAY', items:{type:'OBJECT', properties:{name:{type:'STRING'}, emoji:{type:'STRING'}}, required:['name','emoji']}}});
+      const seen = new Set();
+      questPick = (Array.isArray(out.quests) ? out.quests : []).map(x => ({name:cleanName(x && x.name), emoji:String(x && x.emoji || '').trim().slice(0, 8) || '🎯', on:false}))
+        .filter(x => !isBadName(x.name) && !goalItem(x.name) && !Q.on.some(q => normKey(q.name) === normKey(x.name)) && !seen.has(normKey(x.name)) && seen.add(normKey(x.name)));
+      if (!questPick.length){ questPick = null; toast('AI 出的題目你都有了，再按一次試試', true); }
+    } catch(e){ toast(e.cancelled ? '已停止' : (e.message || '出題失敗了，再試一次'), true); }
+    questBusy = false; $('qs-ai').disabled = false; $('qs-ai').textContent = '🎲 AI 出題';
+    if ($('reorg').classList.contains('open') && !$('rg-quests').hidden) openQuests.draw();
+  }
+  function openQuests(){
+    questCheck([]);
+    const row = () => { const r = document.createElement('div'); r.className = 'rg-row gl-row'; return r; };
+    const span = (cls, txt) => { const e = document.createElement('span'); e.className = cls; e.textContent = txt; return e; };
+    const draw = () => {
+      const Q = quests(), room = QUEST_MAX - Q.on.length;
+      // AI 出的題目：點選要接的，最多 3 個（也不能超過剩下的空位）
+      const pk = $('qs-pick'); pk.textContent = '';
+      if (questPick){
+        const max = Math.min(QUEST_PICK, room);
+        pk.append(span('muted', `點選要接的題目（最多 ${max} 個）：`));
+        for (const c of questPick){
+          const r = row(); if (c.on) r.classList.add('on');
+          r.append(span('gl-mark', c.on ? '☑' : '☐'), span('rg-from', `${c.emoji} ${c.name}`));
+          r.onclick = () => {
+            if (!c.on && questPick.filter(x => x.on).length >= max){ toast(`最多選 ${max} 個`, true); return; }
+            c.on = !c.on; draw();
+          };
+          pk.append(r);
+        }
+        const a = document.createElement('div'); a.className = 'actions';
+        const ok = document.createElement('button'); ok.className = 'btn primary';
+        const n = questPick.filter(x => x.on).length;
+        ok.textContent = n ? `接下 ${n} 個任務` : '接下任務'; ok.disabled = !n;
+        ok.onclick = () => { for (const c of questPick) if (c.on) questAdd(c.name, 'ai'); questPick = null; persist(); renderQuestBtn(); draw(); };
+        const no = document.createElement('button'); no.className = 'btn'; no.textContent = '都不要';
+        no.onclick = () => { questPick = null; draw(); };
+        a.append(ok, no); pk.append(a);
+      }
+      // 進行中：新接的在上面
+      const box = $('qs-list'); box.textContent = '';
+      box.append(span('muted', `進行中 ${Q.on.length}/${QUEST_MAX}`));
+      for (const q of [...Q.on].sort((a, b) => b.t - a.t)){
+        const r = row();
+        const x = document.createElement('button'); x.className = 'btn co-btn'; x.textContent = '放棄'; x.title = '放棄這個任務';
+        x.onclick = () => { if (!confirm(`放棄「${q.name}」？計時會一起清掉。`)) return; quests().on = quests().on.filter(y => y !== q); persist(); renderQuestBtn(); draw(); };
+        const sp = document.createElement('span'); sp.style.flex = '1';
+        r.append(span('gl-mark', '⏳'), span('rg-from', q.name), sp, span('rg-arrow qs-time', questTime(Date.now() - q.t)), x);
+        box.append(r);
+      }
+      if (!Q.on.length) box.append(Object.assign(document.createElement('p'), {className:'muted', textContent:'還沒有任務。按「AI 出題」，或在上面自己打一個。'}));
+      // 完成的：最近完成的在上面，顯示花了多久
+      const dn = $('qs-done'); dn.textContent = '';
+      if (Q.done.length){
+        dn.append(span('muted', `完成了 ${Q.done.length} 個`));
+        for (const d of Q.done){
+          const r = row(); r.classList.add('got');
+          const t = span('rg-from', save.items[d.item] ? `${save.items[d.item].emoji} ${d.item}` : d.name);
+          if (save.items[d.item]){ t.title = '看卡片'; t.onclick = () => { $('reorg').classList.remove('open'); openCard(d.item); }; }
+          const sp = document.createElement('span'); sp.style.flex = '1';
+          r.append(span('gl-mark', '✅'), t, sp, span('rg-arrow qs-time', questTime(d.got - d.t)));
+          dn.append(r);
+        }
+      }
+    };
+    openQuests.draw = draw;
+    $('qs-add').onclick = () => {
+      const name = cleanName($('qs-name').value);
+      if (!name){ toast('要打目標的名字', true); return; }
+      if (questAdd(name, 'me')){ persist(); $('qs-name').value = ''; renderQuestBtn(); draw(); }
+    };
+    $('qs-name').onkeydown = e => { if (e.key === 'Enter') $('qs-add').click(); };
+    $('qs-ai').onclick = questAsk;
+    $('qs-close').onclick = () => $('reorg').classList.remove('open');
+    $('qs-name').value = '';
+    draw();
+    showPanel('rg-quests');
+    $('reorg').classList.add('open');
+    // 開著的時候每 20 秒更新計時
+    clearInterval(questTimer);
+    questTimer = setInterval(() => {
+      if ($('reorg').classList.contains('open') && !$('rg-quests').hidden) draw(); else clearInterval(questTimer);
+    }, 20000);
+    if (canHover) setTimeout(() => $('qs-name').focus(), 50);
+  }
+  $('btn-quests').onclick = openQuests;
   // 分類改名：裡面的東西、自己建的分類、排序都跟著換；改成已有的名字＝併進那一類（先問）
   function renameCat(old){
     if (old === PROPER_CAT){ toast(`「${PROPER_CAT}」是固定標籤，不能改名`, true); return false; }
@@ -1685,7 +1862,7 @@ window.addEventListener('error', e => {
     let names = Object.keys(save.items);
     $('count').innerHTML = `已發現 <b>${names.length}</b> 樣`;
     renderFolderTabs();
-    renderGoalBtn();
+    renderGoalBtn(); renderQuestBtn();
     // 有配方的東西一律算萃取過（萃取結果就是它的第一個配方）
     const made = new Set(Object.values(save.recipes).map(v => v[0]));
     const isUnext = n => !save.items[n].extracted && !made.has(n);
@@ -2147,6 +2324,7 @@ window.addEventListener('error', e => {
     announce(fresh);
     const hit = syncGoals();
     if (hit.length){ persist(); toast(`📓 目標達成！${hit.map(n => `${save.items[n] ? save.items[n].emoji + ' ' : ''}${n}`).join('、')}`); }
+    questCheck(fresh);
     renderBackup();
   }
 
