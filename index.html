@@ -897,7 +897,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.0';
+  const VERSION = '0.1.1';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1078,20 +1078,20 @@ window.addEventListener('error', e => {
       h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
       h *= 60;
     }
-    return {h, s:s * 100};
+    return {h, s:s * 100, l:l * 100};
   }
   // 顏色只上在邊框：底色和字一律跟主題走（深色＝深底淺字，淺色＝淺底深字）
-  // 色相照東西本身；越常見邊框越淺、越稀有越深越飽和；傳說級會發光
+  // 邊框直接用東西本身的代表色，跟稀有度無關（納可 2026-09-29 定）；傳說級照舊會發光
+  // 只有太接近背景的顏色稍微調亮／調暗，免得框看不見（深色主題最暗 35%，淺色主題最亮 65%）
   function paint(el, it){
     el.style.background = el.style.color = '';
     const c = it && hexToHsl(it.color);
     if (!c){ el.style.borderColor = el.style.boxShadow = ''; return; }
     const r = Math.min(5, Math.max(1, it.rarity || 1));
     const dark = document.documentElement.dataset.theme !== 'light';
-    const L = dark ? 80 - (r - 1) * 8 : 74 - (r - 1) * 11;   // 深色 80%→48%，淺色 74%→30%
-    const S = Math.min(90, Math.max(c.s * (0.55 + r * 0.1), c.s > 8 ? 35 : 0));
-    el.style.borderColor = `hsl(${c.h} ${S}% ${L}%)`;
-    el.style.boxShadow = r >= 5 ? `0 0 10px hsl(${c.h} ${Math.max(S, 50)}% 50% / .5)` : '';
+    const L = dark ? Math.max(c.l, 35) : Math.min(c.l, 65);
+    el.style.borderColor = L === c.l ? it.color : `hsl(${c.h} ${c.s}% ${L}%)`;
+    el.style.boxShadow = r >= 5 ? `0 0 10px hsl(${c.h} ${Math.max(c.s, 50)}% 50% / .5)` : '';
   }
 
 
