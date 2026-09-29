@@ -72,7 +72,15 @@
   .slot .em{font-size:2.1rem;line-height:1}
   .slot .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .slot.filled{border-style:solid;background:var(--chip);color:var(--text);box-shadow:var(--shadow)}
-  .slot.pop{animation:pop .3s ease-out}
+  .slot.pop{animation:jelly .5s ease-out}
+  /* Q 彈動畫：只是畫面效果，不存任何東西；設定「動畫：關」時全部停掉 */
+  @keyframes jelly{0%{transform:scale(.4);opacity:0}35%{transform:scale(1.16,.86);opacity:1}55%{transform:scale(.92,1.1)}75%{transform:scale(1.04,.97)}100%{transform:scale(1)}}
+  @keyframes wobble{0%,100%{transform:scale(1)}25%{transform:scale(1.16,.86)}50%{transform:scale(.9,1.12) translateY(-4px)}75%{transform:scale(1.05,.95)}}
+  .slot.brew .em{animation:wobble .7s ease-in-out infinite}
+  .slot.brew[data-i="1"] .em{animation-delay:.12s}
+  .slot.brew[data-i="2"] .em{animation-delay:.24s}
+  .rchip.jelly{animation:jelly .6s ease-out .26s both}
+  .fx{position:fixed;left:0;top:0;pointer-events:none;z-index:60;line-height:1}
   .slot .ph{font-size:1.5rem;opacity:.5}
   .slot{position:relative}
   .slot .pin{position:absolute;top:.15rem;right:.2rem;font-size:.85rem;line-height:1;padding:.2rem;border-radius:.4rem;opacity:.3;filter:grayscale(1);cursor:pointer}
@@ -711,7 +719,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.60';
+  const VERSION = '0.0.61';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1428,6 +1436,7 @@
       }
       if (!n) pinned[i] = false;
       el.classList.toggle('pinned', !!n && pinned[i]);
+      el.classList.toggle('brew', !!n && busy);
       if (i === popIndex){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
     });
     const f = filled().length;
@@ -1592,13 +1601,55 @@
   $('bk-share').onclick = () => $('btn-share').click();
   $('bk-later').onclick = () => { save.meta.backupAt += Math.round(BACKUP_EVERY / 2); persist(); renderBackup(); };
 
+  // 合成成功的動畫：槽位裡的東西飛向結果、結果果凍彈出、冒小星星（只是畫面，不存東西）
+  const motionOn = () => prefs.motion !== 'off' && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function fxGrab(){
+    if (!motionOn()) return null;
+    return [...document.querySelectorAll('.slot.filled')].map(el => {
+      const r = el.getBoundingClientRect(), em = el.querySelector('.em');
+      return {x:r.left + r.width / 2, y:r.top + r.height / 2, emoji:em ? em.textContent : ''};
+    });
+  }
+  function fxPlay(src, fresh){
+    if (!src || !src.length || !document.body.animate) return;
+    const chips = [...document.querySelectorAll('#r-out .rchip')];
+    if (!chips.length) return;
+    chips.forEach(c => c.classList.add('jelly'));
+    const r = chips[0].getBoundingClientRect(), tx = r.left + r.width / 2, ty = r.top + r.height / 2;
+    const spawn = (text, x, y, size) => {
+      const d = document.createElement('div'); d.className = 'fx'; d.textContent = text;
+      d.style.fontSize = size; document.body.append(d);
+      const w = d.offsetWidth / 2, h = d.offsetHeight / 2;
+      d.style.left = (x - w) + 'px'; d.style.top = (y - h) + 'px';
+      return d;
+    };
+    for (const s of src){
+      const g = spawn(s.emoji, s.x, s.y, '2rem');
+      g.animate([{transform:'translate(0,0) scale(1)'}, {transform:'translate(0,-14px) scale(1.15,.9)', offset:.3},
+        {transform:`translate(${tx - s.x}px,${ty - s.y}px) scale(.3)`, opacity:.2}],
+        {duration:380, easing:'ease-in'}).onfinish = () => g.remove();
+    }
+    const n = fresh ? 12 : 7;
+    setTimeout(() => {
+      for (let i = 0; i < n; i++){
+        const a = Math.PI * 2 * i / n + Math.random() * .5, dist = 38 + Math.random() * 34;
+        const sp = spawn(i % 3 ? '✦' : '•', tx, ty, (fresh ? .9 : .7) + Math.random() * .4 + 'rem');
+        sp.style.color = i % 2 ? 'var(--accent)' : '#fff6d8';
+        sp.animate([{transform:'translate(0,0) scale(.4)', opacity:1},
+          {transform:`translate(${Math.cos(a) * dist}px,${Math.sin(a) * dist}px) scale(1)`, opacity:0}],
+          {duration:520 + Math.random() * 200, easing:'cubic-bezier(.2,.8,.3,1)'}).onfinish = () => sp.remove();
+      }
+    }, 330);
+  }
   function finish(type, inputs, outputs, fresh){
+    const fx = fxGrab();
     last = {type, inputs, outputs, fresh, tried:[outputs.join('、')]};
     if (type === 'extract' && save.items[inputs[0]]) save.items[inputs[0]].extracted = true;  // 記下這樣東西萃取過了
     persist();
     clearUnpinned(); packSlots();
     setBusy(false);
     renderResult();
+    fxPlay(fx, fresh.length > 0);
     renderList();
     announce(fresh);
     renderBackup();
