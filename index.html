@@ -150,6 +150,7 @@
   .cattab.fav.on{color:var(--on-accent)}
   .co-row{cursor:default;flex-wrap:nowrap}
   .co-btn{padding:.2rem .6rem;font-size:.9rem}
+  .co-row.co-sub{padding-left:1.4rem;font-size:.88rem}
   .tabrow{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
   .tabrow::-webkit-scrollbar{height:4px}
   .tabrow[hidden],#c-subrow[hidden]{display:none}
@@ -760,7 +761,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.70';
+  const VERSION = '0.0.71';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -778,6 +779,9 @@
   const PROPER_CAT = '專有名詞';  // 特定角色、作品、品牌、真實存在的特定人事物，一律放這類
   // 專有名詞底下的子分類（納可 2026-09-29 要求）：存在東西的 sub 欄位，只有分類是專有名詞時才算數
   const PROPER_SUBS = ['角色','作品','真實人物','地點建築','品牌商品','其他'];
+  // 預設子分類的說明（給 AI 看）；玩家改名或刪掉的就不再給
+  const SUB_DESC = {角色:'虛構作品、遊戲、神話傳說裡的角色', 作品:'書、電影、動畫、遊戲、歌曲等作品本身', 真實人物:'真實存在或存在過的人',
+    地點建築:'真實存在的特定地方、國家城市、建築、景點', 品牌商品:'品牌、公司、特定商品或產品型號', 其他:'都不適合的'};
   const RARITY = ['常見','普通','少見','稀有','傳說'];
   const stars = r => { r = Math.min(5, Math.max(1, r || 1)); return '★'.repeat(r) + '☆'.repeat(5 - r); };  // 稀有度用星星：1 顆實心到 5 顆實心
   const BASE = [
@@ -1210,11 +1214,13 @@
   function subCounts(){
     const m = new Map();
     for (const n of properNames()){ const c = subOf(n); if (c) m.set(c, (m.get(c) || 0) + 1); }
-    const pos = c => { const i = PROPER_SUBS.indexOf(c); return i < 0 ? 1e6 : i; };
+    const order = save.subs || PROPER_SUBS;  // save.subs：玩家改過名、排過順序、刪過之後的子分類清單
+    const pos = c => { const i = order.indexOf(c); return i < 0 ? 1e6 : i; };
     return [...m].sort((a, b) => pos(a[0]) - pos(b[0]) || b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
   }
   // 給 AI 和輸入框用的子分類清單：預設的＋已經有的
-  const subList = () => [...new Set([...PROPER_SUBS, ...subCounts().map(([c]) => c)])];
+  const subList = () => [...new Set([...(save.subs || PROPER_SUBS), ...subCounts().map(([c]) => c)])];
+  const subDescs = sep => subList().filter(c => SUB_DESC[c]).map(c => `${c}${sep}${SUB_DESC[c]}`);
   let subSorting = '';  // AI 正在分子分類時的進度字
   function renderSubFilter(){
     const box = $('subtabs');
@@ -1265,13 +1271,7 @@ ${have.length ? `現有的子分類和裡面目前放的東西：
 ${have.map(([c]) => `${c}：${properNames().filter(n => subOf(n) === c).slice(0, 30).join('、')}`).join('\n')}
 ` : ''}
 可以用的子分類：${subList().join('、')}。
-- 角色：虛構作品、遊戲、神話傳說裡的角色。
-- 作品：書、電影、動畫、遊戲、歌曲等作品本身。
-- 真實人物：真實存在或存在過的人。
-- 地點建築：真實存在的特定地方、國家城市、建築、景點。
-- 品牌商品：品牌、公司、特定商品或產品型號。
-- 其他：都不適合的。
-真的都不適合、而且同類的東西不少時，才自己開一個新的 2 到 4 個字的子分類。
+${subDescs('：').map(x => `- ${x}。\n`).join('')}真的都不適合、而且同類的東西不少時，才自己開一個新的 2 到 4 個字的子分類。
 
 下面每行是一樣東西，格式是「東西名稱：介紹」：
 ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\n')}
@@ -1387,6 +1387,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
           r.append(x);
         }
         box.append(r);
+        if (c === PROPER_CAT) drawSubs(box, draw);
       });
       if (!counts.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = '還沒有分類'; box.append(e); }
     };
@@ -1397,6 +1398,56 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     $('reorg').classList.add('open');
   }
   $('btn-catorder').onclick = openCatOrder;
+  // 管理分類視窗裡，專有名詞底下的子分類：改名（改成已有的＝合併）、排順序、刪掉
+  function drawSubs(box, redraw){
+    const subs = subList(), cnt = new Map(subCounts());
+    const setSubs = xs => { save.subs = xs; persist(); redraw(); renderList(); };
+    subs.forEach((c, i) => {
+      const n = cnt.get(c) || 0;
+      const r = document.createElement('div'); r.className = 'rg-row co-row co-sub';
+      const t = document.createElement('span'); t.className = 'rg-from'; t.textContent = `└ ${c}`;
+      const k = document.createElement('span'); k.className = 'rg-arrow'; k.textContent = `${n} 樣`;
+      const sp = document.createElement('span'); sp.style.flex = '1';
+      const btn = (label, title, fn, dis) => { const b = document.createElement('button'); b.className = 'btn co-btn'; b.textContent = label; b.title = title; b.disabled = !!dis; b.onclick = fn; return b; };
+      const mv = d => () => { const xs = [...subs]; [xs[i], xs[i + d]] = [xs[i + d], xs[i]]; setSubs(xs); };
+      r.append(t, k, sp,
+        btn('✎', '改名', () => { if (renameSub(c)) redraw(); }),
+        btn('↑', '往前', mv(-1), i === 0), btn('↓', '往後', mv(1), i === subs.length - 1),
+        btn('✕', '刪掉這個子分類', () => {
+          if (!confirm(n ? `刪掉子分類「${c}」嗎？\n\n裡面的 ${n} 樣東西不會被刪，會回到「還沒分」。\n\n刪錯了可以到設定按「復原」（只保留最近一次）。` : `刪掉子分類「${c}」嗎？`)) return;
+          if (n) snapshot(`刪掉子分類 ${c}`);
+          for (const it of Object.values(save.items)) if (it.cat === PROPER_CAT && it.sub === c){ delete it.sub; delete it.subLocked; }
+          setSubs(subs.filter(x => x !== c));
+        }));
+      box.append(r);
+    });
+    const add = document.createElement('div'); add.className = 'rg-row co-row co-sub';
+    const ab = document.createElement('button'); ab.className = 'btn co-btn'; ab.textContent = '＋ 新子分類';
+    ab.onclick = () => {
+      const raw = prompt(`新子分類的名字？（最多 ${CAT_MAX_USER} 個字）`);
+      if (raw === null || !raw.trim()) return;
+      const c = cleanCat(raw, CAT_MAX_USER);
+      if (subs.includes(c)){ toast(`已經有「${c}」這個子分類了`, true); return; }
+      setSubs([...subs, c]);
+    };
+    add.append(ab); box.append(add);
+  }
+  function renameSub(old){
+    const raw = prompt(`把子分類「${old}」改成什麼？（最多 ${CAT_MAX_USER} 個字）`, old);
+    if (raw === null) return false;
+    if (!raw.trim()){ toast('名稱不能空白', true); return false; }
+    const nw = cleanCat(raw, CAT_MAX_USER);
+    if (nw === old) return false;
+    const subs = subList(), exists = subs.includes(nw);
+    if (exists && !confirm(`已經有「${nw}」這個子分類了。\n\n要把「${old}」裡的東西全部併進「${nw}」嗎？`)) return false;
+    snapshot(`子分類改名 ${old} → ${nw}`);
+    for (const it of Object.values(save.items)) if (it.cat === PROPER_CAT && it.sub === old) it.sub = nw;
+    save.subs = exists ? subs.filter(c => c !== old) : subs.map(c => c === old ? nw : c);
+    if (subFilter === old) subFilter = exists ? '' : nw;
+    persist(); renderList();
+    toast(exists ? `「${old}」併進「${nw}」了` : `改名成「${nw}」了`);
+    return true;
+  }
   // 分類改名：裡面的東西、自己建的分類、排序都跟著換；改成已有的名字＝併進那一類（先問）
   function renameCat(old){
     if (old === PROPER_CAT){ toast(`「${PROPER_CAT}」是固定分類，不能改名`, true); return false; }
@@ -2045,7 +2096,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     if (!list.includes(PROPER_CAT)) list.push(PROPER_CAT);
     return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。
   專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方，例如「皮卡丘」「哈利波特」「艾菲爾鐵塔」）一律分到「${PROPER_CAT}」。
-- sub：只有分到「${PROPER_CAT}」時才填，是它底下的子分類，優先從這些選：${subList().join('、')}（角色＝虛構或神話角色，作品＝書、電影、動畫、遊戲、歌曲本身，真實人物＝真實的人，地點建築＝真實的特定地方或建築，品牌商品＝品牌、公司、特定商品）。不是專有名詞就填空字串 ""。`;
+- sub：只有分到「${PROPER_CAT}」時才填，是它底下的子分類，優先從這些選：${subList().join('、')}${subDescs('＝').length ? `（${subDescs('＝').join('，')}）` : ''}。不是專有名詞就填空字串 ""。`;
   }
   const DETAIL_RULES = () =>
 `- desc：像百科的一到兩句話，繁體中文，40 字以內，只介紹「這個東西本身」是什麼、有什麼特色。
