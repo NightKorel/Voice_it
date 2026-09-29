@@ -897,7 +897,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.85';
+  const VERSION = '0.0.86';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2343,9 +2343,10 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   const DETAIL_RULES = cats =>
 `- desc：像百科的一到兩句話，繁體中文，40 字以內，只介紹「這個東西本身」是什麼、有什麼特色。
   不要提到合成的材料，不要解釋為什麼會合出它，不要硬扯關係。例如「蒸氣」要寫「水加熱後變成的白色氣體……」，不要寫「風和火相遇時……」。
+  寫介紹時，當作你完全不知道它是用什麼合出來的，就像百科裡的條目。也不要用比喻、形容偷偷暗示材料：例如材料裡有太陽，就不要寫「金黃如日」「像陽光一樣」。
 ${RARITY_RULE}
 ${catRule(cats)}
-- color：這個東西最常讓人聯想到的顏色，用 #RRGGBB 格式。`;
+- color：這個東西本身最常讓人聯想到的顏色，用 #RRGGBB 格式（一樣照東西本身，不照材料）。`;
   const DETAIL_SCHEMA = {
     desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, sub:{type:'STRING'}, color:{type:'STRING'}
   };
