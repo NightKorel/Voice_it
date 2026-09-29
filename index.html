@@ -322,6 +322,11 @@
   :root[data-border="thin"] .slot{border-width:1px}
   :root[data-border="thin"] #c-band{border-bottom-width:2px!important}
   :root[data-motion="off"] *{animation:none!important;transition:none!important}
+  /* 低耗能模式：一鍵關掉動畫、轉場、陰影、發光、毛玻璃、背景花紋（手機省電、舊裝置比較順） */
+  :root[data-lite="on"] *,:root[data-lite="on"] *::before,:root[data-lite="on"] *::after{animation:none!important;transition:none!important;
+    box-shadow:none!important;text-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  :root[data-lite="on"] #board,:root[data-lite="on"] #slots{background:var(--bg)!important}
+  :root[data-lite="on"] #c-emoji{filter:none}
 
   /* ===== 美化（純 CSS，不耗資源） ===== */
   /* 捲動條：細細的、跟主題同色，底是透明的，指上去才變金色 */
@@ -640,6 +645,9 @@
       <div class="seg" id="seg-border"><button data-v="thick">粗框</button><button data-v="thin">細框</button></div></div>
     <div class="setrow"><span class="lbl">動畫</span>
       <div class="seg" id="seg-motion"><button data-v="on">開</button><button data-v="off">關</button></div></div>
+    <div class="setrow"><span class="lbl">低耗能模式</span>
+      <div class="seg" id="seg-lite"><button data-v="on">開</button><button data-v="off">關</button></div></div>
+    <p class="muted">低耗能模式會一次關掉所有特效：動畫、合成特效、陰影、發光、毛玻璃、背景花紋。手機比較省電，舊手機也比較順。</p>
     <div class="setrow"><span class="lbl">收合少用的</span>
       <div class="seg" id="seg-fold"><button data-v="on">開</button><button data-v="off">關</button></div></div>
     <div class="setrow"><span class="lbl">幾天沒用算少用</span>
@@ -719,7 +727,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.61';
+  const VERSION = '0.0.62';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1602,7 +1610,7 @@
   $('bk-later').onclick = () => { save.meta.backupAt += Math.round(BACKUP_EVERY / 2); persist(); renderBackup(); };
 
   // 合成成功的動畫：槽位裡的東西飛向結果、結果果凍彈出、冒小星星（只是畫面，不存東西）
-  const motionOn = () => prefs.motion !== 'off' && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const motionOn = () => prefs.motion !== 'off' && prefs.lite !== 'on' && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   function fxGrab(){
     if (!motionOn()) return null;
     return [...document.querySelectorAll('.slot.filled')].map(el => {
@@ -2970,8 +2978,8 @@ ${lines}
   };
 
   // ---------- 外觀與 AI 來源 ----------
-  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-border','border'], ['seg-fold','fold'], ['seg-folddays','foldDays'], ['seg-ai','ai']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7', trimN:300};
+  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-lite','lite'], ['seg-border','border'], ['seg-fold','fold'], ['seg-folddays','foldDays'], ['seg-ai','ai']];
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7', trimN:300, lite:'off'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
   function applyPrefs(){
@@ -2979,6 +2987,7 @@ ${lines}
     r.dataset.theme = prefs.theme;
     r.dataset.font = prefs.font;
     r.dataset.motion = prefs.motion;
+    r.dataset.lite = prefs.lite;
     r.dataset.border = prefs.border;
     if ([...$('sort').options].some(o => o.value === prefs.sort)) $('sort').value = prefs.sort;  // 清單排序：預設最新在前，會記住上次選的
     r.style.setProperty('--scale', prefs.scale);
