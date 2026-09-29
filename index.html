@@ -897,7 +897,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.86';
+  const VERSION = '0.0.87';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2409,7 +2409,9 @@ ${now === FAIL ? '- 原本判定合成失敗，請再想想有沒有合理的結
 `你是「1+1=?」合成遊戲的引擎。玩家把 ${list} 這 ${names.length} 樣東西合在一起，請決定會產生什麼。
 ${themeRule()}${describe(names)}規則：
 ${NAME_RULE}
-${styleRule()}
+${styleRule()}${names.length === 3 ? `
+- 三樣都要算進去，但不用一樣重要，其中一樣只有一點點影響也可以。
+- 回答前先自己檢查：這三樣裡任意挑兩樣來合，會合出什麼？如果你的答案跟任何一組「兩樣合出來的」一樣，就不合格（等於第三樣沒用到），請再想一個三樣都用得上的答案。` : ''}
 - 避免直接回傳材料本身。
 ${knownRule()}
 - 一定要給出一個結果，就算材料很不相干，也要想出一個說得通的東西。
@@ -2417,12 +2419,14 @@ ${againRule(avoid, names)}${DETAIL_RULES()}`;
     let out = await ask(prompt, COMBINE_SCHEMA);
     let name = canonical(cleanName(out.name));
     if (isBadName(name)) throw new Error('沒拿到答案（AI 回的是空的或看不懂），東西還在槽位，再按一次合成試試');
-    // 名字太長又不是專有名詞：請 AI 再短一點（只重問一次）
-    if (nameLen(name) > NAME_LIMIT && !isTrue(out.proper)){
-      out = await ask(`${prompt}\n\n注意：你上次回答「${name}」超過 ${NAME_LIMIT} 個字又不是專有名詞。請改成 ${NAME_LIMIT} 個字以內，或換成網路上查得到、跟政治無關的專有名詞。`, COMBINE_SCHEMA);
-      const again = canonical(cleanName(out.name));
-      if (!isBadName(again)) name = again;
-    }
+    // 名字太長又不是專有名詞：請 AI 再短一點（只重問一次；新答案看不懂就維持原本的）
+    const retry = async note => {
+      const o = await ask(`${prompt}\n\n注意：${note}`, COMBINE_SCHEMA);
+      const again = canonical(cleanName(o.name));
+      if (!isBadName(again)){ out = o; name = again; }
+    };
+    if (nameLen(name) > NAME_LIMIT && !isTrue(out.proper))
+      await retry(`你上次回答「${name}」超過 ${NAME_LIMIT} 個字又不是專有名詞。請改成 ${NAME_LIMIT} 個字以內，或換成網路上查得到、跟政治無關的專有名詞。`);
     return {...out, name, emoji:String(out.emoji || '').trim().slice(0, 8) || '✨'};
   }
   async function askExtract(name, avoid){
