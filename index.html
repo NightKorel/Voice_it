@@ -711,7 +711,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.59';
+  const VERSION = '0.0.60';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1211,6 +1211,19 @@
     el.dataset.tip = name;
     return el;
   }
+  // 模糊搜尋：名字完全一樣 0 → 開頭一樣 1 → 名字裡連續出現 2 → 跳字（字照順序出現，例如「蒸機」對到「蒸汽機」）3 → 介紹裡有 4；都沒有 9
+  function searchRank(name, q){
+    const n = name.toLowerCase();
+    if (n === q) return 0;
+    if (n.startsWith(q)) return 1;
+    if (n.includes(q)) return 2;
+    const chars = [...q.replace(/\s+/g, '')];
+    let i = 0;
+    for (const c of n) if (c === chars[i]) i++;
+    if (chars.length > 1 && i === chars.length) return 3;
+    if ((save.items[name].desc || '').toLowerCase().includes(q)) return 4;
+    return 9;
+  }
   const FOLD_MIN = 300;   // 東西超過這麼多才開始收合
   let foldOpen = false;   // 少用的東西展開了沒（不記住，每次打開遊戲都是收起來的）
   function renderList(){
@@ -1225,7 +1238,12 @@
     $('f-unext').textContent = `未萃取 ${unext}`;
     renderCatFilter();
     const cat = catFilter;
-    if (q) names = names.filter(n => n.toLowerCase().includes(q) || (save.items[n].desc || '').toLowerCase().includes(q));
+    let qr = null;  // 搜尋時每樣東西對得多準（數字越小越前面）
+    if (q){
+      qr = new Map();
+      for (const n of names){ const r = searchRank(n, q); if (r < 9) qr.set(n, r); }
+      names = names.filter(n => qr.has(n));
+    }
     if (folderFilter){ const f = save.folders.find(x => x.name === folderFilter); names = names.filter(n => f && f.items.includes(n)); }
     if (filterUnext) names = names.filter(isUnext);
     if (cat === MINE) names = names.filter(n => save.items[n].custom);
@@ -1243,7 +1261,8 @@
       rareLow: (a,b) => (rar(a) || 9) - (rar(b) || 9) || byTime(a,b),
       cat: (a,b) => co(a) - co(b) || byTime(a,b)
     };
-    names.sort(sorters[mode] || byTime);
+    const sorter = sorters[mode] || byTime;
+    names.sort(qr ? (a, b) => qr.get(a) - qr.get(b) || sorter(a, b) : sorter);  // 搜尋時先照對得多準排
     const faved = new Set(save.folders.flatMap(f => f.items));
     // 自動收合少用的東西：東西超過 FOLD_MIN 樣、而且在「全部」又沒搜尋、沒篩選時，
     // 只顯示最近用過、最近發現、收藏夾裡、槽位裡的（還有水火風土），其他收到最底下「其餘 N 樣」
@@ -1286,7 +1305,7 @@
     for (const n of all){
       if (n === null){ foldBar(); continue; }
       const it = I[n];
-      if (mode === 'cat' && it.cat !== lastCat){
+      if (mode === 'cat' && !qr && it.cat !== lastCat){
         lastCat = it.cat;
         const h = document.createElement('div'); h.className = 'group'; h.textContent = it.cat || (it.custom ? '只在「我的」' : '未分類');
         frag.append(h);
