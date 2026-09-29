@@ -150,6 +150,15 @@
   .cattab.fav.on{color:var(--on-accent)}
   .co-row{cursor:default;flex-wrap:nowrap}
   .co-btn{padding:.2rem .6rem;font-size:.9rem}
+  /* 清單上方那排按鈕：小手機把字縮短、按鈕靠緊一點，還是擺不下就把右邊兩顆換到下一行 */
+  #side-head .row.tools{flex-wrap:wrap;row-gap:.35rem}
+  .row-r{display:flex;gap:inherit;margin-left:auto}
+  @media (max-width:420px){ .gl-word,.sm-hide{display:none} #side-head .row.tools{gap:.3rem} #side-head .row.tools .chipbtn{padding-left:.5rem;padding-right:.5rem} }
+  #gl-list{display:flex;flex-direction:column;gap:.35rem;margin:.4rem 0}
+  .gl-row{cursor:default;flex-wrap:nowrap}
+  .gl-row.got{border-color:var(--accent)}
+  .gl-row.got .rg-from{cursor:pointer}
+  .gl-mark{flex:none;width:1.4rem;text-align:center}
   .co-row.co-sub{padding-left:1.4rem;font-size:.88rem}
   .tabrow{display:flex;gap:.35rem;overflow-x:auto;padding-bottom:.2rem;scrollbar-width:thin}
   .tabrow::-webkit-scrollbar{height:4px}
@@ -444,12 +453,14 @@
         </select>
       </div>
       <input id="search" type="search" placeholder="搜尋名稱或介紹……" autocomplete="off">
-      <div class="row">
+      <div class="row tools">
         <button class="chipbtn" id="f-unext" title="只看還沒萃取過的東西">未萃取</button>
         <button class="chipbtn" id="btn-select" title="勾選好幾樣，一次加進收藏夾">☑ 多選</button>
-        <div style="flex:1"></div>
-        <button class="chipbtn" id="btn-catorder" title="分類改名、排順序、刪掉自己建的分類">管理分類</button>
-        <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、合併分類、檢查分類">整理</button>
+        <button class="chipbtn" id="btn-goals" title="記下想合出來的東西">📓 目標</button>
+        <div class="row-r">
+          <button class="chipbtn" id="btn-catorder" title="分類改名、排順序、刪掉自己建的分類"><span class="sm-hide">管理</span>分類</button>
+          <button class="chipbtn" id="btn-reorg" title="請 AI 合併相似的東西、合併分類、檢查分類">整理</button>
+        </div>
       </div>
       <div id="selbar" hidden>
         <span id="sel-count"></span>
@@ -595,6 +606,13 @@
       </ul>
       <div class="favnew"><input id="nc-name" maxlength="12" placeholder="新分類的名字（最多 12 個字）" autocomplete="off"><button class="btn primary" id="nc-add">建立</button></div>
       <div class="actions"><button class="btn" id="nc-cancel">取消</button></div>
+    </div>
+    <div id="rg-goals" hidden>
+      <h2>📓 目標本</h2>
+      <p class="muted">記下想合出來的東西，合出來就會自動打勾。</p>
+      <div class="favnew"><input id="gl-name" maxlength="24" placeholder="想合出來的東西" autocomplete="off"><button class="btn primary" id="gl-add">記下來</button></div>
+      <div id="gl-list"></div>
+      <div class="actions"><button class="btn primary" id="gl-done">關閉</button></div>
     </div>
     <div id="rg-order" hidden>
       <h2>管理分類</h2>
@@ -761,7 +779,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.71';
+  const VERSION = '0.0.72';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1021,7 +1039,7 @@
 
   // ---------- 清單 ----------
   // 整理視窗裡一次只顯示一個面板
-  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-partial', 'rg-mine', 'rg-stats'];
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-partial', 'rg-mine', 'rg-stats', 'rg-goals'];
   function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
 
   // ---------- 收藏夾 ----------
@@ -1398,6 +1416,68 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     $('reorg').classList.add('open');
   }
   $('btn-catorder').onclick = openCatOrder;
+
+  // ---------- 目標本 ----------
+  // save.goals：[{name, t（記下的時間）, got（合出來的時間）}]；只是玩家自己的筆記，不會給 AI 看
+  const goalItem = name => { if (save.items[name]) return name; const k = normKey(name); return Object.keys(save.items).find(n => normKey(n) === k) || ''; };
+  // 圖鑑裡已經有的目標打勾（合成、合併存檔等各種方式得到的都算），回傳這次新達成的
+  function syncGoals(){
+    const hit = [];
+    for (const g of save.goals || []) if (!g.got){ const n = goalItem(g.name); if (n){ g.got = Date.now(); hit.push(n); } }
+    return hit;
+  }
+  function renderGoalBtn(){
+    const gs = save.goals || [];
+    // 小手機擺不下「目標」兩個字，只留 📓 和數字
+    const b = $('btn-goals'); b.textContent = '📓';
+    const w = document.createElement('span'); w.className = 'gl-word'; w.textContent = ' 目標';
+    b.append(w);
+    if (gs.length) b.append(` ${gs.filter(g => g.got || goalItem(g.name)).length}/${gs.length}`);
+  }
+  function openGoals(){
+    if (syncGoals().length) persist();
+    const draw = () => {
+      const box = $('gl-list'); box.textContent = '';
+      const gs = save.goals || [];
+      // 還沒達成的在上面（新記的在前），達成的在下面（最近達成的在前）
+      const order = [...gs].sort((a, b) => (!!a.got - !!b.got) || (a.got ? b.got - a.got : b.t - a.t));
+      for (const g of order){
+        const n = g.got ? goalItem(g.name) : '';
+        const r = document.createElement('div'); r.className = 'rg-row gl-row' + (g.got ? ' got' : '');
+        const m = document.createElement('span'); m.className = 'gl-mark'; m.textContent = g.got ? '✅' : '⬜';
+        const t = document.createElement('span'); t.className = 'rg-from';
+        t.textContent = n && save.items[n] ? `${save.items[n].emoji} ${n}` : g.name;
+        if (n){ t.title = '看卡片'; t.onclick = () => { $('reorg').classList.remove('open'); openCard(n); }; }
+        const k = document.createElement('span'); k.className = 'rg-arrow';
+        const d = new Date(g.got || g.t);
+        k.textContent = `${d.getMonth() + 1}/${d.getDate()} ${g.got ? '達成' : '記下'}`;
+        const sp = document.createElement('span'); sp.style.flex = '1';
+        const x = document.createElement('button'); x.className = 'btn co-btn'; x.textContent = '✕'; x.title = '從目標本拿掉';
+        x.onclick = () => { save.goals = gs.filter(y => y !== g); persist(); draw(); renderGoalBtn(); };
+        r.append(m, t, k, sp, x);
+        box.append(r);
+      }
+      if (!gs.length){ const e = document.createElement('p'); e.className = 'muted'; e.textContent = '還沒有目標，在上面打一個想合出來的東西。'; box.append(e); }
+    };
+    $('gl-add').onclick = () => {
+      const name = cleanName($('gl-name').value);
+      if (!name){ toast('要打目標的名字', true); return; }
+      save.goals = save.goals || [];
+      if (save.goals.some(g => normKey(g.name) === normKey(name))){ toast(`「${name}」已經在目標本裡了`, true); return; }
+      const have = goalItem(name);
+      save.goals.push({name, t:Date.now(), ...(have ? {got:Date.now()} : {})});
+      persist(); $('gl-name').value = ''; draw(); renderGoalBtn();
+      if (have) toast(`你已經有「${have}」了，直接打勾`);
+    };
+    $('gl-name').onkeydown = e => { if (e.key === 'Enter') $('gl-add').click(); };
+    $('gl-done').onclick = () => $('reorg').classList.remove('open');
+    draw();
+    $('gl-name').value = '';
+    showPanel('rg-goals');
+    $('reorg').classList.add('open');
+    if (canHover) setTimeout(() => $('gl-name').focus(), 50);
+  }
+  $('btn-goals').onclick = openGoals;
   // 管理分類視窗裡，專有名詞底下的子分類：改名（改成已有的＝合併）、排順序、刪掉
   function drawSubs(box, redraw){
     const subs = subList(), cnt = new Map(subCounts());
@@ -1499,6 +1579,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     let names = Object.keys(save.items);
     $('count').innerHTML = `已發現 <b>${names.length}</b> 樣`;
     renderFolderTabs();
+    renderGoalBtn();
     // 有配方的東西一律算萃取過（萃取結果就是它的第一個配方）
     const made = new Set(Object.values(save.recipes).map(v => v[0]));
     const isUnext = n => !save.items[n].extracted && !made.has(n);
@@ -1931,6 +2012,8 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     fxPlay(fx, fresh.length > 0);
     renderList();
     announce(fresh);
+    const hit = syncGoals();
+    if (hit.length){ persist(); toast(`📓 目標達成！${hit.map(n => `${save.items[n] ? save.items[n].emoji + ' ' : ''}${n}`).join('、')}`); }
     renderBackup();
   }
 
