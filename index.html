@@ -279,6 +279,11 @@
   #modal .actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.8rem}
   #modal hr{border:none;border-top:1px solid var(--line);margin:1.1rem 0 0}
   #modal a{color:var(--accent)}
+  #adv{margin:.6rem 0;border:1px solid var(--line);border-radius:.7rem;padding:.4rem .7rem}
+  #adv summary{cursor:pointer;font-size:.88rem;color:var(--accent);padding:.2rem 0}
+  #adv textarea{width:100%;border-radius:.6rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:.85rem;font-family:inherit;padding:.5rem;resize:vertical;outline:none;line-height:1.6}
+  #adv textarea:focus{border-color:var(--accent)}
+  #adv-tpl .btn.on{border-color:var(--accent);color:var(--accent)}
   .setrow{display:flex;align-items:center;gap:.7rem;margin:.55rem 0;font-size:.9rem}
   .setrow .lbl{width:4.5rem;flex:none;color:var(--muted)}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:.6rem;overflow:hidden;flex-wrap:wrap}
@@ -814,6 +819,13 @@
     <div class="setrow"><span class="lbl">隨機程度</span>
       <div class="seg" id="seg-temp"><button data-v="0.5">穩定 0.5</button><button data-v="0.6">適中 0.6</button><button data-v="0.7">多變 0.7</button></div></div>
     <p class="muted">越多變，合出來的結果越常出乎意料；越穩定，越常是大家想得到的答案。只對 Gemini 和 OpenRouter 有用，手動模式是看你貼去的那個 AI。</p>
+    <details id="adv">
+      <summary>高級設定：自己改合成的提示詞</summary>
+      <p class="muted">下面這段是每次合成時給 AI 的「風格」規則，可以自己改，Gemini、OpenRouter、手動模式都會用。手動模式沒有隨機程度可以調，可以用範本代替：「多變」像溫度高，「穩定」像溫度低。名字規則和回答格式固定，不會被改到。</p>
+      <div class="actions" id="adv-tpl"></div>
+      <textarea id="adv-style" maxlength="600" rows="5"></textarea>
+      <div class="actions"><button class="btn primary" id="adv-save">儲存</button><span class="muted" id="adv-state"></span></div>
+    </details>
     <p class="muted">鑰匙：來源選 Gemini 或 OpenRouter 時才需要。鑰匙只存在這台裝置的這個瀏覽器裡，不會上傳到任何地方；換手機或換瀏覽器要重新貼一次。</p>
     <h3>Gemini 鑰匙</h3>
     <p>用 Google 的 Gemini 免費方案來想「合出來是什麼」。你需要一把自己的鑰匙（API key），免費、不用綁信用卡。</p>
@@ -855,7 +867,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.80';
+  const VERSION = '0.0.81';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2339,14 +2351,23 @@ ${now === FAIL ? '- 原本判定合成失敗，請再想想有沒有合理的結
     const lines = [...new Set(names)].map(n => { const it = save.items[n]; return it && it.desc ? `- ${n}：${it.desc}` : ''; }).filter(Boolean);
     return lines.length ? `材料的介紹：\n${lines.join('\n')}\n` : '';
   }
+  // 合成風格：設定「高級設定」裡玩家可以自己改（納可 2026-09-29 要求），只有這段能改，名字規則、回答格式不給改
+  const STYLE_TEMPLATES = {
+    normal:['預設', `- 結果要合理，看到的人想得通為什麼會變成這個，不要天馬行空亂湊。
+- 但不要老是退到最籠統的大類（例如能量、物質、生命、自然）。優先選具體、有意思的東西；冷門但說得通的結果也很好。`],
+    calm:['穩定（像溫度低）', `- 結果要合理、符合常識，大多數人一看就懂為什麼會變成這個。
+- 優先選最直接、最多人會想到的結果，寧可普通也不要天馬行空。`],
+    wild:['多變（像溫度高）', `- 結果要說得通，但請大膽一點：優先選出乎意料、有創意、仔細想想又很合理的東西，冷門的也很好。
+- 不要選最直接、最多人會想到的答案，也不要退到籠統的大類（例如能量、物質、生命、自然）。`]
+  };
+  const styleRule = () => String(prefs.style || '').trim() || STYLE_TEMPLATES.normal[1];
   async function askCombine(names, avoid){
     const list = names.map(n => `「${n}」`).join('、');
     const prompt =
 `你是「1+1=?」合成遊戲的引擎。玩家把 ${list} 這 ${names.length} 樣東西合在一起，請決定會產生什麼。
 ${themeRule()}${describe(names)}規則：
 ${NAME_RULE}
-- 結果要合理，看到的人想得通為什麼會變成這個，不要天馬行空亂湊。
-- 但不要老是退到最籠統的大類（例如能量、物質、生命、自然）。優先選具體、有意思的東西；冷門但說得通的結果也很好。
+${styleRule()}
 - 避免直接回傳材料本身。
 ${knownRule()}
 - 一定要給出一個結果，就算材料很不相干，也要想出一個說得通的東西。
@@ -3615,6 +3636,7 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
 
   // ---------- 設定 ----------
   function openSettings(msg, toKeys){
+    renderAdv();
     if (prefs.exportLabs) ensureAllLabs();  // 先把封存的專案讀進來，按「分享」時才來得及
     $('key').value = getKey();
     $('orkey').value = getOrKey();
@@ -3952,6 +3974,25 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
   for (const [id, k] of SEGS)
     $(id).addEventListener('click', e => { const v = e.target.dataset && e.target.dataset.v; if (v) setPref(k, v); });
   $('scale').addEventListener('input', e => setPref('scale', parseFloat(e.target.value)));
+  // 高級設定：合成風格提示詞。範本按下去只是填進框框，按「儲存」才算數；清空再儲存＝回到預設
+  function renderAdv(){
+    const cur = styleRule(), box = $('adv-tpl'); box.textContent = '';
+    for (const [k, [label, text]] of Object.entries(STYLE_TEMPLATES)){
+      const b = document.createElement('button'); b.className = 'btn co-btn' + (cur === text ? ' on' : ''); b.textContent = label;
+      b.onclick = () => { $('adv-style').value = text; $('adv-state').textContent = '還沒儲存'; };
+      box.append(b);
+    }
+    $('adv-style').value = cur;
+    const k = Object.keys(STYLE_TEMPLATES).find(k => STYLE_TEMPLATES[k][1] === cur);
+    $('adv-state').textContent = k ? `現在用的是「${STYLE_TEMPLATES[k][0]}」` : '現在用的是你自己改的';
+  }
+  $('adv-style').addEventListener('input', () => { $('adv-state').textContent = '還沒儲存'; });
+  $('adv-save').onclick = () => {
+    const v = $('adv-style').value.trim();
+    prefs.style = v === STYLE_TEMPLATES.normal[1] ? '' : v;
+    store.set(PREF_KEY, JSON.stringify(prefs));
+    renderAdv(); toast(v ? '存好了，下次合成就會用新的提示詞' : '清空了，回到預設的提示詞');
+  };
   $('sidew').addEventListener('input', e => setPref('sidew', parseInt(e.target.value, 10)));
   $('trimn').addEventListener('input', e => setPref('trimN', parseInt(e.target.value, 10)));
   $('aimode').onclick = () => {
