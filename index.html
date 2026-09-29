@@ -580,7 +580,7 @@
       <label class="rg-opt" hidden><input type="checkbox" id="rg-cat"> 合併重複、太像或太零碎的分類（大分類固定之後用不到了）</label>
       <label class="rg-opt"><input type="checkbox" id="rg-move" checked> 檢查每樣東西的分類對不對，只看分錯的（換之前會一一問你；你自己分的不會動）</label>
       <label class="rg-opt"><input type="checkbox" id="rg-star"> 照現在的標準重新評星（以前的東西星星可能偏低；換之前會一一問你）</label>
-      <label class="rg-opt"><input type="checkbox" id="rg-recat"> 全部照分類重新分：每樣東西都重新放進固定的分類，舊的、AI 以前亂開的分類都會清掉（只給 AI 名字；換之前會一一問你；你自己分的不會動）。勾了這項，「檢查分類」就不用再做</label>
+      <label class="rg-opt"><input type="checkbox" id="rg-recat"> 全部照分類重新分：每樣東西都重新放進固定的分類，舊的、AI 以前亂開的分類都會清掉（給 AI 名字和介紹；換之前會一一問你；你自己分的不會動）。勾了這項，「檢查分類」就不用再做</label>
       <p class="muted" id="rg-cost"></p>
       <div class="actions">
         <button class="btn primary" id="rg-go">開始整理</button>
@@ -901,7 +901,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.8';
+  const VERSION = '0.1.9';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1466,7 +1466,7 @@ window.addEventListener('error', e => {
       box.append(ai);
     }
   }
-  // 請 AI 把某個分類裡還沒分子分類的東西分一分：只給名字（省額度），全部問完再一次給你勾選確認
+  // 請 AI 把某個分類裡還沒分子分類的東西分一分：給名字和介紹，全部問完再一次給你勾選確認
   const SUB_SCHEMA = {subs:{type:'ARRAY', items:{type:'OBJECT', properties:{name:{type:'STRING'}, sub:{type:'STRING'}}, required:['name','sub']}}};
   async function sortSubs(cat){
     if (subSorting){ stopAI(); return; }
@@ -1494,11 +1494,11 @@ ${have.map(([c]) => `${c}：${catNames(cat).filter(n => subOf(n) === c).slice(0,
 - 子分類名稱 2 到 4 個字。
 ${CAT_NAME_GUIDE}
 
-下面是這些東西的名字，用「、」隔開：
-${parts[i].join('、')}
+下面每行是一樣東西，格式是「東西名稱：介紹」（沒有介紹的只有名稱）。請照介紹判斷它是什麼：
+${parts[i].map(descLine).join('\n')}
 
 輸出 subs 陣列，每一筆是 {"name":"東西名稱","sub":"子分類"}，每樣都要列。
-- name 必須一字不差地從上面抄。
+- name 必須一字不差地從上面抄（冒號前面那段）。
 範例：{"subs":[{"name":"${parts[i][0]}","sub":"${list[0] || '子分類'}"}]}`, SUB_SCHEMA);
         for (const m of out.subs || []){
           const name = String(m.name || '').trim(), it = save.items[name];
@@ -2853,6 +2853,8 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
   const CATS_SCHEMA = {cats:{type:'ARRAY', items:{type:'STRING'}}};
   const STAR_SCHEMA = {stars:{type:'ARRAY', items:{type:'OBJECT', properties:{name:{type:'STRING'}, rarity:{type:'INTEGER'}}, required:['name','rarity']}}};
   const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+  // 分類時給 AI 看的一行：名字加介紹前 40 字（納可 2026-09-29：只給名字 AI 會分錯）；介紹清掉了就只有名字
+  const descLine = n => { const d = ((save.items[n] || {}).desc || '').slice(0, 40); return d ? `${n}：${d}` : n; };
   let reorging = false;
 
   function reorganize(){
@@ -2927,7 +2929,7 @@ ${part.join('、')}
           persist(); renderList(); renderSlots(); renderResult();
         }
       }
-      // 重新設計分類（納可 2026-09-29 要求）：只給 AI 名字、不給介紹（省額度）
+      // 重新設計分類（納可 2026-09-29 要求）：後來改成名字加介紹（只給名字 AI 會分錯）
       // 第一步：看所有東西的名字想一套分類，玩家可以改；第二步：分批把每樣放進去；最後一樣一樣勾選確認
       if (doRecat){
         // 大分類固定之後（納可 2026-09-29），這項不再請 AI 想新分類，直接把每樣放進這個世界可以用的分類
@@ -2941,12 +2943,12 @@ ${part.join('、')}
             await pace(); progress(`照分類重新分 ${i + 1}/${parts.length}`);
             const o = await ask(
 `你是遊戲圖鑑的分類整理員。分類只有這些：${cats.join('、')}。${fixedHint()}
-下面是一些東西的名字，用「、」隔開：
-${parts[i].join('、')}
+下面每行是一樣東西，格式是「東西名稱：介紹」（沒有介紹的只有名稱）：
+${parts[i].map(descLine).join('\n')}
 
-任務：把每樣東西放進最合適的分類。
+任務：照介紹判斷每樣東西是什麼，放進最合適的分類。
 輸出 moves 陣列，每樣都要列，每一筆是 {"name":"東西名稱","category":"分類"}。
-- name 必須一字不差地從上面抄。category 只能從上面的分類選。
+- name 必須一字不差地從上面抄（冒號前面那段）。category 只能從上面的分類選。
 - 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」；神話、傳說裡有名字的特定神祇、人物、地方、建築（例如宙斯、萬神殿）也是。
 範例：{"moves":[{"name":"${parts[i][0]}","category":"${cats[1] || cats[0]}"}]}`, MOVE_SCHEMA);
             for (const m of o.moves || []){
@@ -3018,13 +3020,13 @@ ${CAT_NAME_GUIDE}
         for (let i = 0; i < parts.length; i++){
           await pace(); progress(`檢查分類 ${i + 1}/${parts.length}`);
           const cats = catCounts().map(([c]) => c);
-          const lines = parts[i].map(n => `${n}：${save.items[n].cat || '未分類'}`).join('\n');
+          const lines = parts[i].map(n => { const d = (save.items[n].desc || '').slice(0, 40); return `${n}：${save.items[n].cat || '未分類'}${d ? `：${d}` : ''}`; }).join('\n');
           const out = await ask(
 `你是遊戲圖鑑的分類整理員。
 現有分類和裡面目前放的東西（每行一個分類）：
 ${cats.map(c => `${c}：${catMembers(c, 30)}`).join('\n') || '（還沒有）'}
 
-下面每行是一樣東西，格式是「東西名稱：目前分類」：
+下面每行是一樣東西，格式是「東西名稱：目前分類：介紹」（沒有介紹的只到目前分類）。請照介紹判斷它是什麼：
 ${lines}
 
 任務：檢查每樣東西放的分類對不對。
@@ -4144,12 +4146,12 @@ ${DETAIL_RULES(['你自己在 cats 裡定的分類'])}`, BASES_SCHEMA());
       const strange = pickItems.filter(n => save.items[n] && save.items[n].cat && !myCats.has(save.items[n].cat));
       if (strange.length){
         const sc = [...new Set(strange.map(n => save.items[n].cat))];
-        if (confirm(`${from}裡有 ${strange.length} 樣東西，放在你這邊沒有的分類：${sc.slice(0, 8).join('、')}${sc.length > 8 ? '……' : ''}。\n\n要請 AI 把它們分進你現有的分類嗎？（只給 AI 名字，最後會一樣一樣問你）\n\n按「取消」就維持原樣，這些分類會直接加進你的分類。`))
+        if (confirm(`${from}裡有 ${strange.length} 樣東西，放在你這邊沒有的分類：${sc.slice(0, 8).join('、')}${sc.length > 8 ? '……' : ''}。\n\n要請 AI 把它們分進你現有的分類嗎？（給 AI 名字和介紹，最後會一樣一樣問你）\n\n按「取消」就維持原樣，這些分類會直接加進你的分類。`))
           assignToMyCats(strange, [...myCats]);
       }
     };
   }
-  // 把一些東西分進指定的分類清單：分批只給名字，最後勾選確認；換了就算 AI 分的（整理時可以再動）
+  // 把一些東西分進指定的分類清單：分批給名字和介紹，最後勾選確認；換了就算 AI 分的（整理時可以再動）
   async function assignToMyCats(names, cats){
     if (reorging){ toast('正在整理，等整理完再分', true); return; }
     if (!aiReady()) return;
@@ -4163,13 +4165,13 @@ ${DETAIL_RULES(['你自己在 cats 裡定的分類'])}`, BASES_SCHEMA());
         askStep = parts.length > 1 ? `分進你的分類：第 ${i + 1} 次，共 ${parts.length} 次` : '';
         toast(parts.length > 1 ? `請 AI 分類中（${i + 1}/${parts.length}）……` : '請 AI 分類中……');
         const o = await ask(
-`你是遊戲圖鑑的分類整理員。分類只有這些：${cats.join('、')}。
-下面是一些東西的名字，用「、」隔開：
-${parts[i].join('、')}
+`你是遊戲圖鑑的分類整理員。分類只有這些：${cats.join('、')}。${fixedHint()}
+下面每行是一樣東西，格式是「東西名稱：介紹」（沒有介紹的只有名稱）：
+${parts[i].map(descLine).join('\n')}
 
-任務：把每樣東西放進最合適的分類。
+任務：照介紹判斷每樣東西是什麼，放進最合適的分類。
 輸出 moves 陣列，每樣都要列，每一筆是 {"name":"東西名稱","category":"分類"}。
-- name 必須一字不差地從上面抄。category 只能從上面的分類選。
+- name 必須一字不差地從上面抄（冒號前面那段）。category 只能從上面的分類選。
 - 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」；神話、傳說裡有名字的特定神祇、人物、地方、建築（例如宙斯、萬神殿）也是。
 範例：{"moves":[{"name":"${parts[i][0]}","category":"${cats[0]}"}]}`, MOVE_SCHEMA);
         for (const m of o.moves || []){
