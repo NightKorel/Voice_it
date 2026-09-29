@@ -865,9 +865,18 @@
 
 <script src="starter.js"></script>
 <script>
+// 出錯時在畫面最下面顯示錯誤訊息，玩家截圖就知道哪裡壞了（v0.0.82 加：之前開場出錯時畫面看起來正常，只是按鈕都沒反應）
+window.addEventListener('error', e => {
+  if (document.getElementById('crash')) return;
+  const d = document.createElement('div'); d.id = 'crash';
+  d.style.cssText = 'position:fixed;left:.5rem;right:.5rem;bottom:.5rem;z-index:99;padding:.6rem .8rem;border-radius:.7rem;background:#3a1d1a;color:#ffd9d2;border:1px solid #d98b7c;font-size:.8rem;line-height:1.6';
+  d.textContent = `遊戲出錯了，請截圖這段給 Claude：${e.message}${e.lineno ? `（第 ${e.lineno} 行）` : ''}`;
+  d.onclick = () => d.remove();
+  document.body.append(d);
+});
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.81';
+  const VERSION = '0.0.82';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -3736,7 +3745,10 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
     }
     return null;
   }
-  if (navigator.share && shareFile()) $('btn-share').hidden = false;  // 不支援的瀏覽器就不顯示
+  // 不支援的瀏覽器就不顯示。開場只拿一個小小的測試檔問能不能分享：
+  // 以前這裡直接做一份完整的匯出檔，v0.0.77 起匯出會讀設定（prefs），開場時設定還沒讀好，手機 Chrome 整個開場就停住，按鈕全壞（v0.0.82 修）
+  const canShareFiles = () => { for (const type of ['application/json', 'text/plain']){ try { if (navigator.canShare && navigator.canShare({files:[new File(['{}'], 'test.json', {type})]})) return true; } catch(e){} } return false; };
+  if (navigator.share && canShareFiles()) $('btn-share').hidden = false;
   $('btn-share').onclick = async () => {
     const f = shareFile();
     if (!f){ toast('這個瀏覽器不能直接分享檔案，請用「下載存檔」', true); return; }
