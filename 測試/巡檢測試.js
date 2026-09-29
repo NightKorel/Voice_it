@@ -16,19 +16,23 @@ const ST = ctxS.window.STARTER;
 const items = {'水':{emoji:'💧',t:0},'火':{emoji:'🔥',t:1},'風':{emoji:'🌬️',t:2},'土':{emoji:'🌍',t:3}};
 let t = 10;
 for (const [n, d] of Object.entries(ST.items).slice(0, 60)) items[n] = {emoji:d[0], desc:d[1], rarity:d[2], cat:d[3], color:d[4], t:t++};
-Object.assign(items, {'皮卡丘':{emoji:'⚡',desc:'電氣鼠',rarity:2,cat:'專有名詞',sub:'角色',color:'#f2d330',t:t++}, '哈利波特':{emoji:'🧙',desc:'巫師',rarity:2,cat:'專有名詞',color:'#553322',t:t++}, '測試甲':{emoji:'🅰️',desc:'a',rarity:1,cat:'物品',color:'#888888',t:t++}, '測試乙':{emoji:'🅱️',desc:'b',rarity:1,cat:'物品',color:'#888888',t:t++}});
+Object.assign(items, {'皮卡丘':{emoji:'⚡',desc:'電氣鼠',rarity:2,cat:'專有名詞',sub:'角色',color:'#f2d330',t:t++}, '舊生物':{emoji:'🐛',desc:'舊版分類',rarity:1,cat:'生物',color:'#558833',t:t++}, '哈利波特':{emoji:'🧙',desc:'巫師',rarity:2,cat:'專有名詞',color:'#553322',t:t++}, '測試甲':{emoji:'🅰️',desc:'a',rarity:1,cat:'物品',color:'#888888',t:t++}, '測試乙':{emoji:'🅱️',desc:'b',rarity:1,cat:'物品',color:'#888888',t:t++}});
 const recipes = {}; for (const [a, b, r] of ST.recipes) if (items[a] && items[b] && items[r]) recipes[[a, b].sort().join('+')] = [r];
 const SAVE = {items, recipes, extracts:{}, folders:[{name:'喜歡', items:['皮卡丘']}], userCats:[], goals:[{name:'彩虹', t:1}], meta:{ai:'manual'}};
 
 let uid = 0;
 function answerFor(pr){
   const js = pr.slice(pr.lastIndexOf('【回答格式】'));
-  const item = n => ({name:n, emoji:'🧪', proper:false, desc:'測試用的東西', rarity:3, category:'物品', sub:'', color:'#44aa66'});
+  const item = n => ({name:n, emoji:'🧪', proper:false, desc:'測試用的東西', rarity:3, tags:['物品', '科技'], color:'#44aa66'});
   if (js.includes('"parts"')) return {parts:[item('巡檢零件' + (++uid)), item('巡檢零件' + (++uid))]};
   if (js.includes('"bases"')) return {cats:['巡檢角色', '巡檢地點', '巡檢道具'], bases:[item('巡檢起點甲'), item('巡檢起點乙'), item('巡檢起點丙')]};
-  for (const k of ['groups', 'merges', 'moves', 'stars', 'subs', 'cats']) if (js.includes(`"${k}"`)) return {[k]:[]};
+  // 提議新標籤：給一個，貼到測試甲上
+  if (js.includes('"tags"') && js.includes('"items"') && pr.includes('最多提議 5 個')) return {tags:[{name:'巡檢新標籤', items:['測試甲', '皮卡丘']}]};
+  // 重新貼標籤、檢查標籤、貼你的標籤：每樣都給兩個標籤
+  if (js.includes('"items"')){ const names = [...pr.matchAll(/^(.+?)：/gm)].map(m => m[1]).filter(n => items[n] || /巡檢|測試/.test(n)); return {items:names.slice(0, 5).map(n => ({name:n, tags:['物品', '日常']}))}; }
+  for (const k of ['groups', 'stars', 'cats']) if (js.includes(`"${k}"`)) return {[k]:[]};
   if (js.includes('"name"')) return item('巡檢結果' + (++uid));
-  return {desc:'重寫的介紹', rarity:2, category:'物品', sub:'', color:'#446688'};
+  return {desc:'重寫的介紹', rarity:2, tags:['物品'], color:'#446688'};
 }
 
 (async () => {
@@ -82,9 +86,16 @@ function answerFor(pr){
   await step('隨機、釘子、清空', async () => {
     for (let i = 0; i < 30; i++){ await tap('#btn-random'); const s = await p.$$eval('.slot.filled .nm, .slot.filled', x => x.map(e => e.textContent)); if (new Set(s).size !== s.length) throw new Error('隨機抽到重複的'); }
     await tap('#btn-random'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); });
-  await step('卡片、收藏、改分類、子分類', async () => {
+  await step('舊存檔搬家（生物→動物、子分類清掉、內建的有多個標籤）', async () => {
+    const s = await p.evaluate(() => JSON.parse(localStorage.getItem('wuxian_save_v1')));
+    if (s.items['舊生物'].cat !== '動物') throw new Error('生物沒搬到動物');
+    if (s.items['皮卡丘'].sub) throw new Error('子分類沒清掉');
+    if (!(s.items['龍捲風'].tags || []).includes('災難')) throw new Error('內建圖鑑沒照新標籤');
+  });
+  await step('卡片、收藏、改三個標籤', async () => {
     await card('皮卡丘'); await tap('#c-fav'); await p.fill('#c-favname', '巡檢夾'); await tap('#c-favadd');
-    await tap('#c-cat'); await p.fill('#c-subin', '巡檢子類'); await tap('#c-catok');
+    await tap('#c-cat'); await p.fill('#c-tag2', '動漫'); await p.fill('#c-tag3', '動物'); await tap('#c-catok');
+    if (!(await p.$eval('#c-cat', e => e.textContent)).includes('專有名詞・動漫・動物')) throw new Error('卡片沒顯示三個標籤');
     await tap('#c-redesc'); await p.waitForTimeout(300);
   });
   await step('卡片路線、刪除東西', async () => { await card('測試乙'); await tap('#c-del'); await p.waitForTimeout(200); });
@@ -92,33 +103,45 @@ function answerFor(pr){
     await p.fill('#search', '水'); await p.waitForTimeout(300); await p.fill('#search', ''); await p.waitForTimeout(250);
     for (const v of await p.$$eval('#sort option', x => x.map(o => o.value))) await p.selectOption('#sort', v);
     await tap('#f-unext'); await tap('#f-unext');
-    await tap('#cattabs .cattab:has-text("專有名詞")'); await tap('#subtabs .cattab >> nth=1'); await tap('#cattabs .cattab:has-text("我的")'); await tap('#favtabs .cattab >> nth=0');
+    await tap('#cattabs .cattab:has-text("動漫")');
+    if (!(await p.$('#list .litem:has-text("皮卡丘")'))) throw new Error('點「動漫」標籤沒看到皮卡丘');
+    await tap('#cattabs .cattab:has-text("全部")');
+    await p.fill('#search', '動漫'); await p.waitForTimeout(300);
+    if (!(await p.$('#list .litem:has-text("皮卡丘")'))) throw new Error('搜尋標籤名字沒找到');
+    await p.fill('#search', ''); await p.waitForTimeout(250);
+    await tap('#cattabs .cattab:has-text("我的")'); await tap('#favtabs .cattab >> nth=0');
+  });
+  await step('找標籤', async () => {
+    await tap('#cattabs .cattab:has-text("找標籤")'); await p.fill('#tf-q', '災'); await p.waitForTimeout(100); await tap('#tf-list .cattab >> nth=0');
+    if (!(await p.$('#cattabs .cattab.on:has-text("災難")'))) throw new Error('找標籤點了沒選到');
+    await tap('#cattabs .cattab:has-text("全部")');
   });
   await step('排除分類', async () => {
     await tap('#cattabs .cattab:has-text("全部")'); await tap('#cattabs .cattab:has-text("⊘")'); await tap('#cattabs .cattab:has-text("物品")'); await tap('#cattabs .cattab:has-text("⊘")');
     if (!(await p.$('.hidebar'))) throw new Error('排除後沒有提示列');
     await tap('.hidebar');
   });
-  await step('請 AI 分子分類', async () => { await tap('#cattabs .cattab:has-text("專有名詞")'); await tap('#subtabs .cattab.ai'); await p.waitForTimeout(300); });
-  await step('一般分類的子分類（東西 20 樣以上）', async () => {
-    await tap('#cattabs .cattab:has-text("全部")'); await tap('#cattabs .cattab:has-text("自然")');
-    if (await p.$eval('#subtabs', e => e.hidden)) throw new Error('自然有 20 樣以上卻沒有子分類標籤');
-    await tap('#subtabs .cattab.ai'); await p.waitForTimeout(300);
-  });
-  await step('多選改分類、加收藏夾', async () => {
+  await step('多選加標籤、拿掉標籤、加收藏夾', async () => {
     if (await p.$('#favtabs .cattab.on')) await tap('#favtabs .cattab.on');  // 收藏夾篩選關掉
     await tap('#cattabs .cattab:has-text("全部")'); await tap('#btn-select'); await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1');
-    await tap('#sel-cat'); await tap('#sc-list .rg-row:not(.pk-sub):has-text("物品")');
+    await tap('#sel-cat'); await tap('#sc-list .rg-row:has-text("音樂")');
+    await tap('#btn-select'); await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1');
+    await tap('#sel-cat'); await tap('#sc-list .rg-row:has-text("音樂")');
     await tap('#btn-select'); await tap('#list .litem >> nth=0'); await tap('#sel-fav'); await tap('#pk-list .rg-row >> nth=0'); await tap('#sel-done').catch(() => {});
   });
   await step('目標本', async () => { await tap('#btn-goals'); await p.fill('#gl-name', '巡檢目標'); await tap('#gl-add'); await tap('#gl-list .gl-row button >> nth=0'); });
-  await step('管理分類、新分類', async () => {
-    await tap('#btn-catorder'); await tap('#co-list .co-row:not(.co-sub) button:has-text("↓") >> nth=0'); await tap('#co-list .co-row:not(.co-sub) button:has-text("✎") >> nth=1');
-    await tap('#co-list .co-sub button:has-text("✎") >> nth=0').catch(() => {}); await tap('#co-done');
-    await tap('#cattabs .cattab:has-text("新分類")'); await p.fill('#nc-name', '巡檢類'); await tap('#nc-add');
+  await step('管理標籤、新標籤', async () => {
+    await tap('#btn-catorder'); await tap('#co-list .co-row button:has-text("↓") >> nth=0'); await tap('#co-list .co-row button:has-text("✎") >> nth=1'); await tap('#co-done');
+    await tap('#cattabs .cattab:has-text("新標籤")'); await p.fill('#nc-name', '巡檢類'); await tap('#nc-add');
   });
-  await step('整理（四項全勾）', async () => { await tap('#btn-reorg'); await p.check('#rg-star'); await tap('#rg-go'); await p.waitForTimeout(400); });
-  await step('整理：重新設計分類', async () => { await tap('#btn-reorg'); await p.uncheck('#rg-items'); await p.uncheck('#rg-star'); await p.check('#rg-recat'); await tap('#rg-go'); await p.waitForTimeout(400); });
+  await step('整理（四項全勾，含提議新標籤）', async () => { await tap('#btn-reorg'); await p.check('#rg-star'); await p.check('#rg-newtag'); await tap('#rg-go'); await p.waitForTimeout(400); await autoAnswer();
+    // 提議的新標籤、換標籤都會跳勾選視窗：全部照 AI 的
+    for (let i = 0; i < 4; i++){ if (await p.$eval('#rg-review', e => !e.hidden && e.closest('#reorg').classList.contains('open')).catch(() => false)){ await tap('#rg-apply'); await p.waitForTimeout(300); await autoAnswer(); } }
+    const s = await p.evaluate(() => JSON.parse(localStorage.getItem('wuxian_save_v1')));
+    if (!s.userCats.includes('巡檢新標籤')) throw new Error('新標籤沒加進清單');
+  });
+  await step('整理：全部重新貼標籤', async () => { await tap('#btn-reorg'); await p.uncheck('#rg-items'); await p.uncheck('#rg-star'); await p.uncheck('#rg-newtag'); await p.check('#rg-recat'); await tap('#rg-go'); await p.waitForTimeout(400); await autoAnswer();
+    if (await p.$eval('#rg-review', e => !e.hidden).catch(() => false)) await tap('#rg-apply'); });
   await step('統計', async () => { await tap('#btn-stats'); });
   await step('設定每個選項', async () => {
     await tap('#btn-settings');
@@ -137,7 +160,7 @@ function answerFor(pr){
     await tap('#btn-lab'); await tap('#wl-new'); await p.fill('#nl-theme', '巡檢主題'); await tap('#nl-gen'); await autoAnswer(); await tap('#nl-start'); await p.waitForTimeout(300);
     await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1'); await tap('#btn-craft');
     await p.waitForSelector('#manual.open', {state:'attached', timeout:3000});
-    if (!(await p.$eval('#m-prompt', e => e.value)).includes('只能從這些選一個：巡檢角色、巡檢地點、巡檢道具')) throw new Error('專案的分類沒給 AI');
+    if (!(await p.$eval('#m-prompt', e => e.value)).includes('只能從這些選：巡檢角色、巡檢地點、巡檢道具')) throw new Error('專案的標籤沒給 AI');
     await autoAnswer();
     await tap('#btn-lab'); await tap('#wl-list .wl-row.here button:has-text("編輯")'); await p.fill('#el-prompt', '巡檢補充'); await tap('#el-save');
   });
