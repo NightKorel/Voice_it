@@ -142,6 +142,8 @@
   .favnew input:focus{border-color:var(--accent)}
   #c-favlist{display:flex;flex-wrap:wrap;gap:.35rem}
   .cattab.fav{color:var(--accent)}
+  .cattab[data-cat]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  .cattab.dragging{border-color:var(--accent);color:var(--text);transform:scale(1.12);box-shadow:var(--lift);position:relative;z-index:2}
   .cattab.fav.on{color:var(--on-accent)}
   .co-row{cursor:default;flex-wrap:nowrap}
   .co-btn{padding:.2rem .6rem;font-size:.9rem}
@@ -464,7 +466,7 @@
     <div class="cbody">
       <div class="ctitle"><h2 id="c-name"></h2><button class="tag" id="c-cat" title="自己改分類"></button></div>
       <div id="c-catedit" hidden>
-        <input id="c-catin" list="catlist" placeholder="選一個分類，或打新的名字" autocomplete="off">
+        <input id="c-catin" list="catlist" maxlength="12" placeholder="選一個分類，或打新的名字（最多 12 個字）" autocomplete="off">
         <datalist id="catlist"></datalist>
         <div class="actions">
           <button class="btn primary" id="c-catok">確定</button>
@@ -523,7 +525,7 @@
       <div class="mn-row"><label>名稱</label><input id="mn-name" maxlength="24" placeholder="必填" autocomplete="off"></div>
       <div class="mn-row"><label>emoji</label><input id="mn-emoji" maxlength="8" placeholder="✨" autocomplete="off"></div>
       <div class="mn-row"><label>介紹</label><textarea id="mn-desc" maxlength="120" placeholder="一兩句話介紹它是什麼"></textarea></div>
-      <div class="mn-row"><label>分類</label><input id="mn-cat" list="catlist2" placeholder="不填＝只放在「我的」" autocomplete="off"><datalist id="catlist2"></datalist></div>
+      <div class="mn-row"><label>分類</label><input id="mn-cat" list="catlist2" maxlength="12" placeholder="不填＝只放在「我的」（最多 12 個字）" autocomplete="off"><datalist id="catlist2"></datalist></div>
       <p class="muted" style="margin:.1rem 0 .3rem 4.1rem">不管有沒有填分類，都一定會出現在「我的」。填了分類，那個分類標籤裡也會有它。</p>
       <div class="mn-row"><label>稀有度</label><select id="mn-rar" class="sel"><option value="1">常見</option><option value="2">普通</option><option value="3">少見</option><option value="4">稀有</option><option value="5">傳說</option></select></div>
       <div class="mn-row"><label>顏色</label><input id="mn-color" type="color"></div>
@@ -544,7 +546,7 @@
       <h2>改分類</h2>
       <p id="sc-desc"></p>
       <div id="sc-list" class="rg-list"></div>
-      <div class="favnew"><input id="sc-name" placeholder="或打一個新分類的名字" autocomplete="off"><button class="btn" id="sc-add">改到新分類</button></div>
+      <div class="favnew"><input id="sc-name" maxlength="12" placeholder="或打一個新分類的名字（最多 12 個字）" autocomplete="off"><button class="btn" id="sc-add">改到新分類</button></div>
       <div class="actions"><button class="btn" id="sc-cancel">取消</button></div>
     </div>
     <div id="rg-folders" hidden>
@@ -563,12 +565,12 @@
         <li>如果只是想把幾樣東西收在一起、不想影響 AI 怎麼分，用收藏夾就好。</li>
         <li>你建的分類整理時不會被 AI 併掉；裡面沒東西也會留著。不要了可以到「排序分類」按 ✕ 刪掉。</li>
       </ul>
-      <div class="favnew"><input id="nc-name" placeholder="新分類的名字（最多 6 個字）" autocomplete="off"><button class="btn primary" id="nc-add">建立</button></div>
+      <div class="favnew"><input id="nc-name" maxlength="12" placeholder="新分類的名字（最多 12 個字）" autocomplete="off"><button class="btn primary" id="nc-add">建立</button></div>
       <div class="actions"><button class="btn" id="nc-cancel">取消</button></div>
     </div>
     <div id="rg-order" hidden>
       <h2>排序分類</h2>
-      <p>用 ↑ ↓ 調整順序，上面的分類會排在前面。分類標籤、「依分類」排序都照這個順序。之後新出現的分類會接在最後面。</p>
+      <p>也可以直接在清單上方長按分類標籤，左右拖曳排順序。這裡用 ↑ ↓ 調整，上面的分類會排在前面。分類標籤、「依分類」排序都照這個順序。之後新出現的分類會接在最後面。</p>
       <div id="co-list" class="rg-list"></div>
       <div class="actions">
         <button class="btn primary" id="co-done">完成</button>
@@ -727,7 +729,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.64';
+  const VERSION = '0.0.65';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1023,7 +1025,7 @@
       if (isBadName(name)){ $('mn-err').textContent = '要取一個名字'; return; }
       if (name !== editing && save.items[name]){ $('mn-err').textContent = `已經有「${name}」了，換個名字`; return; }
       const data = {emoji:$('mn-emoji').value.trim().slice(0, 8) || '✨', desc:$('mn-desc').value.trim().slice(0, 120),
-        cat:$('mn-cat').value.trim() ? cleanCat($('mn-cat').value) : '', catLocked:true, rarity:+$('mn-rar').value, color:$('mn-color').value, custom:true};
+        cat:$('mn-cat').value.trim() ? cleanCat($('mn-cat').value, CAT_MAX_USER) : '', catLocked:true, rarity:+$('mn-rar').value, color:$('mn-color').value, custom:true};
       if (it && name !== editing) renameItem(editing, name);
       save.items[name] = {...(save.items[name] || {t:Date.now()}), ...data};
       persist(); renderList(); renderSlots(); if (last) renderResult();
@@ -1148,7 +1150,8 @@
     const tab = (value, label) => {
       const b = document.createElement('button'); b.className = 'cattab' + (catFilter === value ? ' on' : '');
       b.textContent = label;
-      b.onclick = () => { catFilter = catFilter === value ? '' : value; renderList(); list.scrollTop = 0; };  // 再按一次回到全部
+      b.onclick = () => { if (catDragEnd > Date.now() - 300) return; catFilter = catFilter === value ? '' : value; renderList(); list.scrollTop = 0; };  // 再按一次回到全部
+      if (value && value !== MINE){ b.dataset.cat = value; b.title = '長按可以左右拖曳排順序'; b.addEventListener('pointerdown', e => catDragDown(e, b)); }
       box.append(b);
     };
     tab('', `全部 ${Object.keys(save.items).length}`);
@@ -1162,13 +1165,51 @@
     if (on) on.scrollIntoView({block:'nearest', inline:'nearest'});
   }
 
+  // 長按分類標籤拖曳排順序：按住約 0.4 秒後標籤浮起來，左右拖到想要的位置放開（順序存在 catOrder）
+  let catDrag = null, catDragEnd = 0;
+  function catDragDown(e, b){
+    if (e.button > 0) return;
+    const d = catDrag = {b, sx:e.clientX, sy:e.clientY, on:false};
+    d.timer = setTimeout(() => {
+      if (catDrag !== d) return;
+      d.on = true; b.classList.add('dragging');
+      if (navigator.vibrate) try { navigator.vibrate(15); } catch(_){}
+    }, 400);
+  }
+  function catDragMove(x, y, e){
+    const d = catDrag; if (!d) return;
+    if (!d.on){ if (Math.hypot(x - d.sx, y - d.sy) > 8){ clearTimeout(d.timer); catDrag = null; } return; }
+    if (e && e.cancelable) e.preventDefault();
+    const box = $('cattabs'), r = box.getBoundingClientRect();
+    if (x < r.left + 30) box.scrollLeft -= 10; else if (x > r.right - 30) box.scrollLeft += 10;
+    const tabs = [...box.querySelectorAll('.cattab[data-cat]')].filter(t => t !== d.b);
+    const before = tabs.find(t => { const q = t.getBoundingClientRect(); return x < q.left + q.width / 2; });
+    if (before) box.insertBefore(d.b, before);
+    else if (tabs.length) tabs[tabs.length - 1].after(d.b);
+  }
+  function catDragUp(){
+    const d = catDrag; if (!d) return;
+    clearTimeout(d.timer); catDrag = null;
+    if (!d.on) return;
+    d.b.classList.remove('dragging');
+    catDragEnd = Date.now();
+    save.catOrder = [...$('cattabs').querySelectorAll('.cattab[data-cat]')].map(t => t.dataset.cat);
+    persist(); renderList();
+  }
+  window.addEventListener('pointermove', e => catDragMove(e.clientX, e.clientY, e));
+  window.addEventListener('pointerup', catDragUp);
+  window.addEventListener('pointercancel', () => { if (catDrag && !catDrag.on){ clearTimeout(catDrag.timer); catDrag = null; } });  // 拖曳中被瀏覽器接手時，改用 touchmove 繼續
+  $('cattabs').addEventListener('touchmove', e => { if (catDrag && catDrag.on && e.touches[0]) catDragMove(e.touches[0].clientX, e.touches[0].clientY, e); }, {passive:false});
+  $('cattabs').addEventListener('touchend', catDragUp);
+  $('cattabs').addEventListener('contextmenu', e => { if (e.target.closest('.cattab[data-cat]')) e.preventDefault(); });
+
   // 新建分類：會加進 AI 的分類清單，所以先說明清楚
   function openNewCat(){
     $('nc-name').value = '';
     $('nc-add').onclick = () => {
       const raw = $('nc-name').value.trim();
       if (!raw){ toast('分類要有名字', true); return; }
-      const c = cleanCat(raw);
+      const c = cleanCat(raw, CAT_MAX_USER);
       if (catCounts().some(([x]) => x === c)){ toast(`已經有「${c}」這個分類了`, true); return; }
       save.userCats.push(c); persist();
       $('reorg').classList.remove('open');
@@ -1393,7 +1434,7 @@
     const box = $('sc-list'); box.textContent = '';
     const apply = c => {
       if (!String(c || '').trim()){ toast('分類名稱不能空白', true); return; }
-      c = cleanCat(c);
+      c = cleanCat(c, CAT_MAX_USER);
       for (const n of names){ save.items[n].cat = c; save.items[n].catLocked = true; }
       persist(); renderList(); $('reorg').classList.remove('open');
       toast(`${names.length} 樣改到「${c}」了`);
@@ -1805,7 +1846,9 @@
   // 名字：去掉標點和引號；英文專有名詞中間的空格保留一個
   const cleanName = n => String(n || '').replace(/[。，！？、「」『』《》"'!?]/g, '').replace(/\s+/g, ' ').trim()
     .replace(/(?<=[^\x00-\x7F]) | (?=[^\x00-\x7F])/g, '').slice(0, 24);
-  const cleanCat = c => String(c || '').replace(/[\s。，！？、「」"'.,!?（）()]/g, '').slice(0, 6) || '其他';
+  // 分類名稱：AI 開的最多 6 個字；玩家自己打的放寬到 CAT_MAX_USER 個字（納可 2026-09-29 定）
+  const CAT_MAX_USER = 12;
+  const cleanCat = (c, max = 6) => String(c || '').replace(/[\s。，！？、「」"'.,!?（）()]/g, '').slice(0, max) || '其他';
   // AI 回的東西 → 存檔用的資料；AI 標成專有名詞的，分類一律是「專有名詞」
   const aiData = o => { const d = {emoji:o.emoji, ...cleanDetail(o)}; if (isTrue(o.proper)) d.cat = PROPER_CAT; return d; };
   const cleanDetail = o => ({
@@ -2735,7 +2778,7 @@ ${lines}
     for (const [c] of catCounts()){ const o = document.createElement('option'); o.value = c; dl.append(o); }
     $('c-catin').value = it.cat || '';
     $('c-catauto').hidden = !it.catLocked || !!it.custom;
-    $('c-catin').placeholder = it.custom ? '選一個分類，或清空＝只放在「我的」' : '選一個分類，或打新的名字';
+    $('c-catin').placeholder = it.custom ? '選一個分類，或清空＝只放在「我的」（最多 12 個字）' : '選一個分類，或打新的名字（最多 12 個字）';
     $('c-catedit').hidden = false;
     $('c-catin').focus();
   };
@@ -2743,7 +2786,7 @@ ${lines}
     const it = save.items[cardName]; if (!it) return;
     const v = $('c-catin').value.trim();
     if (!v && !it.custom){ toast('分類名稱不能空白', true); return; }
-    it.cat = v ? cleanCat(v) : ''; it.catLocked = true;  // 自己設定的東西可以清空＝只放在「我的」
+    it.cat = v ? cleanCat(v, CAT_MAX_USER) : ''; it.catLocked = true;  // 自己設定的東西可以清空＝只放在「我的」
     persist(); renderList(); openCard(cardName);
   }
   $('c-catok').onclick = saveCat;
