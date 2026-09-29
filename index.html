@@ -577,6 +577,7 @@
       <label class="rg-opt"><input type="checkbox" id="rg-cat" checked> 合併重複、太像或太零碎的分類（合併前會一一問你）</label>
       <label class="rg-opt"><input type="checkbox" id="rg-move" checked> 檢查每樣東西的分類對不對（換之前會一一問你；你自己分的不會動）</label>
       <label class="rg-opt"><input type="checkbox" id="rg-star"> 照現在的標準重新評星（以前的東西星星可能偏低；換之前會一一問你）</label>
+      <label class="rg-opt"><input type="checkbox" id="rg-recat"> 照現在的東西重新設計分類：AI 先看所有東西的名字想一套新分類（你可以改），再把每樣放進去（換之前會一一問你；你自己分的不會動）。勾了這項，上面兩項分類的整理就不用再做</label>
       <p class="muted" id="rg-cost"></p>
       <div class="actions">
         <button class="btn primary" id="rg-go">開始整理</button>
@@ -897,7 +898,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.1';
+  const VERSION = '0.1.2';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2739,7 +2740,8 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
   const MERGE_SCHEMA = {groups:{type:'ARRAY', items:{type:'OBJECT', properties:{keep:{type:'STRING'}, merge:{type:'ARRAY', items:{type:'STRING'}}}, required:['keep','merge']}}};
   const CATMERGE_SCHEMA = {merges:{type:'ARRAY', items:{type:'OBJECT', properties:{from:{type:'STRING'}, to:{type:'STRING'}}, required:['from','to']}}};
   const MOVE_SCHEMA = {moves:{type:'ARRAY', items:{type:'OBJECT', properties:{name:{type:'STRING'}, category:{type:'STRING'}}, required:['name','category']}}};
-  const ITEM_BATCH = 300, MOVE_BATCH = 80, STAR_BATCH = 100;
+  const ITEM_BATCH = 300, MOVE_BATCH = 80, STAR_BATCH = 100, RECAT_BATCH = 150, RECAT_SEE = 800;
+  const CATS_SCHEMA = {cats:{type:'ARRAY', items:{type:'STRING'}}};
   const STAR_SCHEMA = {stars:{type:'ARRAY', items:{type:'OBJECT', properties:{name:{type:'STRING'}, rarity:{type:'INTEGER'}}, required:['name','rarity']}}};
   const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
   let reorging = false;
@@ -2749,9 +2751,11 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     if (!aiReady()) return;
     const n = Object.keys(save.items).length;
     const free = Object.values(save.items).filter(it => !it.catLocked).length;
-    const cost = () => ($('rg-items').checked ? Math.ceil(n / ITEM_BATCH) : 0) + ($('rg-cat').checked ? 1 : 0) + ($('rg-move').checked ? Math.ceil(free / MOVE_BATCH) : 0) + ($('rg-star').checked ? Math.ceil(n / STAR_BATCH) : 0);
-    const upd = () => { $('rg-cost').textContent = `大約要問 AI ${cost()} 次。`; $('rg-go').disabled = !cost(); };
-    ['rg-items', 'rg-cat', 'rg-move', 'rg-star'].forEach(id => $(id).onchange = upd);
+    const recat = () => $('rg-recat').checked;
+    const cost = () => ($('rg-items').checked ? Math.ceil(n / ITEM_BATCH) : 0) + (!recat() && $('rg-cat').checked ? 1 : 0) + (!recat() && $('rg-move').checked ? Math.ceil(free / MOVE_BATCH) : 0) + ($('rg-star').checked ? Math.ceil(n / STAR_BATCH) : 0) + (recat() ? 1 + Math.ceil(free / RECAT_BATCH) : 0);
+    // 勾了「重新設計分類」，合併分類、檢查分類就用不到了，先變灰
+    const upd = () => { ['rg-cat', 'rg-move'].forEach(id => $(id).disabled = recat()); $('rg-cost').textContent = `大約要問 AI ${cost()} 次。`; $('rg-go').disabled = !cost(); };
+    ['rg-items', 'rg-cat', 'rg-move', 'rg-star', 'rg-recat'].forEach(id => $(id).onchange = upd);
     upd();
     showPanel('rg-setup');
     $('reorg').classList.add('open');
@@ -2765,17 +2769,18 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     return xs.slice(0, max).join('、') + (xs.length > max ? `……等 ${xs.length} 樣` : '');
   }
   async function runReorg(){
-    const doItems = $('rg-items').checked, doCat = $('rg-cat').checked, doMove = $('rg-move').checked, doStar = $('rg-star').checked;
+    const doRecat = $('rg-recat').checked;
+    const doItems = $('rg-items').checked, doCat = !doRecat && $('rg-cat').checked, doMove = !doRecat && $('rg-move').checked, doStar = $('rg-star').checked;
     $('reorg').classList.remove('open');
     snapshot('整理');
     reorging = true; freshAI(); aiTimeout = 40000;
     const btn = $('btn-reorg'); btn.classList.add('on');
     const progress = t => { btn.textContent = `■ ${t}（按一下停止）`; };
-    const res = {items:0, cats:0, moved:0, stars:0};
+    const res = {items:0, cats:0, moved:0, stars:0, recat:0};
     let asked = 0;
     // 大約要問幾次（跟設定視窗算的一樣；中途合併了東西，後面的次數可能少一點）
     const n0 = Object.keys(save.items).length, free0 = Object.values(save.items).filter(it => !it.catLocked).length;
-    const total = (doItems ? Math.ceil(n0 / ITEM_BATCH) : 0) + (doCat && catCounts().length > 1 ? 1 : 0) + (doMove ? Math.ceil(free0 / MOVE_BATCH) : 0) + (doStar ? Math.ceil(n0 / STAR_BATCH) : 0);
+    const total = (doItems ? Math.ceil(n0 / ITEM_BATCH) : 0) + (doCat && catCounts().length > 1 ? 1 : 0) + (doMove ? Math.ceil(free0 / MOVE_BATCH) : 0) + (doStar ? Math.ceil(n0 / STAR_BATCH) : 0) + (doRecat ? 1 + Math.ceil(free0 / RECAT_BATCH) : 0);
     const pace = async () => {
       if (asked++ && prefs.ai !== 'manual') await sleep(4000);  // 放慢一點，避免撞到每分鐘上限
       checkStop();
@@ -2811,6 +2816,57 @@ ${part.join('、')}
           const picks = await reviewMerges(groups);
           res.items = applyMerges(picks);
           persist(); renderList(); renderSlots(); renderResult();
+        }
+      }
+      // 重新設計分類（納可 2026-09-29 要求）：只給 AI 名字、不給介紹（省額度）
+      // 第一步：看所有東西的名字想一套分類，玩家可以改；第二步：分批把每樣放進去；最後一樣一樣勾選確認
+      if (doRecat){
+        const all = Object.keys(save.items);
+        const see = all.length > RECAT_SEE ? [...all].sort(() => Math.random() - .5).slice(0, RECAT_SEE) : all;  // 太多就抽一部分給 AI 看
+        await pace(); progress('想一套新分類……');
+        const keep = [PROPER_CAT, ...save.userCats];
+        const out = await ask(
+`你是遊戲圖鑑的分類設計師。${world && save.lab ? `這個世界的主題是「${save.lab.theme}」。` : ''}下面是圖鑑裡${see.length < all.length ? `隨機抽出的 ${see.length} 樣（一共 ${all.length} 樣）` : '所有'}東西的名字：
+${see.join('、')}
+
+任務：照這些東西實際的樣子，重新設計一套分類，讓每樣東西都有合適的地方放。
+- 回傳 cats 陣列，8 到 15 個分類名稱，每個 2 到 4 個字，是大類不要太細，彼此不要重疊。
+- 這些分類一定要保留、原封不動放進去：${keep.join('、')}。`, CATS_SCHEMA);
+        let cats = [...new Set([...keep, ...(Array.isArray(out.cats) ? out.cats : []).map(c => cleanCat(c)).filter(Boolean)])];
+        progress('等你確認……');
+        const edited = prompt('AI 建議的新分類如下，可以直接改（用「、」隔開）。按「確定」會把每樣東西放進這些分類，換之前還會一樣一樣問你；按「取消」就不做這項。', cats.join('、'));
+        if (edited !== null && edited.trim()){
+          cats = [...new Set([...keep, ...parseCats(edited)])];
+          const free = all.filter(n => !save.items[n].catLocked);
+          const moves = new Map();
+          const parts = chunk(free, RECAT_BATCH);
+          for (let i = 0; i < parts.length; i++){
+            await pace(); progress(`放進新分類 ${i + 1}/${parts.length}`);
+            const o = await ask(
+`你是遊戲圖鑑的分類整理員。分類只有這些：${cats.join('、')}。
+下面是一些東西的名字，用「、」隔開：
+${parts[i].join('、')}
+
+任務：把每樣東西放進最合適的分類。
+輸出 moves 陣列，每樣都要列，每一筆是 {"name":"東西名稱","category":"分類"}。
+- name 必須一字不差地從上面抄。category 只能從上面的分類選。
+- 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」。
+範例：{"moves":[{"name":"${parts[i][0]}","category":"${cats[1] || cats[0]}"}]}`, MOVE_SCHEMA);
+            for (const m of o.moves || []){
+              const name = String(m.name || '').trim(), it = save.items[name], c = cleanCat(m.category, CAT_MAX_USER);
+              if (it && !it.catLocked && cats.includes(c) && it.cat !== c) moves.set(name, c);
+            }
+          }
+          if (moves.size){
+            progress('等你確認……');
+            const picks = await review({title:'要照新分類換嗎？', apply:'換勾選的', skip:'都不要換',
+              desc:`新分類：${cats.join('、')}。勾選的才會換，右邊也可以自己改。沒勾的留在原本的分類。`,
+              rows:[...moves].map(([n, c]) => ({key:n, label:`${save.items[n].emoji} ${n}（${save.items[n].cat || '未分類'}）`, arrow:'改放到', value:c,
+                options:[...new Set([...cats, ...catCounts().map(([x]) => x)])].map(x => ({value:x, label:x}))}))});
+            for (const p of picks){ const it = save.items[p.key]; if (it && it.cat !== p.value){ it.cat = p.value; res.recat++; } }
+          }
+          if (world && save.lab) save.lab.cats = cats.filter(c => c !== PROPER_CAT);  // 專案的分類清單也換成新的
+          persist(); renderList();
         }
       }
       // 2. 合併分類
@@ -2933,7 +2989,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
           persist(); renderList(); renderSlots(); if (last) renderResult();
         }
       }
-      toast(`整理完成：合併了 ${res.items} 樣東西、${res.cats} 個分類，移動了 ${res.moved} 樣東西的分類${doStar ? `，換了 ${res.stars} 樣的星星` : ''}`);
+      toast(`整理完成：合併了 ${res.items} 樣東西、${res.cats} 個分類，移動了 ${res.moved} 樣東西的分類${doStar ? `，換了 ${res.stars} 樣的星星` : ''}${doRecat ? `，照新分類換了 ${res.recat} 樣` : ''}`);
     } catch(e){
       if (!e.cancelled) toast(`整理到一半停下來了（已整理的有存起來）：${e.message}`, true);
       else toast('整理停下來了（已整理的有存起來）', true);

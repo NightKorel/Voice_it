@@ -26,7 +26,7 @@ function answerFor(pr){
   const item = n => ({name:n, emoji:'🧪', proper:false, desc:'測試用的東西', rarity:3, category:'物品', sub:'', color:'#44aa66'});
   if (js.includes('"parts"')) return {parts:[item('巡檢零件' + (++uid)), item('巡檢零件' + (++uid))]};
   if (js.includes('"bases"')) return {cats:['巡檢角色', '巡檢地點', '巡檢道具'], bases:[item('巡檢起點甲'), item('巡檢起點乙'), item('巡檢起點丙')]};
-  for (const k of ['groups', 'merges', 'moves', 'stars', 'subs']) if (js.includes(`"${k}"`)) return {[k]:[]};
+  for (const k of ['groups', 'merges', 'moves', 'stars', 'subs', 'cats']) if (js.includes(`"${k}"`)) return {[k]:[]};
   if (js.includes('"name"')) return item('巡檢結果' + (++uid));
   return {desc:'重寫的介紹', rarity:2, category:'物品', sub:'', color:'#446688'};
 }
@@ -108,6 +108,7 @@ function answerFor(pr){
     await tap('#cattabs .cattab:has-text("新分類")'); await p.fill('#nc-name', '巡檢類'); await tap('#nc-add');
   });
   await step('整理（四項全勾）', async () => { await tap('#btn-reorg'); await p.check('#rg-star'); await tap('#rg-go'); await p.waitForTimeout(400); });
+  await step('整理：重新設計分類', async () => { await tap('#btn-reorg'); await p.uncheck('#rg-items'); await p.uncheck('#rg-star'); await p.check('#rg-recat'); await tap('#rg-go'); await p.waitForTimeout(400); });
   await step('統計', async () => { await tap('#btn-stats'); });
   await step('設定每個選項', async () => {
     await tap('#btn-settings');
