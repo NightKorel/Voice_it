@@ -937,7 +937,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.17';
+  const VERSION = '0.1.18';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2196,7 +2196,10 @@ ${themeRule()}規則：
   // 隨機：從清單「目前看得到的」東西裡抽兩或三樣（每格各抽各的，所以可能重複），換掉槽位裡原本的
   $('btn-random').onclick = () => {
     if (busy) return;
-    const pool = shownNames.length ? shownNames : Object.keys(save.items);
+    const all = shownNames.length ? shownNames : Object.keys(save.items);
+    // 專有名詞不抽（納可 2026-09-29）；只剩專有名詞時（例如點了「專有名詞」標籤）才照樣抽
+    const plain = all.filter(n => !tagsOf(save.items[n]).includes(PROPER_CAT));
+    const pool = plain.length >= 2 ? plain : all;
     // 釘住的留著，只抽其他格；總數還是兩或三樣
     clearUnpinned();
     const keep = filled().length;

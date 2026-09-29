@@ -102,7 +102,7 @@ function answerFor(pr){
   });
   await step('萃取', async () => { await clear(); await tap('#list .litem:has-text("測試甲")'); await tap('#btn-extract'); await p.waitForTimeout(300); });
   await step('隨機、釘子、清空', async () => {
-    for (let i = 0; i < 30; i++){ await tap('#btn-random'); const s = await p.$$eval('.slot.filled .nm, .slot.filled', x => x.map(e => e.textContent)); if (new Set(s).size !== s.length) throw new Error('隨機抽到重複的'); }
+    for (let i = 0; i < 30; i++){ await tap('#btn-random'); const s = await p.$$eval('.slot.filled .nm, .slot.filled', x => x.map(e => e.textContent)); if (new Set(s).size !== s.length) throw new Error('隨機抽到重複的'); if (s.some(t => /皮卡丘|哈利波特/.test(t))) throw new Error('隨機抽到專有名詞'); }
     await tap('#btn-random'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); });
   await step('舊存檔搬家（生物→動物、子分類清掉、內建的有多個標籤）', async () => {
     const s = await p.evaluate(() => JSON.parse(localStorage.getItem('wuxian_save_v1')));
