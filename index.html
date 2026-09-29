@@ -900,7 +900,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.6';
+  const VERSION = '0.1.7';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -4098,6 +4098,7 @@ ${DETAIL_RULES(['你自己在 cats 裡定的分類'])}`, BASES_SCHEMA());
     $('fm-cancel').onclick = () => $('reorg').classList.remove('open');
     $('fm-apply').onclick = () => {
       snapshot(opt.lab ? `併入專案 ${opt.lab}` : '合併朋友的存檔');
+      const myCats = new Set([...catCounts().map(([c]) => c), ...save.userCats, PROPER_CAT]);  // 合併前你有的分類
       const pickItems = itemRows.filter(r => r.cb.checked).map(r => r.name);
       const pickRecipes = new Set(recipeRows.filter(r => r.cb.checked).map(r => r.k));
       $('reorg').classList.remove('open');
@@ -4122,7 +4123,57 @@ ${DETAIL_RULES(['你自己在 cats 裡定的分類'])}`, BASES_SCHEMA());
       fillBase(save);
       persist(); renderList(); renderSlots();
       toast(pickItems.length || added ? `加入了 ${pickItems.length} 樣東西、${added} 條配方` : '什麼都沒有加');
+      // 朋友的分類你這邊沒有（納可 2026-09-29）：問要不要請 AI 把那些東西分進你現有的分類
+      const strange = pickItems.filter(n => save.items[n] && save.items[n].cat && !myCats.has(save.items[n].cat));
+      if (strange.length){
+        const sc = [...new Set(strange.map(n => save.items[n].cat))];
+        if (confirm(`${from}裡有 ${strange.length} 樣東西，放在你這邊沒有的分類：${sc.slice(0, 8).join('、')}${sc.length > 8 ? '……' : ''}。\n\n要請 AI 把它們分進你現有的分類嗎？（只給 AI 名字，最後會一樣一樣問你）\n\n按「取消」就維持原樣，這些分類會直接加進你的分類。`))
+          assignToMyCats(strange, [...myCats]);
+      }
     };
+  }
+  // 把一些東西分進指定的分類清單：分批只給名字，最後勾選確認；換了就算 AI 分的（整理時可以再動）
+  async function assignToMyCats(names, cats){
+    if (reorging){ toast('正在整理，等整理完再分', true); return; }
+    if (!aiReady()) return;
+    const parts = chunk(names, RECAT_BATCH);
+    reorging = true; freshAI(); aiTimeout = 40000;
+    const moves = new Map();
+    try {
+      for (let i = 0; i < parts.length; i++){
+        if (i && prefs.ai !== 'manual') await sleep(4000);
+        checkStop();
+        askStep = parts.length > 1 ? `分進你的分類：第 ${i + 1} 次，共 ${parts.length} 次` : '';
+        toast(parts.length > 1 ? `請 AI 分類中（${i + 1}/${parts.length}）……` : '請 AI 分類中……');
+        const o = await ask(
+`你是遊戲圖鑑的分類整理員。分類只有這些：${cats.join('、')}。
+下面是一些東西的名字，用「、」隔開：
+${parts[i].join('、')}
+
+任務：把每樣東西放進最合適的分類。
+輸出 moves 陣列，每樣都要列，每一筆是 {"name":"東西名稱","category":"分類"}。
+- name 必須一字不差地從上面抄。category 只能從上面的分類選。
+- 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」；神話、傳說裡有名字的特定神祇、人物、地方、建築（例如宙斯、萬神殿）也是。
+範例：{"moves":[{"name":"${parts[i][0]}","category":"${cats[0]}"}]}`, MOVE_SCHEMA);
+        for (const m of o.moves || []){
+          const name = String(m.name || '').trim(), it = save.items[name], c = cleanCat(m.category, CAT_MAX_USER);
+          if (it && cats.includes(c) && it.cat !== c) moves.set(name, c);
+        }
+      }
+      if (!moves.size){ toast('AI 沒給出建議，這些東西維持原本的分類'); return; }
+      const picks = await review({title:'要把朋友的東西分進你的分類嗎？', apply:'換勾選的', skip:'都不要換',
+        desc:'AI 建議把這些東西放進你現有的分類。勾選的才會換，右邊也可以自己改；沒勾的維持朋友原本的分類。',
+        rows:[...moves].map(([n, c]) => ({key:n, label:`${save.items[n].emoji} ${n}（${save.items[n].cat}）`, arrow:'改放到', value:c,
+          options:cats.map(x => ({value:x, label:x}))}))});
+      let n = 0;
+      for (const p of picks){ const it = save.items[p.key]; if (it && it.cat !== p.value){ it.cat = p.value; delete it.catLocked; n++; } }
+      persist(); renderList();
+      toast(`換好 ${n} 樣的分類了`);
+    } catch(e){
+      toast(e.cancelled ? '分類停下來了，還沒換的維持原本的分類' : `分類停下來了：${e.message}`, true);
+    } finally {
+      reorging = false; aiTimeout = 20000; askStep = '';
+    }
   }
 
   $('btn-reset').onclick = () => {
