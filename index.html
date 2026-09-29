@@ -393,6 +393,19 @@
   /* 視窗開場淡入 */
   #modal.open .box,#reorg.open .box,#manual.open .box{animation:rise .22s ease-out}
   @keyframes rise{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+  /* 常用介面的細節（2026-09-29）：都是很淡的差別，不加動畫 */
+  /* 清單的東西、按鈕：上緣一點點亮，看起來有厚度 */
+  .litem,.btn:not(.primary),.cattab:not(.on),.chipbtn:not(.on){background-image:linear-gradient(to bottom, rgba(255,255,255,.03), transparent 60%)}
+  :root[data-theme="light"] .litem,:root[data-theme="light"] .btn:not(.primary){background-image:linear-gradient(to bottom, rgba(255,255,255,.7), transparent 60%)}
+  /* 標籤上的數量淡一點，數字等寬不會跳 */
+  .cattab .n{opacity:.6;font-variant-numeric:tabular-nums}
+  .cattab.on .n{opacity:.75}
+  #count b,#btn-goals,#f-unext{font-variant-numeric:tabular-nums}
+  /* 清單上方的小按鈕和標籤：指上去有反應 */
+  .chipbtn{transition:border-color .12s,color .12s}
+  .chipbtn:hover:not(:disabled):not(.on){border-color:var(--accent);color:var(--text)}
+  /* 輸入框按下去時外圈淡淡的光 */
+  #search:focus,.favnew input:focus,#c-catin:focus,#c-subin:focus{box-shadow:0 0 0 3px var(--accent-soft)}
   /* 手機：清單多分一點空間，工作台縮一點 */
   @media (max-width:700px){
     #side{height:52%}
@@ -780,7 +793,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.74';
+  const VERSION = '0.0.75';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -1053,7 +1066,7 @@
     if (folderFilter && !save.folders.some(f => f.name === folderFilter)) folderFilter = '';
     for (const f of save.folders){
       const b = document.createElement('button'); b.className = 'cattab fav' + (folderFilter === f.name ? ' on' : '');
-      b.textContent = `★ ${f.name} ${f.items.length}`;
+      tabLabel(b, `★ ${f.name} ${f.items.length}`);
       b.onclick = () => { folderFilter = folderFilter === f.name ? '' : f.name; renderList(); list.scrollTop = 0; };
       box.append(b);
     }
@@ -1197,6 +1210,12 @@
     const pos = c => { const i = order.indexOf(c); return i < 0 ? 1e6 : i; };
     return [...m].sort((a, b) => pos(a[0]) - pos(b[0]) || b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hant'));
   }
+  // 標籤文字：最後的數量另外包一層，顏色淡一點（「自然 21」的 21）
+  function tabLabel(b, label){
+    const m = /^(.*) (\d+)$/.exec(label);
+    b.textContent = m ? m[1] + ' ' : label;
+    if (m){ const n = document.createElement('span'); n.className = 'n'; n.textContent = m[2]; b.append(n); }
+  }
   // 分類標籤：點一下只看那一類；「我的」是玩家自己設定的東西
   let catFilter = '';
   const MINE = '__mine__';
@@ -1206,7 +1225,7 @@
     box.textContent = '';
     const tab = (value, label) => {
       const b = document.createElement('button'); b.className = 'cattab' + (catFilter === value ? ' on' : '');
-      b.textContent = label;
+      tabLabel(b, label);
       b.onclick = () => { if (catDragEnd > Date.now() - 300) return; catFilter = catFilter === value ? '' : value; subFilter = ''; renderList(); list.scrollTop = 0; };  // 再按一次回到全部
       if (value && value !== MINE){ b.dataset.cat = value; b.title = '長按可以左右拖曳排順序'; b.addEventListener('pointerdown', e => catDragDown(e, b)); }
       box.append(b);
@@ -1251,7 +1270,7 @@
     box.textContent = '';
     const tab = (value, label) => {
       const b = document.createElement('button'); b.className = 'cattab' + (subFilter === value ? ' on' : '');
-      b.textContent = label;
+      tabLabel(b, label);
       b.onclick = () => { subFilter = subFilter === value ? '' : value; renderList(); list.scrollTop = 0; };
       box.append(b);
     };
@@ -2991,7 +3010,11 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     const band = $('c-band');
     const bc = hexToHsl(it.color);
     band.style.cssText = '';
-    if (bc){ paint(band, it); band.style.borderBottomWidth = '3px'; band.style.boxShadow = ''; }
+    if (bc){
+      paint(band, it); band.style.borderBottomWidth = '3px'; band.style.boxShadow = '';
+      // emoji 後面淡淡暈開它自己的代表色；五星多一點點
+      band.style.background = `radial-gradient(ellipse at 50% 55%, hsl(${bc.h} ${Math.max(bc.s, 30)}% 55% / ${it.rarity >= 5 ? .24 : .13}), transparent 70%), var(--chip)`;
+    }
     const rr = $('c-rarity'); rr.textContent = '';
     if (it.rarity){
       const dots = document.createElement('span'); dots.className = 'dots';
