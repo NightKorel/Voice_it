@@ -811,6 +811,9 @@
     <div class="setrow"><span class="lbl">來源</span>
       <div class="seg" id="seg-ai"><button data-v="gemini">Gemini</button><button data-v="openrouter">OpenRouter</button><button data-v="manual">手動複製貼上</button></div></div>
     <p class="muted">手動：每次需要 AI 時會跳出一段問題，你複製去問任何 AI，再把回答貼回來。自動的 AI 太忙或次數用完時，也會問你要不要改用手動。</p>
+    <div class="setrow"><span class="lbl">隨機程度</span>
+      <div class="seg" id="seg-temp"><button data-v="0.5">穩定 0.5</button><button data-v="0.6">適中 0.6</button><button data-v="0.7">多變 0.7</button></div></div>
+    <p class="muted">越多變，合出來的結果越常出乎意料；越穩定，越常是大家想得到的答案。只對 Gemini 和 OpenRouter 有用，手動模式是看你貼去的那個 AI。</p>
     <p class="muted">鑰匙：來源選 Gemini 或 OpenRouter 時才需要。鑰匙只存在這台裝置的這個瀏覽器裡，不會上傳到任何地方；換手機或換瀏覽器要重新貼一次。</p>
     <h3>Gemini 鑰匙</h3>
     <p>用 Google 的 Gemini 免費方案來想「合出來是什麼」。你需要一把自己的鑰匙（API key），免費、不用綁信用卡。</p>
@@ -852,7 +855,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.79';
+  const VERSION = '0.0.80';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2417,6 +2420,8 @@ ${themeRule()}${DETAIL_RULES()}`;
   // 開始一件新的 AI 工作前，換一個新的開關（上一次按過停止不會影響這次）
   function freshAI(){ if (aiCtl.signal.aborted) aiCtl = new AbortController(); }
 
+  // 隨機程度（溫度）：玩家在設定裡選 0.5／0.6／0.7（納可 2026-09-29 定範圍），預設 0.7
+  const aiTemp = () => { const t = parseFloat(prefs.temp); return t >= 0.5 && t <= 0.7 ? t : 0.7; };
   async function ask(prompt, props){
     checkStop();
     if (prefs.ai === 'manual') return manualAsk(prompt, props);
@@ -2494,7 +2499,7 @@ ${themeRule()}${DETAIL_RULES()}`;
           body:JSON.stringify({
             contents:[{role:'user', parts:[{text:prompt}]}],
             generationConfig:{
-              temperature:0.7,
+              temperature:aiTemp(),
               responseMimeType:'application/json',
               responseSchema:{type:'OBJECT', properties:props, required:Object.keys(props)}
             }
@@ -2543,7 +2548,7 @@ ${themeRule()}${DETAIL_RULES()}`;
         resp = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
           method:'POST',
           headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + getOrKey(), 'X-Title':'1+1=?'},
-          body:JSON.stringify({model, temperature:0.7, messages:[{role:'user', content:full}]})
+          body:JSON.stringify({model, temperature:aiTemp(), messages:[{role:'user', content:full}]})
         });
       } catch(e){ if (e.cancelled) throw e; lastErr = e.busy ? e : new Error('連不上 OpenRouter'); lastErr.busy = true; continue; }
       if (resp.status === 401 || resp.status === 403){ throw new Error('OpenRouter 鑰匙好像不對，到設定檢查一下'); }
@@ -3902,8 +3907,8 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
   };
 
   // ---------- 外觀與 AI 來源 ----------
-  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-lite','lite'], ['seg-border','border'], ['seg-fold','fold'], ['seg-folddays','foldDays'], ['seg-ai','ai']];
-  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7', trimN:300, lite:'off'};
+  const SEGS = [['seg-theme','theme'], ['seg-font','font'], ['seg-motion','motion'], ['seg-lite','lite'], ['seg-border','border'], ['seg-fold','fold'], ['seg-folddays','foldDays'], ['seg-ai','ai'], ['seg-temp','temp']];
+  let prefs = {theme:'dark', scale:1, font:'sans', motion:'on', ai:'gemini', sidew:50, border:'thick', sort:'new', fold:'on', foldDays:'7', trimN:300, lite:'off', temp:'0.7'};
   try { Object.assign(prefs, JSON.parse(store.get(PREF_KEY)) || {}); } catch(e){}
   delete prefs.reroll;
   // AI 來源也記在存檔裡（save.meta.ai）：換裝置、加到主畫面後匯入存檔，照樣是原本的來源，手動就不會一直問鑰匙
