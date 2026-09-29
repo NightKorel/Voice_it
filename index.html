@@ -876,7 +876,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.82';
+  const VERSION = '0.0.83';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -3114,6 +3114,7 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     store.set(WORLD_KEY, id || '');
     const lx = id && labIndex.find(l => l.id === id); if (lx){ lx.played = Date.now(); saveIndex(); }  // 排序「最近玩過」用
     last = null; resetSlots();
+    if (selectMode) setSelectMode(false);  // 多選勾的是另一個世界的東西，切換時一起取消
     catFilter = ''; subFilter = ''; folderFilter = ''; filterUnext = false; foldOpen = false;
     $('f-unext').classList.remove('on'); $('search').value = '';
     renderWorld(); renderList(); renderSlots(); renderResult(); renderBackup(); renderSnap();

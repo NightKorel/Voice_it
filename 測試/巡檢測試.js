@@ -1,0 +1,152 @@
+// 巡檢測試：模擬手機（有分享功能），用手動模式自動回答 AI，走過大部分功能，收集所有錯誤。
+// 用法（在 repo 根目錄）：
+//   python3 -m http.server 8765 &
+//   node 測試/巡檢測試.js              （手機）
+//   DESKTOP=1 node 測試/巡檢測試.js    （電腦，會多測快捷鍵）
+// 每一步印「✓／✗ 步驟名」，最後列出所有錯誤；有錯就回傳失敗。
+const path = require('path'), fs = require('fs'), os = require('os'), { execSync } = require('child_process');
+const { chromium } = require(path.join(execSync('npm root -g').toString().trim(), 'playwright'));
+const URL = process.env.URL || 'http://localhost:8765/index.html';
+const PHONE = process.env.DESKTOP ? false : true;
+const vm = require('vm');
+const ctxS = {window:{}}; vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'starter.js'), 'utf8'), ctxS);
+const ST = ctxS.window.STARTER;
+
+// 一份「玩了一陣子」的存檔：內建圖鑑前 60 樣、幾樣專有名詞、收藏夾、目標
+const items = {'水':{emoji:'💧',t:0},'火':{emoji:'🔥',t:1},'風':{emoji:'🌬️',t:2},'土':{emoji:'🌍',t:3}};
+let t = 10;
+for (const [n, d] of Object.entries(ST.items).slice(0, 60)) items[n] = {emoji:d[0], desc:d[1], rarity:d[2], cat:d[3], color:d[4], t:t++};
+Object.assign(items, {'皮卡丘':{emoji:'⚡',desc:'電氣鼠',rarity:2,cat:'專有名詞',sub:'角色',color:'#f2d330',t:t++}, '哈利波特':{emoji:'🧙',desc:'巫師',rarity:2,cat:'專有名詞',color:'#553322',t:t++}, '測試甲':{emoji:'🅰️',desc:'a',rarity:1,cat:'物品',color:'#888888',t:t++}, '測試乙':{emoji:'🅱️',desc:'b',rarity:1,cat:'物品',color:'#888888',t:t++}});
+const recipes = {}; for (const [a, b, r] of ST.recipes) if (items[a] && items[b] && items[r]) recipes[[a, b].sort().join('+')] = [r];
+const SAVE = {items, recipes, extracts:{}, folders:[{name:'喜歡', items:['皮卡丘']}], userCats:[], goals:[{name:'彩虹', t:1}], meta:{ai:'manual'}};
+
+let uid = 0;
+function answerFor(pr){
+  const js = pr.slice(pr.lastIndexOf('【回答格式】'));
+  const item = n => ({name:n, emoji:'🧪', proper:false, desc:'測試用的東西', rarity:3, category:'物品', sub:'', color:'#44aa66'});
+  if (js.includes('"parts"')) return {parts:[item('巡檢零件' + (++uid)), item('巡檢零件' + (++uid))]};
+  if (js.includes('"bases"')) return {bases:[item('巡檢起點甲'), item('巡檢起點乙'), item('巡檢起點丙')]};
+  for (const k of ['groups', 'merges', 'moves', 'stars', 'subs']) if (js.includes(`"${k}"`)) return {[k]:[]};
+  if (js.includes('"name"')) return item('巡檢結果' + (++uid));
+  return {desc:'重寫的介紹', rarity:2, category:'物品', sub:'', color:'#446688'};
+}
+
+(async () => {
+  const b = await chromium.launch();
+  const ctx = await b.newContext({viewport: PHONE ? {width:390, height:844} : {width:1280, height:800}, acceptDownloads:true});
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', e => errs.push(e.message));
+  p.on('dialog', d => d.type() === 'prompt' ? d.accept('巡檢改名') : d.accept());
+  await p.addInitScript(([phone, save]) => {
+    if (phone){ navigator.share = async () => {}; navigator.canShare = () => true; }
+    if (!localStorage.getItem('wuxian_prefs')){ localStorage.setItem('wuxian_prefs', JSON.stringify({ai:'manual'})); localStorage.setItem('wuxian_save_v1', save); }
+  }, [PHONE, JSON.stringify(SAVE)]);
+  // 手動視窗一打開就自動回答
+  let answering = false;
+  const autoAnswer = async () => {
+    if (answering) return; answering = true;
+    try {
+      for (let i = 0; i < 20; i++){
+        const open = await p.$eval('#manual', e => e.classList.contains('open')).catch(() => false);
+        if (!open) break;
+        const pr = await p.$eval('#m-prompt', e => e.value);
+        await p.fill('#m-answer', JSON.stringify(answerFor(pr)));
+        await p.click('#m-ok'); await p.waitForTimeout(250);
+      }
+    } finally { answering = false; }
+  };
+  const closeAll = () => p.evaluate(() => { for (const id of ['modal', 'reorg', 'card']) document.getElementById(id).classList.remove('open'); });
+  const results = [];
+  const step = async (name, fn) => {
+    const before = errs.length;
+    try { await fn(); await autoAnswer(); await p.waitForTimeout(150); results.push([errs.length === before, name]); }
+    catch(e){ const loc = (e.message.match(/waiting for (locator\([^\n]*\))/) || [])[1] || ''; results.push([false, `${name}（${e.message.split('\n')[0]} ${loc}）`]); }
+    await closeAll();
+  };
+  const tap = async sel => { try { await p.click(sel, {timeout:3000}); } catch(e){
+    const info = await p.evaluate(sel => { const el = document.querySelector(sel.replace(/ >> nth=\d+/, '').replace(/:has-text\([^)]*\)/, '')); if (!el) return '找不到'; const r = el.getBoundingClientRect(); const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return `disabled=${el.disabled} hidden=${el.hidden || !el.offsetParent} 蓋住的是=${top && (top.id || top.className)}`; }, sel).catch(() => '');
+    throw new Error(`點不到 ${sel}：${info}`); } };
+  const clear = async () => { if (await p.$eval('#btn-clearslots', e => !e.disabled)) await tap('#btn-clearslots'); };
+  const card = n => p.click(`#list .litem:has-text("${n}")`, {button:'right', timeout:3000});
+
+  await step('開場', async () => { await p.goto(URL); await p.waitForTimeout(900); if (!(await p.$eval('#count', e => e.textContent))) throw new Error('清單沒出來'); });
+  await step('合成（問 AI）', async () => { await tap('#list .litem:has-text("測試甲")'); await tap('#list .litem:has-text("測試乙")'); await tap('#btn-craft'); await p.waitForTimeout(300); });
+  await step('真的嗎', async () => { await tap('#btn-really'); await p.waitForTimeout(300); });
+  await step('內建配方合成', async () => { await clear(); await tap('#list .litem:has-text("水") >> nth=0'); await tap('#list .litem:has-text("火") >> nth=0'); await tap('#btn-craft'); });
+  await step('萃取', async () => { await clear(); await tap('#list .litem:has-text("測試甲")'); await tap('#btn-extract'); await p.waitForTimeout(300); });
+  await step('隨機、釘子、清空', async () => { await tap('#btn-random'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); await p.click('.slot .pin >> nth=0'); await tap('#btn-clearslots'); });
+  await step('卡片、收藏、改分類、子分類', async () => {
+    await card('皮卡丘'); await tap('#c-fav'); await p.fill('#c-favname', '巡檢夾'); await tap('#c-favadd');
+    await tap('#c-cat'); await p.fill('#c-subin', '巡檢子類'); await tap('#c-catok');
+    await tap('#c-redesc'); await p.waitForTimeout(300);
+  });
+  await step('卡片路線、刪除東西', async () => { await card('測試乙'); await tap('#c-del'); await p.waitForTimeout(200); });
+  await step('搜尋、排序、篩選', async () => {
+    await p.fill('#search', '水'); await p.waitForTimeout(300); await p.fill('#search', ''); await p.waitForTimeout(250);
+    for (const v of await p.$$eval('#sort option', x => x.map(o => o.value))) await p.selectOption('#sort', v);
+    await tap('#f-unext'); await tap('#f-unext');
+    await tap('#cattabs .cattab:has-text("專有名詞")'); await tap('#subtabs .cattab >> nth=1'); await tap('#cattabs .cattab:has-text("我的")'); await tap('#favtabs .cattab >> nth=0');
+  });
+  await step('請 AI 分子分類', async () => { await tap('#cattabs .cattab:has-text("專有名詞")'); await tap('#subtabs .cattab.ai'); await p.waitForTimeout(300); });
+  await step('多選改分類、加收藏夾', async () => {
+    if (await p.$('#favtabs .cattab.on')) await tap('#favtabs .cattab.on');  // 收藏夾篩選關掉
+    await tap('#cattabs .cattab:has-text("全部")'); await tap('#btn-select'); await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1');
+    await tap('#sel-cat'); await tap('#sc-list .rg-row:not(.pk-sub):has-text("物品")');
+    await tap('#btn-select'); await tap('#list .litem >> nth=0'); await tap('#sel-fav'); await tap('#pk-list .rg-row >> nth=0'); await tap('#sel-done').catch(() => {});
+  });
+  await step('目標本', async () => { await tap('#btn-goals'); await p.fill('#gl-name', '巡檢目標'); await tap('#gl-add'); await tap('#gl-list .gl-row button >> nth=0'); });
+  await step('管理分類、新分類', async () => {
+    await tap('#btn-catorder'); await tap('#co-list .co-row:not(.co-sub) button:has-text("↓") >> nth=0'); await tap('#co-list .co-row:not(.co-sub) button:has-text("✎") >> nth=1');
+    await tap('#co-list .co-sub button:has-text("✎") >> nth=0').catch(() => {}); await tap('#co-done');
+    await tap('#cattabs .cattab:has-text("新分類")'); await p.fill('#nc-name', '巡檢類'); await tap('#nc-add');
+  });
+  await step('整理（四項全勾）', async () => { await tap('#btn-reorg'); await p.check('#rg-star'); await tap('#rg-go'); await p.waitForTimeout(400); });
+  await step('統計', async () => { await tap('#btn-stats'); });
+  await step('設定每個選項', async () => {
+    await tap('#btn-settings');
+    for (const seg of ['seg-theme', 'seg-font', 'seg-motion', 'seg-lite', 'seg-border', 'seg-fold', 'seg-folddays', 'seg-temp'])
+      for (const btn of await p.$$(`#${seg} button`)) await btn.click();
+    await p.click('#adv summary'); await tap('#adv-tpl .btn >> nth=2'); await tap('#adv-save');
+  });
+  let file = path.join(os.tmpdir(), 'xunjian.json');
+  await step('下載存檔（連專案）', async () => {
+    await tap('#btn-settings'); await p.check('#ex-labs').catch(() => {});
+    const [dl] = await Promise.all([p.waitForEvent('download'), tap('#btn-export')]); await dl.saveAs(file);
+  });
+  if (PHONE) await step('分享存檔', async () => { await tap('#btn-settings'); await tap('#btn-share'); });  // 電腦沒有分享功能，按鈕本來就藏起來
+  await step('部分匯出', async () => { await tap('#btn-settings'); await tap('#btn-partial'); await p.check('#px-cats input >> nth=0'); const [dl] = await Promise.all([p.waitForEvent('download'), tap('#px-dl')]); });
+  await step('實驗室：開專案、合成、編輯', async () => {
+    await tap('#btn-lab'); await tap('#wl-new'); await p.fill('#nl-theme', '巡檢主題'); await tap('#nl-gen'); await autoAnswer(); await tap('#nl-start'); await p.waitForTimeout(300);
+    await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1'); await tap('#btn-craft'); await autoAnswer();
+    await tap('#btn-lab'); await tap('#wl-list .wl-row.here button:has-text("編輯")'); await p.fill('#el-prompt', '巡檢補充'); await tap('#el-save');
+  });
+  await step('實驗室：擋住的操作、回我的世界、併入、封存、還原', async () => {
+    await tap('#btn-settings'); await tap('#btn-import'); await closeAll();
+    await tap('#wb-home'); await p.waitForTimeout(200);
+    await tap('#btn-lab'); await tap('#wl-list .wl-row:has-text("巡檢主題") button:has-text("併入")'); await tap('#fm-apply');
+    await tap('#btn-lab'); await tap('#wl-list .wl-row:has-text("巡檢主題") button:has-text("封存")');
+    await tap('#wl-list .foldbar'); await tap('#wl-list .wl-row:has-text("巡檢主題") button:has-text("還原")');
+  });
+  await step('合併朋友的存檔（含專案）', async () => {
+    await tap('#btn-settings'); const [fc] = await Promise.all([p.waitForEvent('filechooser'), tap('#btn-merge')]); await fc.setFiles(file); await p.waitForTimeout(400);
+    await tap('#fm-apply').catch(() => {});
+  });
+  await step('匯入存檔、復原', async () => {
+    await tap('#btn-settings'); const [fc] = await Promise.all([p.waitForEvent('filechooser'), tap('#btn-import')]); await fc.setFiles(file); await p.waitForTimeout(400);
+    await closeAll(); await tap('#btn-settings'); await tap('#btn-undo'); await p.waitForTimeout(300);
+  });
+  await step('自己設定東西（我的）', async () => {
+    await tap('#cattabs .cattab:has-text("我的")'); await tap('#list .litem >> nth=0'); await p.fill('#mn-name', '巡檢我的'); await p.fill('#mn-desc', '我自己的'); await tap('#mn-save');
+  });
+  await step('重新整理後還正常', async () => { await p.reload(); await p.waitForTimeout(900); if (!(await p.$eval('#count', e => e.textContent))) throw new Error('清單沒出來'); });
+  if (!PHONE) await step('電腦快捷鍵', async () => { for (const k of ['1', '2', 'Enter', 'Escape', 'r', 'Delete']) await p.keyboard.press(k); });
+
+  const crash = await p.$eval('#crash', e => e.textContent).catch(() => '');
+  for (const [ok, name] of results) console.log(`${ok ? '✓' : '✗'} ${name}`);
+  if (crash) console.log('錯誤訊息條：' + crash);
+  console.log(errs.length ? '錯誤：\n  ' + [...new Set(errs)].join('\n  ') : '沒有錯誤');
+  await b.close();
+  process.exit(errs.length || results.some(r => !r[0]) ? 1 : 0);
+})();
