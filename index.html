@@ -142,6 +142,9 @@
   .favnew input:focus{border-color:var(--accent)}
   #c-favlist{display:flex;flex-wrap:wrap;gap:.35rem}
   .cattab.fav{color:var(--accent)}
+  .rg-row[hidden],.fm-cats[hidden]{display:none}
+  .fm-cats{display:flex;flex-wrap:wrap;gap:.35rem .8rem;margin:.3rem 0 .6rem}
+  .fm-cats label{display:inline-flex;align-items:center;gap:.3rem;font-size:.88rem;cursor:pointer}
   .cattab[data-cat]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
   .cattab.dragging{border-color:var(--accent);color:var(--text);transform:scale(1.12);box-shadow:var(--lift);position:relative;z-index:2}
   .cattab.fav.on{color:var(--on-accent)}
@@ -584,6 +587,9 @@
         <button class="btn" id="fm-all">全選</button>
         <button class="btn" id="fm-none">全不選</button>
       </div>
+      <h3 id="fm-h-cats">依分類</h3>
+      <p class="muted" id="fm-cats-note">取消勾選的分類，那一類的東西全部不加（下面的清單也會藏起來）。</p>
+      <div id="fm-cats" class="fm-cats"></div>
       <h3 id="fm-h-items">你沒有的東西</h3>
       <div id="fm-items" class="rg-list"></div>
       <h3 id="fm-h-recipes">你已有東西的新配方</h3>
@@ -729,7 +735,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.67';
+  const VERSION = '0.0.68';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -3001,13 +3007,27 @@ ${lines}
       const it = fr.items[n];
       const ways = newRecipes.filter(k => fr.recipes[k][0] === n).map(k => k.split('+').join('＋'));
       const sub = [it.rarity ? `${stars(it.rarity)} ${RARITY[it.rarity - 1]}` : '', it.desc || '', ways.length ? `煉法：${ways.join('、')}` : ''].filter(Boolean).join('　');
-      itemRows.push({name:n, cb:row($('fm-items'), `${it.emoji || '❓'} ${n}`, sub)});
+      const cb = row($('fm-items'), `${it.emoji || '❓'} ${n}`, sub);
+      itemRows.push({name:n, cb, cat:it.cat || '未分類', rowEl:cb.parentElement});
     }
+    // 依分類勾選：預設全勾；取消一個分類＝那類的東西全部不勾、清單裡藏起來
+    const catBox = $('fm-cats'); catBox.textContent = '';
+    const catN = new Map();
+    for (const r of itemRows) catN.set(r.cat, (catN.get(r.cat) || 0) + 1);
+    const catCbs = [];
+    for (const [c, n] of [...catN].sort((a, b) => b[1] - a[1])){
+      const l = document.createElement('label');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true;
+      cb.onchange = () => itemRows.filter(r => r.cat === c).forEach(r => { r.cb.checked = cb.checked; r.rowEl.hidden = !cb.checked; });
+      l.append(cb, `${c} ${n}`);
+      catBox.append(l); catCbs.push(cb);
+    }
+    $('fm-h-cats').hidden = $('fm-cats-note').hidden = catBox.hidden = catN.size < 2;
     for (const k of newRecipes.filter(k => !tied(k))) recipeRows.push({k, cb:row($('fm-recipes'), recipeText(k))});
     $('fm-h-items').hidden = $('fm-items').hidden = !itemRows.length;
     $('fm-h-recipes').hidden = $('fm-recipes').hidden = !recipeRows.length;
     $('fm-summary').textContent = `${raw.exportedAt ? `這份存檔的時間：${timeText(raw.exportedAt)}。` : ''}朋友的存檔裡有 ${newItems.length} 樣你沒有的東西、${newRecipes.length} 條你沒有的配方${conflicts ? `，另外有 ${conflicts} 條配方跟你的不一樣（一律保留你的）` : ''}。勾選想加入的：`;
-    const all = v => [...itemRows, ...recipeRows].forEach(r => r.cb.checked = v);
+    const all = v => { [...itemRows, ...recipeRows].forEach(r => r.cb.checked = v); catCbs.forEach(cb => cb.checked = v); itemRows.forEach(r => r.rowEl.hidden = !v); };
     $('fm-all').onclick = () => all(true);
     $('fm-none').onclick = () => all(false);
     showPanel('rg-friend');
