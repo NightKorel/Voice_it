@@ -137,7 +137,7 @@ function answerFor(pr){
     await tap('#btn-lab'); await tap('#wl-new'); await p.fill('#nl-theme', '巡檢主題'); await tap('#nl-gen'); await autoAnswer(); await tap('#nl-start'); await p.waitForTimeout(300);
     await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1'); await tap('#btn-craft');
     await p.waitForSelector('#manual.open', {state:'attached', timeout:3000});
-    if (!(await p.$eval('#m-prompt', e => e.value)).includes('優先從現有分類選一個：巡檢角色、巡檢地點、巡檢道具')) throw new Error('專案的分類沒給 AI');
+    if (!(await p.$eval('#m-prompt', e => e.value)).includes('只能從這些選一個：巡檢角色、巡檢地點、巡檢道具')) throw new Error('專案的分類沒給 AI');
     await autoAnswer();
     await tap('#btn-lab'); await tap('#wl-list .wl-row.here button:has-text("編輯")'); await p.fill('#el-prompt', '巡檢補充'); await tap('#el-save');
   });

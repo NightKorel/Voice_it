@@ -192,6 +192,7 @@
   .rg-sub{font-size:.8rem;color:var(--muted);flex-basis:100%;padding-left:1.6rem;line-height:1.5}
   #reorg h3{font-size:.92rem;color:var(--accent);margin:.9rem 0 .3rem}
   .rg-opt{display:flex;gap:.5rem;align-items:flex-start;font-size:.9rem;line-height:1.6;margin:.5rem 0;cursor:pointer}
+  .rg-opt[hidden]{display:none}
   .rg-opt input,.rg-row input{accent-color:var(--accent);margin-top:.3rem}
   #selbar{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;padding:.4rem .5rem;border:1px dashed var(--accent);border-radius:.7rem;font-size:.8rem;color:var(--muted)}
   #selbar[hidden]{display:none}
@@ -576,10 +577,10 @@
       <h2>整理</h2>
       <p>要請 AI 做哪些事？</p>
       <label class="rg-opt"><input type="checkbox" id="rg-items" checked> 找出可以合併的相似東西（例如「蒸氣」和「蒸汽」，合併前會一一問你）</label>
-      <label class="rg-opt"><input type="checkbox" id="rg-cat" checked> 合併重複、太像或太零碎的分類（合併前會一一問你）</label>
-      <label class="rg-opt"><input type="checkbox" id="rg-move" checked> 檢查每樣東西的分類對不對（換之前會一一問你；你自己分的不會動）</label>
+      <label class="rg-opt" hidden><input type="checkbox" id="rg-cat"> 合併重複、太像或太零碎的分類（大分類固定之後用不到了）</label>
+      <label class="rg-opt"><input type="checkbox" id="rg-move" checked> 檢查每樣東西的分類對不對，只看分錯的（換之前會一一問你；你自己分的不會動）</label>
       <label class="rg-opt"><input type="checkbox" id="rg-star"> 照現在的標準重新評星（以前的東西星星可能偏低；換之前會一一問你）</label>
-      <label class="rg-opt"><input type="checkbox" id="rg-recat"> 照現在的東西重新設計分類：AI 先看所有東西的名字想一套新分類（你可以改），再把每樣放進去（換之前會一一問你；你自己分的不會動）。勾了這項，上面兩項分類的整理就不用再做</label>
+      <label class="rg-opt"><input type="checkbox" id="rg-recat"> 全部照分類重新分：每樣東西都重新放進固定的分類，舊的、AI 以前亂開的分類都會清掉（只給 AI 名字；換之前會一一問你；你自己分的不會動）。勾了這項，「檢查分類」就不用再做</label>
       <p class="muted" id="rg-cost"></p>
       <div class="actions">
         <button class="btn primary" id="rg-go">開始整理</button>
@@ -900,7 +901,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.1.7';
+  const VERSION = '0.1.8';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -914,7 +915,10 @@ window.addEventListener('error', e => {
   const OR_KEY = 'wuxian_or_key';
   const API = 'https://generativelanguage.googleapis.com/v1beta';
   // 分類是活的：AI 會優先用已有的分類，都不適合才自己開新分類。一開始沒什麼分類時，拿這些當參考
-  const STARTER_CATS = ['自然','生物','植物','食物','物品','工具','地點','人物','神話','奇幻','科技','文化娛樂','概念','天文','專有名詞'];
+  // 固定的大分類（納可 2026-09-29 定）：AI 只能從這裡挑，細的放子分類；玩家自己建的分類照樣能用
+  const FIXED_CATS = ['自然','天文','物質','生物','植物','食物','物品','科技','地點','人物','神話','奇幻','文化','概念','專有名詞'];
+  const FIXED_HINT = '自然＝天氣、現象、地形、元素；天文＝星球、宇宙；物質＝金屬、石頭、玻璃、泥土這類材料；生物＝動物、微生物；食物＝吃的喝的；物品＝日用品、工具、器具；科技＝機械、電子、交通工具；地點＝地方、建築；人物＝職業、身分；神話、奇幻＝一般的種類（龍、精靈、魔法）；文化＝藝術、音樂、運動、節慶；概念＝抽象的東西（愛、時間、情緒）';
+  const OLD_CATS = {工具:'物品', 文化娛樂:'文化', 神話奇幻:'神話'};  // 舊存檔的分類自動搬
   const PROPER_CAT = '專有名詞';  // 特定角色、作品、品牌、真實存在的特定人事物，一律放這類
   // 專有名詞底下的子分類（納可 2026-09-29 要求）：存在東西的 sub 欄位，只有分類是專有名詞時才算數
   const PROPER_SUBS = ['角色','作品','真實人物','地點建築','品牌商品','其他'];
@@ -973,6 +977,26 @@ window.addEventListener('error', e => {
       s.userCats = [...new Set(s.userCats.map(ren))];
       if (Array.isArray(s.catOrder)) s.catOrder = [...new Set(s.catOrder.map(ren))];
       if (s.lab && Array.isArray(s.lab.cats)) s.lab.cats = [...new Set(s.lab.cats.map(ren))];
+    }
+    // 大分類固定（納可 2026-09-29）：我的世界裡的舊分類，對得上的自動搬（工具→物品、文化娛樂→文化），內建圖鑑照新的分類放；
+    // 其他 AI 以前開的分類先留著，用「整理」的「全部照分類重新分」再分
+    if (!s.lab){
+      const SI1 = (window.STARTER || {}).items || {};
+      const ok = new Set([...FIXED_CATS, ...s.userCats]);
+      for (const [n, it] of Object.entries(s.items)){
+        if (!it || !it.cat || ok.has(it.cat)) continue;
+        if (OLD_CATS[it.cat]) it.cat = OLD_CATS[it.cat];
+        else if (SI1[n] && !it.catLocked) it.cat = SI1[n][3];
+      }
+      // 只做一次：內建圖鑑的東西照新的分類重放（例如石頭從自然搬到物質）；之後玩家或整理改過的就不再動
+      const meta = s.meta || (s.meta = {});
+      if (!meta.fixedCats){
+        for (const [n, it] of Object.entries(s.items)) if (it && SI1[n] && !it.catLocked) it.cat = SI1[n][3];
+        meta.fixedCats = 1;
+      }
+      const mv = c => OLD_CATS[c] || c;
+      if (Array.isArray(s.catOrder)) s.catOrder = [...new Set(s.catOrder.map(mv))];
+      if (Array.isArray(s.hideCats)) s.hideCats = [...new Set(s.hideCats.map(mv))];
     }
     // 舊版的子分類順序只有專有名詞（save.subs），搬進 subMap
     if (Array.isArray(s.subs)){ s.subMap = {...(s.subMap || {}), [PROPER_CAT]:s.subs}; delete s.subs; }
@@ -2366,7 +2390,9 @@ ${parts[i].join('、')}
   const CAT_MAX_USER = 12;
   const cleanCat = (c, max = 6) => String(c || '').replace(/[\s。，！？、「」"'.,!?（）()]/g, '').slice(0, max) || '其他';
   // AI 回的東西 → 存檔用的資料；AI 標成專有名詞的，分類一律是「專有名詞」
-  const aiData = o => { const d = {emoji:o.emoji, ...cleanDetail(o)}; if (isTrue(o.proper)) d.cat = PROPER_CAT; return keepSub(d); };
+  // AI 給了不在清單裡的分類：先試舊名字對照，再不行就留空（顯示「未分類」，整理時會再分）
+  const fitCat = c => { if (!c) return ''; const ok = allowedCats(); if (ok.includes(c)) return c; const m = OLD_CATS[c]; return m && ok.includes(m) ? m : ''; };
+  const aiData = o => { const d = {emoji:o.emoji, ...cleanDetail(o)}; if (isTrue(o.proper)) d.cat = PROPER_CAT; d.cat = fitCat(d.cat); return keepSub(d); };
   // 子分類只有在專有名詞裡才留著
   // 子分類要記下是哪個分類的（subFor）；沒給就拿掉
   // AI 只能從那個分類現有的子分類裡選，選了不存在的就不算（新子分類只由「請 AI 分」或玩家自己開）
@@ -2396,15 +2422,20 @@ ${parts[i].join('、')}
     return cats.map(c => { const xs = subList(c); if (!xs.length) return '';
       return c === PROPER_CAT && subDescs('＝').length ? `「${c}」底下：${xs.join('、')}（${subDescs('＝').join('，')}）` : `「${c}」底下：${xs.join('、')}`; }).filter(Boolean).join('；');
   }
+  // 這個世界可以用的大分類：我的世界＝固定的 15 個；專案＝開專案時定的分類（沒有就用固定的）；都加上玩家自己建的
+  function allowedCats(){
+    const base = world && save.lab && Array.isArray(save.lab.cats) && save.lab.cats.length ? save.lab.cats : FIXED_CATS;
+    return [...new Set([...base, PROPER_CAT, ...(save.userCats || [])])];
+  }
+  // 我的世界（固定分類）時，附上每個分類放什麼
+  const fixedHint = () => world && save.lab && Array.isArray(save.lab.cats) && save.lab.cats.length ? '' : `\n各分類放什麼：${FIXED_HINT}。`;
   function catRule(list){
-    const have = catCounts().map(([c]) => c);
-    const labCats = world && save.lab && Array.isArray(save.lab.cats) && save.lab.cats.length ? save.lab.cats : null;
-    if (list) list = [...list];
-    else if (labCats) list = [...new Set([...labCats, ...have])];
-    else list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
-    if (!list.includes(PROPER_CAT)) list.push(PROPER_CAT);
-    return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。
+    if (list) return `- category：分類名稱，從${list.join('、')}裡選。
 ${CAT_NAME_GUIDE}
+  專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律分到「${PROPER_CAT}」。`;
+    const fixed = !(world && save.lab && Array.isArray(save.lab.cats) && save.lab.cats.length);
+    return `- category：分類名稱，只能從這些選一個：${allowedCats().join('、')}。不能自己開新分類；想分得更細，用下面的 sub（子分類）。${fixed ? `
+  各分類放什麼：${FIXED_HINT}。` : ''}
   專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方，例如「皮卡丘」「哈利波特」「艾菲爾鐵塔」）一律分到「${PROPER_CAT}」。
   神話、傳說、宗教裡有名字的特定神祇、人物、地方、建築，也是專有名詞，例如「宙斯」「萬神殿」「奧林帕斯山」「孫悟空」。「神話」「奇幻」只放一般的種類，例如龍、鳳凰、天使、精靈、魔法。
 - sub：子分類。如果你選的分類底下已經有子分類，就從那個分類的子分類裡選最合適的一個；那個分類沒有子分類、或都不適合，就填空字串 ""，不要自己開新的。
@@ -2536,7 +2567,8 @@ ${DETAIL_RULES()}`;
     const prompt =
 `你是「1+1=?」合成遊戲的圖鑑編輯。請為遊戲裡的「${name}」寫圖鑑資料。
 ${themeRule()}${DETAIL_RULES()}`;
-    return keepSub(cleanDetail(await ask(prompt, DETAIL_SCHEMA)));
+    const d = cleanDetail(await ask(prompt, DETAIL_SCHEMA)); d.cat = fitCat(d.cat) || (save.items[name] && save.items[name].cat) || '';
+    return keepSub(d);
   }
 
   // 問 AI：手動模式跳視窗；Gemini 太忙時問要不要改手動
@@ -2829,7 +2861,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     const n = Object.keys(save.items).length;
     const free = Object.values(save.items).filter(it => !it.catLocked).length;
     const recat = () => $('rg-recat').checked;
-    const cost = () => ($('rg-items').checked ? Math.ceil(n / ITEM_BATCH) : 0) + (!recat() && $('rg-cat').checked ? 1 : 0) + (!recat() && $('rg-move').checked ? Math.ceil(free / MOVE_BATCH) : 0) + ($('rg-star').checked ? Math.ceil(n / STAR_BATCH) : 0) + (recat() ? 1 + Math.ceil(free / RECAT_BATCH) : 0);
+    const cost = () => ($('rg-items').checked ? Math.ceil(n / ITEM_BATCH) : 0) + (!recat() && $('rg-move').checked ? Math.ceil(free / MOVE_BATCH) : 0) + ($('rg-star').checked ? Math.ceil(n / STAR_BATCH) : 0) + (recat() ? Math.ceil(free / RECAT_BATCH) : 0);
     // 勾了「重新設計分類」，合併分類、檢查分類就用不到了，先變灰
     const upd = () => { ['rg-cat', 'rg-move'].forEach(id => $(id).disabled = recat()); $('rg-cost').textContent = `大約要問 AI ${cost()} 次。`; $('rg-go').disabled = !cost(); };
     ['rg-items', 'rg-cat', 'rg-move', 'rg-star', 'rg-recat'].forEach(id => $(id).onchange = upd);
@@ -2847,7 +2879,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
   }
   async function runReorg(){
     const doRecat = $('rg-recat').checked;
-    const doItems = $('rg-items').checked, doCat = !doRecat && $('rg-cat').checked, doMove = !doRecat && $('rg-move').checked, doStar = $('rg-star').checked;
+    const doItems = $('rg-items').checked, doCat = false, doMove = !doRecat && $('rg-move').checked, doStar = $('rg-star').checked;
     $('reorg').classList.remove('open');
     snapshot('整理');
     reorging = true; freshAI(); aiTimeout = 40000;
@@ -2857,7 +2889,7 @@ ${JSON.stringify(example({type:'OBJECT', properties:props}), null, 1)}`;
     let asked = 0;
     // 大約要問幾次（跟設定視窗算的一樣；中途合併了東西，後面的次數可能少一點）
     const n0 = Object.keys(save.items).length, free0 = Object.values(save.items).filter(it => !it.catLocked).length;
-    const total = (doItems ? Math.ceil(n0 / ITEM_BATCH) : 0) + (doCat && catCounts().length > 1 ? 1 : 0) + (doMove ? Math.ceil(free0 / MOVE_BATCH) : 0) + (doStar ? Math.ceil(n0 / STAR_BATCH) : 0) + (doRecat ? 1 + Math.ceil(free0 / RECAT_BATCH) : 0);
+    const total = (doItems ? Math.ceil(n0 / ITEM_BATCH) : 0) + (doCat && catCounts().length > 1 ? 1 : 0) + (doMove ? Math.ceil(free0 / MOVE_BATCH) : 0) + (doStar ? Math.ceil(n0 / STAR_BATCH) : 0) + (doRecat ? Math.ceil(free0 / RECAT_BATCH) : 0);
     const pace = async () => {
       if (asked++ && prefs.ai !== 'manual') await sleep(4000);  // 放慢一點，避免撞到每分鐘上限
       checkStop();
@@ -2898,30 +2930,17 @@ ${part.join('、')}
       // 重新設計分類（納可 2026-09-29 要求）：只給 AI 名字、不給介紹（省額度）
       // 第一步：看所有東西的名字想一套分類，玩家可以改；第二步：分批把每樣放進去；最後一樣一樣勾選確認
       if (doRecat){
+        // 大分類固定之後（納可 2026-09-29），這項不再請 AI 想新分類，直接把每樣放進這個世界可以用的分類
         const all = Object.keys(save.items);
-        const see = all.length > RECAT_SEE ? [...all].sort(() => Math.random() - .5).slice(0, RECAT_SEE) : all;  // 太多就抽一部分給 AI 看
-        await pace(); progress('想一套新分類……');
-        const keep = [PROPER_CAT, ...save.userCats];
-        const out = await ask(
-`你是遊戲圖鑑的分類設計師。${world && save.lab ? `這個世界的主題是「${save.lab.theme}」。` : ''}下面是圖鑑裡${see.length < all.length ? `隨機抽出的 ${see.length} 樣（一共 ${all.length} 樣）` : '所有'}東西的名字：
-${see.join('、')}
-
-任務：照這些東西實際的樣子，重新設計一套分類，讓每樣東西都有合適的地方放。
-- 回傳 cats 陣列，8 到 15 個分類名稱，每個 2 到 4 個字，是大類不要太細，彼此不要重疊。
-${CAT_NAME_GUIDE}
-- 這些分類一定要保留、原封不動放進去：${keep.join('、')}。`, CATS_SCHEMA);
-        let cats = [...new Set([...keep, ...(Array.isArray(out.cats) ? out.cats : []).map(c => cleanCat(c)).filter(Boolean)])];
-        progress('等你確認……');
-        const edited = prompt('AI 建議的新分類如下，可以直接改（用「、」隔開）。按「確定」會把每樣東西放進這些分類，換之前還會一樣一樣問你；按「取消」就不做這項。', cats.join('、'));
-        if (edited !== null && edited.trim()){
-          cats = [...new Set([...keep, ...parseCats(edited)])];
+        let cats = allowedCats();
+        {
           const free = all.filter(n => !save.items[n].catLocked);
           const moves = new Map();
           const parts = chunk(free, RECAT_BATCH);
           for (let i = 0; i < parts.length; i++){
-            await pace(); progress(`放進新分類 ${i + 1}/${parts.length}`);
+            await pace(); progress(`照分類重新分 ${i + 1}/${parts.length}`);
             const o = await ask(
-`你是遊戲圖鑑的分類整理員。分類只有這些：${cats.join('、')}。
+`你是遊戲圖鑑的分類整理員。分類只有這些：${cats.join('、')}。${fixedHint()}
 下面是一些東西的名字，用「、」隔開：
 ${parts[i].join('、')}
 
@@ -2937,13 +2956,12 @@ ${parts[i].join('、')}
           }
           if (moves.size){
             progress('等你確認……');
-            const picks = await review({title:'要照新分類換嗎？', apply:'換勾選的', skip:'都不要換',
-              desc:`新分類：${cats.join('、')}。勾選的才會換，右邊也可以自己改。沒勾的留在原本的分類。`,
+            const picks = await review({title:'要照分類重新分嗎？', apply:'換勾選的', skip:'都不要換',
+              desc:`分類：${cats.join('、')}。勾選的才會換，右邊也可以自己改。沒勾的留在原本的分類。`,
               rows:[...moves].map(([n, c]) => ({key:n, label:`${save.items[n].emoji} ${n}（${save.items[n].cat || '未分類'}）`, arrow:'改放到', value:c,
                 options:[...new Set([...cats, ...catCounts().map(([x]) => x)])].map(x => ({value:x, label:x}))}))});
             for (const p of picks){ const it = save.items[p.key]; if (it && it.cat !== p.value){ it.cat = p.value; res.recat++; } }
           }
-          if (world && save.lab) save.lab.cats = cats.filter(c => c !== PROPER_CAT);  // 專案的分類清單也換成新的
           persist(); renderList();
         }
       }
@@ -3014,14 +3032,13 @@ ${lines}
 - name 必須一字不差地從上面抄（冒號前面那段）。
 - 參考上面每個分類裡已經放了什麼，放進最像的那一類。
 - 專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方）一律放「${PROPER_CAT}」；神話、傳說裡有名字的特定神祇、人物、地方、建築（例如宙斯、萬神殿）也是。
-- category 優先用現有分類；真的都不適合才開新的 2 到 4 個字的大類。
-${CAT_NAME_GUIDE}
-- 分得對的不要列。全部都對就回 {"moves":[]}。
+- category 只能從這些選：${allowedCats().join('、')}。不能開新分類。${fixedHint()}
+- 分得對的不要列；目前分類不在上面清單裡的，一定要列出來換。全部都對就回 {"moves":[]}。
 範例：{"moves":[{"name":"蘋果","category":"食物"}]}`, MOVE_SCHEMA);
           for (const m of out.moves || []){
             const name = String(m.name || '').trim(), it = save.items[name];
-            const c = cleanCat(m.category);
-            if (it && !it.catLocked && it.cat !== c) moves.set(name, c);
+            const c = cleanCat(m.category, CAT_MAX_USER);
+            if (it && !it.catLocked && it.cat !== c && allowedCats().includes(c)) moves.set(name, c);
           }
         }
         if (moves.size){
@@ -3480,7 +3497,7 @@ ${NAME_RULE}
 ${DETAIL_RULES(['你自己在 cats 裡定的分類'])}`, BASES_SCHEMA());
       const seen = new Set();
       const got = (Array.isArray(out.bases) ? out.bases : [])
-        .map(p => ({...aiData(p), name:cleanName(p.name), emoji:String(p.emoji || '').trim().slice(0, 8) || '✨'}))
+        .map(p => ({...aiData(p), cat:isTrue(p.proper) ? PROPER_CAT : cleanCat(p.category), name:cleanName(p.name), emoji:String(p.emoji || '').trim().slice(0, 8) || '✨'}))  // 起點的分類照 AI 剛定的，不用這個世界的清單
         .filter(b => !isBadName(b.name) && !seen.has(normKey(b.name)) && seen.add(normKey(b.name)));
       if (!got.length) throw new Error('AI 沒給出起點，再試一次');
       newBases = got; drawNewBases();
@@ -4098,7 +4115,7 @@ ${DETAIL_RULES(['你自己在 cats 裡定的分類'])}`, BASES_SCHEMA());
     $('fm-cancel').onclick = () => $('reorg').classList.remove('open');
     $('fm-apply').onclick = () => {
       snapshot(opt.lab ? `併入專案 ${opt.lab}` : '合併朋友的存檔');
-      const myCats = new Set([...catCounts().map(([c]) => c), ...save.userCats, PROPER_CAT]);  // 合併前你有的分類
+      const myCats = new Set(allowedCats());  // 你可以用的分類（固定的＋自己建的）
       const pickItems = itemRows.filter(r => r.cb.checked).map(r => r.name);
       const pickRecipes = new Set(recipeRows.filter(r => r.cb.checked).map(r => r.k));
       $('reorg').classList.remove('open');
