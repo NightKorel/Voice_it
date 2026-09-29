@@ -136,7 +136,7 @@
   #reorg p{font-size:.86rem;line-height:1.7;margin:.3rem 0}
   #reorg .muted{color:var(--muted);font-size:.8rem}
   #reorg .actions{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
-  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],#rg-setcat[hidden],#rg-newcat[hidden],#rg-mine[hidden],#rg-stats[hidden],#c-edit[hidden],#btn-install[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
+  #rg-setup[hidden],#rg-review[hidden],#rg-friend[hidden],#rg-order[hidden],#rg-folders[hidden],#rg-pick[hidden],#rg-setcat[hidden],#rg-newcat[hidden],#rg-partial[hidden],#rg-mine[hidden],#rg-stats[hidden],#c-edit[hidden],#btn-install[hidden],.rg-list[hidden],#c-favbox[hidden],#c-fillrow[hidden]{display:none}
   .favnew{display:flex;gap:.5rem;margin:.6rem 0}
   .favnew input{flex:1;min-width:0;padding:.45rem .65rem;border-radius:.6rem;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:.88rem;font-family:inherit;outline:none}
   .favnew input:focus{border-color:var(--accent)}
@@ -552,6 +552,21 @@
       <div class="favnew"><input id="sc-name" maxlength="12" placeholder="或打一個新分類的名字（最多 12 個字）" autocomplete="off"><button class="btn" id="sc-add">改到新分類</button></div>
       <div class="actions"><button class="btn" id="sc-cancel">取消</button></div>
     </div>
+    <div id="rg-partial" hidden>
+      <h2>部分匯出</h2>
+      <p>勾選要匯出哪些東西，可以混著勾。水火風土一定會帶。匯出的檔案給朋友用「合併朋友的存檔」加進去。</p>
+      <h3 id="px-h-cats">分類</h3>
+      <div id="px-cats" class="fm-cats"></div>
+      <h3 id="px-h-folders">收藏夾</h3>
+      <div id="px-folders" class="fm-cats"></div>
+      <label class="rg-opt"><input type="checkbox" id="px-route"> 連合成路線上需要的東西一起帶（朋友才合得出來）</label>
+      <p id="px-count" class="muted"></p>
+      <div class="actions">
+        <button class="btn primary" id="px-dl">下載</button>
+        <button class="btn" id="px-share" hidden>分享</button>
+        <button class="btn" id="px-cancel">取消</button>
+      </div>
+    </div>
     <div id="rg-folders" hidden>
       <h2>管理收藏夾</h2>
       <p>收藏夾跟分類是分開的，一樣東西可以放進好幾個收藏夾。東西要放進收藏夾：長按打開卡片，按「收藏」。</p>
@@ -668,6 +683,7 @@
     <div class="actions">
       <button class="btn" id="btn-share" hidden>分享存檔</button>
       <button class="btn" id="btn-export">下載存檔</button>
+      <button class="btn" id="btn-partial" title="只匯出某些分類、收藏夾的東西">部分匯出</button>
       <button class="btn" id="btn-merge">合併朋友的存檔</button>
     </div>
     <p class="muted">跟朋友交換：把「分享存檔」或「下載存檔」的檔案傳給對方，對方按「合併朋友的存檔」。只會加進你沒有的東西和配方，你已經有的一律以你的為主。</p>
@@ -735,7 +751,7 @@
 <script>
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.68';
+  const VERSION = '0.0.69';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -990,7 +1006,7 @@
 
   // ---------- 清單 ----------
   // 整理視窗裡一次只顯示一個面板
-  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-mine', 'rg-stats'];
+  const PANELS = ['rg-setup', 'rg-review', 'rg-friend', 'rg-order', 'rg-folders', 'rg-pick', 'rg-setcat', 'rg-newcat', 'rg-partial', 'rg-mine', 'rg-stats'];
   function showPanel(id){ PANELS.forEach(x => $(x).hidden = x !== id); }
 
   // ---------- 收藏夾 ----------
@@ -2736,8 +2752,7 @@ ${lines}
     }
     return best;
   }
-  function routeTo(name){
-    const best = routeLevels();
+  function routeTo(name, best = routeLevels()){
     if (!best[name]) return null;
     const steps = [], seen = new Set();
     const walk = n => {
@@ -2958,6 +2973,71 @@ ${lines}
     try { await navigator.share({files:[f], title:'1+1=? 存檔'}); markBackup(); }
     catch(e){ if (e.name !== 'AbortError') toast('分享沒有成功，可以改用「下載存檔」', true); }
   };
+  // 部分匯出：勾分類、收藏夾、「我的」，只匯出那些東西（加上水火風土）和做出它們的配方；檔案標 partial
+  function openPartial(){
+    const mk = (box, entries) => {
+      box.textContent = '';
+      return entries.map(([key, label]) => {
+        const l = document.createElement('label');
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.onchange = count;
+        l.append(cb, label); box.append(l);
+        return {key, cb};
+      });
+    };
+    const mineN = Object.values(save.items).filter(it => it.custom).length;
+    const cats = mk($('px-cats'), [...(mineN ? [[MINE, `我的 ${mineN}`]] : []), ...catCounts().filter(([, n]) => n).map(([c, n]) => [c, `${c} ${n}`])]);
+    const fds = mk($('px-folders'), save.folders.filter(f => f.items.length).map(f => [f.name, `★ ${f.name} ${f.items.length}`]));
+    $('px-h-folders').hidden = $('px-folders').hidden = !fds.length;
+    $('px-route').onchange = count;
+    const pick = () => {
+      const set = new Set();
+      const cs = new Set(cats.filter(x => x.cb.checked).map(x => x.key));
+      for (const [n, it] of Object.entries(save.items)) if (cs.has(it.cat) || (cs.has(MINE) && it.custom)) set.add(n);
+      for (const x of fds) if (x.cb.checked) save.folders.find(f => f.name === x.key).items.forEach(n => save.items[n] && set.add(n));
+      if ($('px-route').checked && set.size){
+        const best = routeLevels();
+        for (const n of [...set]) for (const st of routeTo(n, best) || []) for (const m of [...(st.ins || [st.src]), st.out]) set.add(m);
+      }
+      BASE.forEach(b => set.add(b.name));
+      return set;
+    };
+    function count(){
+      const n = pick().size - BASE.length;
+      $('px-count').textContent = n > 0 ? `會匯出 ${n} 樣東西（另外加上水火風土）。` : '還沒有勾選。';
+      $('px-dl').disabled = $('px-share').disabled = n <= 0;
+    }
+    const build = () => {
+      const set = pick();
+      const items = {}, recipes = {}, extracts = {};
+      for (const n of set){ const it = {...save.items[n]}; delete it.used; items[n] = it; }
+      for (const [k, v] of Object.entries(save.recipes)) if (set.has(v[0]) && k.split('+').every(n => set.has(n))) recipes[k] = [...v];
+      for (const [k, v] of Object.entries(save.extracts)) if (set.has(k) && v.every(n => set.has(n))) extracts[k] = [...v];
+      exportTime = new Date();
+      return JSON.stringify({items, recipes, extracts, folders:[], partial:true, exportedAt:exportTime.getTime()}, null, 1);
+    };
+    const fname = () => `1+1 part ${stamp(exportTime)}.json`;
+    $('px-dl').onclick = () => {
+      const blob = new Blob([build()], {type:'application/json'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname(); a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      $('reorg').classList.remove('open'); toast('部分存檔下載好了');
+    };
+    $('px-share').hidden = $('btn-share').hidden;
+    $('px-share').onclick = async () => {
+      const text = build();
+      let f = null;
+      for (const type of ['application/json', 'text/plain']){ const g = new File([text], fname(), {type}); try { if (navigator.canShare && navigator.canShare({files:[g]})){ f = g; break; } } catch(e){} }
+      if (!f){ toast('這個瀏覽器不能直接分享檔案，請用「下載」', true); return; }
+      try { await navigator.share({files:[f], title:'1+1=? 部分存檔'}); $('reorg').classList.remove('open'); }
+      catch(e){ if (e.name !== 'AbortError') toast('分享沒有成功，可以改用「下載」', true); }
+    };
+    $('px-cancel').onclick = () => $('reorg').classList.remove('open');
+    count();
+    showPanel('rg-partial');
+    $('modal').classList.remove('open');
+    $('reorg').classList.add('open');
+  }
+  $('btn-partial').onclick = openPartial;
   let fileMode = 'import';
   $('btn-import').onclick = () => { fileMode = 'import'; $('file').click(); };
   $('btn-merge').onclick = () => { fileMode = 'merge'; $('file').click(); };
@@ -2971,6 +3051,8 @@ ${lines}
     } catch(_){ toast('這個檔案看起來不是存檔', true); return; }
     if (fileMode === 'merge') return mergeFriend(s);
     const when = s.exportedAt ? `\n\n這份存檔的時間：${timeText(s.exportedAt)}（${Object.keys(s.items).length} 樣東西）` : '';
+    if (s.partial && !confirm(`注意：這是「部分匯出」的存檔，只有 ${Object.keys(s.items).length} 樣東西。\n\n用「匯入」會把你現在的存檔整個換掉，只剩這些。想把它加進你的存檔，請按取消，改用「合併朋友的存檔」。\n\n還是要整個換掉嗎？`)) return;
+    delete s.partial;
     if (!confirm(`匯入會把你現在的存檔整個換掉，確定嗎？${when}\n\n（想保留自己的、只加朋友的新東西，請用「合併朋友的存檔」）`)) return;
     delete s.exportedAt;
     snapshot('匯入存檔');
