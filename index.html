@@ -669,6 +669,7 @@
       <div class="mn-row"><label>起點</label><select id="nl-k" class="sel"><option value="3">3 樣</option><option value="4" selected>4 樣</option><option value="5">5 樣</option><option value="6">6 樣</option></select>
         <button class="btn" id="nl-gen">請 AI 想起點</button></div>
       <div id="nl-bases"></div>
+      <div class="mn-row"><label>分類</label><input id="nl-cats" maxlength="200" placeholder="AI 想起點時會一起定，也可以自己打，用「、」隔開" autocomplete="off"></div>
       <div class="favnew"><input id="nl-add" maxlength="24" placeholder="也可以自己加一個起點" autocomplete="off"><button class="btn" id="nl-addbtn">加進去</button></div>
       <p class="muted" id="nl-note">起點至少要 2 樣。不喜歡的按 ✕ 拿掉，或按「請 AI 想起點」換一批。</p>
       <div class="actions">
@@ -681,8 +682,9 @@
       <div class="mn-row"><label>名稱</label><input id="el-name" maxlength="12" placeholder="最多 12 個字" autocomplete="off"></div>
       <div class="mn-row"><label>主題</label><input id="el-theme" maxlength="24" autocomplete="off"></div>
       <div class="mn-row"><label>補充</label><textarea id="el-prompt" maxlength="300" placeholder="可以空著。想要的風格、方向或限制，這個專案每次合成 AI 都會看到"></textarea></div>
+      <div class="mn-row"><label>分類</label><input id="el-cats" maxlength="200" placeholder="這個世界的分類，用「、」隔開；空著就用一般的分類" autocomplete="off"></div>
       <p class="muted" id="el-bases"></p>
-      <p class="muted">改完之後的合成、萃取會照新的主題和補充說明走，已經合出來的東西不會變。</p>
+      <p class="muted">改完之後的合成、萃取會照新的主題、補充說明和分類走，已經合出來的東西不會變。</p>
       <div class="actions">
         <button class="btn primary" id="el-save">儲存</button>
         <button class="btn" id="el-cancel">取消</button>
@@ -895,7 +897,7 @@ window.addEventListener('error', e => {
 });
 (() => {
   // 版本號：每次更新 0.0.x 的 x 加一（10 之後是 0.0.10，不進位到中間），納可說「大更新」才動前面
-  const VERSION = '0.0.84';
+  const VERSION = '0.0.85';
   document.getElementById('ver').textContent = 'v' + VERSION;
   document.getElementById('ver2').textContent = `1+1=? 版本 ${VERSION}`;
   document.title = `1+1=? v${VERSION}`;
@@ -2318,9 +2320,13 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     sub: String(o.sub || '').trim() ? cleanCat(o.sub) : '',
     color: /^#[0-9a-f]{6}$/i.test(String(o.color || '').trim()) ? String(o.color).trim() : ''
   });
-  function catRule(){
+  // list：開實驗室時，AI 自己定的分類清單（genBases 傳進來）；在專案裡時用那個專案的分類（save.lab.cats）
+  function catRule(list){
     const have = catCounts().map(([c]) => c);
-    const list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
+    const labCats = world && save.lab && Array.isArray(save.lab.cats) && save.lab.cats.length ? save.lab.cats : null;
+    if (list) list = [...list];
+    else if (labCats) list = [...new Set([...labCats, ...have])];
+    else list = have.length >= 6 ? have : [...new Set([...have, ...STARTER_CATS])];
     if (!list.includes(PROPER_CAT)) list.push(PROPER_CAT);
     return `- category：分類名稱。優先從現有分類選一個：${list.join('、')}。只有真的都不適合時，才自己開一個新分類（2 到 4 個字，要是一個大類，不要太細）。
   專有名詞（特定的角色、作品、品牌、真實存在的特定人物或地方，例如「皮卡丘」「哈利波特」「艾菲爾鐵塔」）一律分到「${PROPER_CAT}」。
@@ -2334,11 +2340,11 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   4＝偏門，不少人沒聽過或說不太出是什麼（例如日晷、渡渡鳥、鸚鵡螺）
   5＝冷門，大部分人沒聽過（例如水熊蟲、蓋亞假說、伏尼契手稿）
   上面的例子只是尺度，照這個東西本身實際有多少人知道來給，該給 4、5 就大方給。`;
-  const DETAIL_RULES = () =>
+  const DETAIL_RULES = cats =>
 `- desc：像百科的一到兩句話，繁體中文，40 字以內，只介紹「這個東西本身」是什麼、有什麼特色。
   不要提到合成的材料，不要解釋為什麼會合出它，不要硬扯關係。例如「蒸氣」要寫「水加熱後變成的白色氣體……」，不要寫「風和火相遇時……」。
 ${RARITY_RULE}
-${catRule()}
+${catRule(cats)}
 - color：這個東西最常讓人聯想到的顏色，用 #RRGGBB 格式。`;
   const DETAIL_SCHEMA = {
     desc:{type:'STRING'}, rarity:{type:'INTEGER'}, category:{type:'STRING'}, sub:{type:'STRING'}, color:{type:'STRING'}
@@ -2628,7 +2634,7 @@ ${themeRule()}${DETAIL_RULES()}`;
 
   // ---------- 手動問 AI ----------
   // 給手動／OpenRouter 看的格式範例；這些提示字如果被原封不動抄回來，會被當成沒答案
-  const HINTS = {name:'東西的名字', emoji:'一個emoji', desc:'一兩句介紹', category:'分類', sub:'子分類（不是專有名詞就空著）', color:'#RRGGBB', keep:'保留的名字', from:'舊分類', to:'新分類'};
+  const HINTS = {name:'東西的名字', emoji:'一個emoji', desc:'一兩句介紹', category:'分類', cats:'分類名稱', sub:'子分類（不是專有名詞就空著）', color:'#RRGGBB', keep:'保留的名字', from:'舊分類', to:'新分類'};
   function example(schema, key){
     // 數字和是非不寫死範例值：以前寫 1 和 true，AI 會照抄（星星老是一星、一堆東西被標成專有名詞）
     if (schema.type === 'BOOLEAN') return 'true 或 false';
@@ -3251,12 +3257,13 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
     if (!await ensureLab(x.id)) return;
     const d = labCache.get(x.id);
     $('el-name').value = x.name; $('el-theme').value = d.lab.theme || ''; $('el-prompt').value = d.lab.prompt || '';
+    $('el-cats').value = (d.lab.cats || []).join('、');
     $('el-bases').textContent = `起點：${d.lab.bases.map(b => `${b.emoji} ${b.name}`).join('、')}（起點不能改）`;
     $('el-save').onclick = () => {
       const theme = $('el-theme').value.trim();
       if (!theme){ toast('主題不能空白', true); return; }
       x.name = ($('el-name').value.trim() || theme).slice(0, 12); x.theme = theme; saveIndex();
-      Object.assign(d.lab, {name:x.name, theme, prompt:$('el-prompt').value.trim()});
+      Object.assign(d.lab, {name:x.name, theme, prompt:$('el-prompt').value.trim(), cats:parseCats($('el-cats').value)});
       if (world === x.id) persist(); else idbSet('lab:' + x.id, JSON.stringify(d));
       renderWorld(); openWorlds();
       toast('改好了，之後的合成會照新的主題走');
@@ -3275,11 +3282,11 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
   $('btn-lab').onclick = openWorlds;
 
   // 開新專案：名稱、主題、補充說明 → 請 AI 想起點（可以換一批、拿掉、自己加）→ 開始
-  const BASES_SCHEMA = () => ({bases:{type:'ARRAY', items:{type:'OBJECT', properties:ITEM_SCHEMA, required:Object.keys(ITEM_SCHEMA)}}});
+  const BASES_SCHEMA = () => ({cats:{type:'ARRAY', items:{type:'STRING'}}, bases:{type:'ARRAY', items:{type:'OBJECT', properties:ITEM_SCHEMA, required:Object.keys(ITEM_SCHEMA)}}});
   let newBases = [];
   function openNewLab(){
     newBases = [];
-    ['nl-name', 'nl-theme', 'nl-prompt', 'nl-add'].forEach(id => $(id).value = '');
+    ['nl-name', 'nl-theme', 'nl-prompt', 'nl-add', 'nl-cats'].forEach(id => $(id).value = '');
     drawNewBases();
     $('nl-gen').onclick = genBases;
     $('nl-addbtn').onclick = () => {
@@ -3325,21 +3332,26 @@ ${parts[i].map(n => `${n}：${(save.items[n].desc || '').slice(0, 40)}`).join('\
 請想出 ${k} 樣這個主題裡「最基礎、最原始」的東西，當作這個世界的起點，取代水火風土。
 - 要夠基礎、夠廣，彼此不一樣，互相合成之後能發展出這個主題裡的各種東西。
 - 不要太細、太特定，也不要直接給這個主題裡最有名的東西（那些留給玩家自己合出來）。
+- 另外回傳 cats 陣列：這個世界裡的東西大概會分成哪幾類。給 6 到 10 個分類名稱，每個 2 到 4 個字，是大類不要太細，要涵蓋這個主題常見的東西（例如角色、地點、道具、事件、能力這類，照主題來定）。之後合出來的東西都會放進這些分類。
 - 回傳 bases 陣列，剛好 ${k} 樣，每一樣的欄位規則：
 ${NAME_RULE}
-${DETAIL_RULES()}`, BASES_SCHEMA());
+${DETAIL_RULES(['你自己在 cats 裡定的分類'])}`, BASES_SCHEMA());
       const seen = new Set();
       const got = (Array.isArray(out.bases) ? out.bases : [])
         .map(p => ({...aiData(p), name:cleanName(p.name), emoji:String(p.emoji || '').trim().slice(0, 8) || '✨'}))
         .filter(b => !isBadName(b.name) && !seen.has(normKey(b.name)) && seen.add(normKey(b.name)));
       if (!got.length) throw new Error('AI 沒給出起點，再試一次');
       newBases = got; drawNewBases();
+      const cats = parseCats((Array.isArray(out.cats) ? out.cats : []).join('、'), 6);
+      if (cats.length) $('nl-cats').value = cats.join('、');
     } catch(e){
       if (!e.cancelled) toast('想起點失敗：' + e.message, true);
     } finally {
       genning = false; $('nl-gen').textContent = '請 AI 想起點';
     }
   }
+  // 分類欄：用「、」「，」或空白隔開；每個最多 max 個字，最多 15 個
+  const parseCats = (txt, max = CAT_MAX_USER) => [...new Set(String(txt || '').split(/[、，,\s\/／]+/).map(c => c.trim()).filter(Boolean).map(c => cleanCat(c, max)))].slice(0, 15);
   function startLab(){
     const theme = $('nl-theme').value.trim();
     const name = ($('nl-name').value.trim() || theme).slice(0, 12);
@@ -3349,7 +3361,7 @@ ${DETAIL_RULES()}`, BASES_SCHEMA());
     const bases = newBases.map(b => ({...b}));
     const items = {};
     bases.forEach((b, i) => { const it = {...b, t:i}; delete it.name; items[b.name] = it; });
-    const d = {items, recipes:{}, extracts:{}, folders:[], userCats:[], lab:{id, name, theme, prompt:$('nl-prompt').value.trim(), bases, t:Date.now()}};
+    const d = {items, recipes:{}, extracts:{}, folders:[], userCats:[], lab:{id, name, theme, prompt:$('nl-prompt').value.trim(), cats:parseCats($('nl-cats').value), bases, t:Date.now()}};
     labCache.set(id, d);
     labIndex.push({id, name, theme, n:bases.length, t:Date.now()}); saveIndex();
     idbSet('lab:' + id, JSON.stringify(d)).then(r => { if (!r.ok) toast('這個瀏覽器不讓網頁用資料庫，專案可能存不起來', true); });

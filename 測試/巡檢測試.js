@@ -25,7 +25,7 @@ function answerFor(pr){
   const js = pr.slice(pr.lastIndexOf('【回答格式】'));
   const item = n => ({name:n, emoji:'🧪', proper:false, desc:'測試用的東西', rarity:3, category:'物品', sub:'', color:'#44aa66'});
   if (js.includes('"parts"')) return {parts:[item('巡檢零件' + (++uid)), item('巡檢零件' + (++uid))]};
-  if (js.includes('"bases"')) return {bases:[item('巡檢起點甲'), item('巡檢起點乙'), item('巡檢起點丙')]};
+  if (js.includes('"bases"')) return {cats:['巡檢角色', '巡檢地點', '巡檢道具'], bases:[item('巡檢起點甲'), item('巡檢起點乙'), item('巡檢起點丙')]};
   for (const k of ['groups', 'merges', 'moves', 'stars', 'subs']) if (js.includes(`"${k}"`)) return {[k]:[]};
   if (js.includes('"name"')) return item('巡檢結果' + (++uid));
   return {desc:'重寫的介紹', rarity:2, category:'物品', sub:'', color:'#446688'};
@@ -124,7 +124,10 @@ function answerFor(pr){
   await step('部分匯出', async () => { await tap('#btn-settings'); await tap('#btn-partial'); await p.check('#px-cats input >> nth=0'); const [dl] = await Promise.all([p.waitForEvent('download'), tap('#px-dl')]); });
   await step('實驗室：開專案、合成、編輯', async () => {
     await tap('#btn-lab'); await tap('#wl-new'); await p.fill('#nl-theme', '巡檢主題'); await tap('#nl-gen'); await autoAnswer(); await tap('#nl-start'); await p.waitForTimeout(300);
-    await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1'); await tap('#btn-craft'); await autoAnswer();
+    await tap('#list .litem >> nth=0'); await tap('#list .litem >> nth=1'); await tap('#btn-craft');
+    await p.waitForSelector('#manual.open', {state:'attached', timeout:3000});
+    if (!(await p.$eval('#m-prompt', e => e.value)).includes('優先從現有分類選一個：巡檢角色、巡檢地點、巡檢道具')) throw new Error('專案的分類沒給 AI');
+    await autoAnswer();
     await tap('#btn-lab'); await tap('#wl-list .wl-row.here button:has-text("編輯")'); await p.fill('#el-prompt', '巡檢補充'); await tap('#el-save');
   });
   await step('實驗室：擋住的操作、回我的世界、併入、封存、還原', async () => {
